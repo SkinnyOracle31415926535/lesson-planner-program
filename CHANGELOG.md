@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-23 — Private monorepo and Idea Library media controls
+
+- Migrated the full Lesson Planner Program into one private root monorepo after preserving the former nested Git metadata outside the project.
+- Added one browser-local photo-or-video attachment per Idea Library item, including Create/Edit add, replace, preview, and remove controls plus version-5 photo migration.
+- Added permanent idea deletion with attachment cleanup while preserving copies already placed in lessons.
+- Kept Idea Library cards content-sized in the dedicated window and separated Star, Info, Edit, remove, and status controls across supported widths.
+
 ## 2026-07-19 — Coach-supplied station boards and iPad touch pass
 
 - Imported the 24 exact station-board crops supplied by the owner into both the browser editor and the native iPad project. A direct board now takes priority over an inferred Skeleton/Freeform crop and is displayed at its original proportions without automatic re-cropping. Every browser board now fits inside one compact 16:10 planning canvas rather than claiming extra row height or width for its own source ratio; the original image letterboxes inside it. Its label coordinates are projected into the outer canvas, clamped on-screen, and given a small vertical lane when nearby labels would overlap. This covers F6, Weight Room, SR/PH, SR, PH, HB, PB, PB/HB, the three beam views, FX-only, FX/TS, F5, TS, Vault, the supplied pit/UB/strap combinations, Trampoline, Tumble Track, UB3, and Preschool.

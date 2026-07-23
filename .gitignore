@@ -11,6 +11,9 @@
 # Apple/Xcode generated state
 DerivedData/
 build/
+!web-editor/build/
+web-editor/build/*
+!web-editor/build/sites-vite-plugin.ts
 *.xcuserstate
 xcuserdata/
 

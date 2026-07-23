@@ -36,20 +36,24 @@ function idea(id: string, title = id): LibraryItem {
   };
 }
 
-test("library exports are versioned, detached, and omit browser-local photos", () => {
+test("library exports are versioned, detached, and omit browser-local attachments", () => {
   const source = {
     ...idea("skill-one", "Handstand"),
-    photoId: "photo-one",
-    photoFilename: "handstand.jpg",
-    photoWidth: 1200,
-    photoHeight: 800,
+    mediaId: "video-one",
+    mediaKind: "video" as const,
+    mediaFilename: "handstand.mov",
+    mediaMimeType: "video/quicktime",
+    mediaWidth: 1920,
+    mediaHeight: 1080,
+    mediaDurationSeconds: 12,
   };
   const bundle = createLibraryTransferBundle([source], "2026-07-23T12:00:00.000Z");
 
   assert.equal(bundle.format, "gym-lesson-planner-idea-library");
   assert.equal(bundle.version, 1);
   assert.equal(bundle.photosIncluded, false);
-  assert.equal("photoId" in bundle.ideas[0], false);
+  assert.equal("mediaId" in bundle.ideas[0], false);
+  assert.equal("mediaKind" in bundle.ideas[0], false);
 
   source.tags.push("changed-after-export");
   assert.deepEqual(bundle.ideas[0].tags, ["floor"]);
@@ -58,7 +62,7 @@ test("library exports are versioned, detached, and omit browser-local photos", (
   assert.equal(parsed.ok, true);
 });
 
-test("library import rejects malformed, oversized, and photo-bearing files", () => {
+test("library import rejects malformed, oversized, and attachment-bearing files", () => {
   assert.equal(parseLibraryTransferJson("{").ok, false);
   assert.equal(parseLibraryTransferJson("{}", MAX_LIBRARY_TRANSFER_FILE_BYTES + 1).ok, false);
 
@@ -66,7 +70,7 @@ test("library import rejects malformed, oversized, and photo-bearing files", () 
   const unsafe = { ...withPhotos, photosIncluded: true };
   const photoResult = parseLibraryTransferJson(JSON.stringify(unsafe));
   assert.equal(photoResult.ok, false);
-  if (!photoResult.ok) assert.match(photoResult.error, /does not import photos/);
+  if (!photoResult.ok) assert.match(photoResult.error, /does not import attachments/);
 
   const unknown = { ...withPhotos, roster: ["No"] };
   assert.equal(parseLibraryTransferJson(JSON.stringify(unknown)).ok, false);

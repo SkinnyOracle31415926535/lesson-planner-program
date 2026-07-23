@@ -66,10 +66,20 @@ import {
   type VisualLabelLayout,
 } from "./custom-boards";
 import {
-  createIdeaPhotoId,
-  loadIdeaPhoto,
-  saveIdeaPhoto,
+  createIdeaMediaId,
+  ideaMediaKindForFile,
+  ideaMediaValidationMessage,
+  loadIdeaMedia,
+  removeIdeaMedia,
+  saveIdeaMedia,
 } from "./idea-photos";
+import {
+  normalizedLibraryMedia,
+  permanentlyDeleteLibraryIdea,
+  replacedLibraryMediaId,
+  withoutLibraryMedia,
+  type LibraryMediaMetadata,
+} from "./library-preferences";
 import {
   libraryTransferFilename,
   mergeLibraryTransfer,
@@ -196,7 +206,7 @@ const BUILT_IN_ZONE_IDS = zoneCatalog.map((zone) => zone.id);
 const INITIAL_DEMO_GEM_IDS: string[] = [];
 const LIBRARY_ROW_HEIGHT_MIN = 56;
 const LIBRARY_ROW_HEIGHT_DEFAULT = 66;
-const LIBRARY_ROW_HEIGHT_MAX = 150;
+const LIBRARY_ROW_HEIGHT_MAX = 118;
 const LIBRARY_ROW_HEIGHT_STEP = 18;
 const LEGACY_RECURRING_TASK_ID = "set-bar-station-mats";
 const TODAY_LESSON_PLAN_ID = "legacy-current";
@@ -381,7 +391,7 @@ type ResolvedVisualAnchor = {
 };
 
 type StoredLibraryPreferences = {
-  version: 5;
+  version: 6;
   gemIds: string[];
   customCards: LibraryItem[];
   /** Source-library idea IDs ordered from most to least recently placed. */
@@ -392,6 +402,10 @@ type StoredLibraryPreferences = {
   itemOverridesById: Record<string, LibraryItem>;
   /** Browser-local soft removals. They remain restorable from Archive. */
   removedIdeaIds: string[];
+};
+
+type StoredLibraryPreferencesV5 = Omit<StoredLibraryPreferences, "version"> & {
+  version: 5;
 };
 
 type StoredLibraryPreferencesV4 = {
@@ -467,7 +481,7 @@ function libraryRowHeightFromStorage(value: string | null): number | null {
 
 function libraryDetailLevel(rowHeight: number): "COMPACT" | "DETAILS" | "FULL DETAILS" {
   if (rowHeight < 86) return "COMPACT";
-  if (rowHeight < 122) return "DETAILS";
+  if (rowHeight < 110) return "DETAILS";
   return "FULL DETAILS";
 }
 
@@ -503,14 +517,10 @@ function copyCard(card: LessonCard): LessonCard {
 }
 
 function copyLibraryItem(card: LibraryItem): LibraryItem {
-  return {
+  const copied: LibraryItem = {
+    ...card,
     ...copyCard(card),
-    ...(card.photoId ? {
-      photoId: card.photoId,
-      photoFilename: card.photoFilename,
-      photoWidth: card.photoWidth,
-      photoHeight: card.photoHeight,
-    } : {}),
+    ...normalizedLibraryMedia(card),
     events: [...card.events],
     skills: [...card.skills],
     goals: [...card.goals],
@@ -523,6 +533,11 @@ function copyLibraryItem(card: LibraryItem): LibraryItem {
     })),
     sourceRefs: [...card.sourceRefs],
   };
+  delete copied.photoId;
+  delete copied.photoFilename;
+  delete copied.photoWidth;
+  delete copied.photoHeight;
+  return copied;
 }
 
 function editableList(values: string[]): string {
@@ -818,6 +833,56 @@ function isAllowedCustomBoardPhoto(file: File): boolean {
   return allowedPhoto && file.size <= 35 * 1024 * 1024;
 }
 
+function readIdeaVideoMetadata(file: File): Promise<{ width?: number; height?: number; durationSeconds?: number }> {
+  return new Promise((resolve, reject) => {
+    const sourceUrl = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    const finish = () => URL.revokeObjectURL(sourceUrl);
+    video.preload = "metadata";
+    video.onloadedmetadata = () => {
+      const width = video.videoWidth || undefined;
+      const height = video.videoHeight || undefined;
+      const durationSeconds = Number.isFinite(video.duration) ? video.duration : undefined;
+      finish();
+      resolve({ width, height, durationSeconds });
+    };
+    video.onerror = () => {
+      finish();
+      reject(new Error("The selected video could not be opened by this browser."));
+    };
+    video.src = sourceUrl;
+  });
+}
+
+async function libraryMediaMetadataForFile(file: File): Promise<LibraryMediaMetadata> {
+  const kind = ideaMediaKindForFile(file);
+  if (!kind) throw new Error("unsupported media");
+  const details = kind === "image"
+    ? await readCustomPhotoDimensions(file).then(({ width, height }) => ({ width, height }))
+    : await readIdeaVideoMetadata(file);
+  return {
+    mediaKind: kind,
+    mediaFilename: file.name || (kind === "image" ? "idea-reference-photo" : "idea-reference-video"),
+    mediaMimeType: file.type || `${kind}/*`,
+    mediaWidth: details.width,
+    mediaHeight: details.height,
+    mediaDurationSeconds: "durationSeconds" in details ? details.durationSeconds : undefined,
+  };
+}
+
+function useLocalFileUrl(file: File | null): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const nextUrl = file ? URL.createObjectURL(file) : null;
+    const frame = window.requestAnimationFrame(() => setUrl(nextUrl));
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (nextUrl) URL.revokeObjectURL(nextUrl);
+    };
+  }, [file]);
+  return url;
+}
+
 const REQUIRED_PHASE_IDS = new Set(phaseData.filter((phase) => phase.isRequired).map((phase) => phase.id));
 
 function normalizeLessonPhase(phase: LessonPhase): LessonPhase {
@@ -880,15 +945,32 @@ function isLibraryItem(value: unknown): value is LibraryItem {
     && Array.isArray(item.sourceRefs)
     && typeof item.sourceStatus === "string"
     && typeof item.sourceType === "string"
-    && isOptionalLibraryIdeaPhoto(item);
+    && isOptionalLibraryIdeaMedia(item);
 }
 
-/** Old browser-local ideas omit this metadata; a saved photo requires all fields. */
-function isOptionalLibraryIdeaPhoto(item: Partial<LibraryItem>): boolean {
-  if (item.photoId === undefined
-    && item.photoFilename === undefined
-    && item.photoWidth === undefined
-    && item.photoHeight === undefined) return true;
+/** Old ideas may omit media or use the complete version-5 photo shape. */
+function isOptionalLibraryIdeaMedia(item: Partial<LibraryItem>): boolean {
+  const hasGenericMedia = item.mediaId !== undefined
+    || item.mediaKind !== undefined
+    || item.mediaFilename !== undefined
+    || item.mediaMimeType !== undefined
+    || item.mediaWidth !== undefined
+    || item.mediaHeight !== undefined
+    || item.mediaDurationSeconds !== undefined;
+  if (hasGenericMedia) {
+    return typeof item.mediaId === "string" && item.mediaId.trim().length > 0
+      && (item.mediaKind === "image" || item.mediaKind === "video")
+      && typeof item.mediaFilename === "string" && item.mediaFilename.trim().length > 0
+      && typeof item.mediaMimeType === "string" && item.mediaMimeType.trim().length > 0
+      && (item.mediaWidth === undefined || (Number.isFinite(item.mediaWidth) && item.mediaWidth > 0))
+      && (item.mediaHeight === undefined || (Number.isFinite(item.mediaHeight) && item.mediaHeight > 0))
+      && (item.mediaDurationSeconds === undefined || (Number.isFinite(item.mediaDurationSeconds) && item.mediaDurationSeconds >= 0));
+  }
+  const hasLegacyPhoto = item.photoId !== undefined
+    || item.photoFilename !== undefined
+    || item.photoWidth !== undefined
+    || item.photoHeight !== undefined;
+  if (!hasLegacyPhoto) return true;
   return typeof item.photoId === "string" && item.photoId.trim().length > 0
     && typeof item.photoFilename === "string" && item.photoFilename.trim().length > 0
     && typeof item.photoWidth === "number" && Number.isFinite(item.photoWidth) && item.photoWidth > 0
@@ -1340,6 +1422,25 @@ function storedLessonWithBoardSnapshot(
 function isStoredLibraryPreferences(value: unknown): value is StoredLibraryPreferences {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<StoredLibraryPreferences>;
+  return candidate.version === 6
+    && Array.isArray(candidate.gemIds)
+    && candidate.gemIds.every((id) => typeof id === "string")
+    && Array.isArray(candidate.customCards)
+    && candidate.customCards.every(isLibraryItem)
+    && Array.isArray(candidate.recentIdeaIds)
+    && candidate.recentIdeaIds.every((id) => typeof id === "string")
+    && Array.isArray(candidate.archivedIdeaIds)
+    && candidate.archivedIdeaIds.every((id) => typeof id === "string")
+    && Array.isArray(candidate.restoredIdeaIds)
+    && candidate.restoredIdeaIds.every((id) => typeof id === "string")
+    && isLibraryItemRecord(candidate.itemOverridesById)
+    && Array.isArray(candidate.removedIdeaIds)
+    && candidate.removedIdeaIds.every((id) => typeof id === "string");
+}
+
+function isStoredLibraryPreferencesV5(value: unknown): value is StoredLibraryPreferencesV5 {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<StoredLibraryPreferencesV5>;
   return candidate.version === 5
     && Array.isArray(candidate.gemIds)
     && candidate.gemIds.every((id) => typeof id === "string")
@@ -1982,7 +2083,9 @@ export default function Home() {
   const lessonModeRef = useRef(mode);
   const classSetupGuideRef = useRef<HTMLTextAreaElement | null>(null);
   const newIdeaCameraInputRef = useRef<HTMLInputElement | null>(null);
-  const newIdeaPhotoInputRef = useRef<HTMLInputElement | null>(null);
+  const newIdeaMediaInputRef = useRef<HTMLInputElement | null>(null);
+  const editIdeaCameraInputRef = useRef<HTMLInputElement | null>(null);
+  const editIdeaMediaInputRef = useRef<HTMLInputElement | null>(null);
   const libraryTransferInputRef = useRef<HTMLInputElement | null>(null);
   const libraryStackRef = useRef<HTMLDivElement | null>(null);
   const libraryPinchRef = useRef<LibraryPinchState>({ active: false, startDistance: 0, startRowHeight: LIBRARY_ROW_HEIGHT_DEFAULT });
@@ -2056,7 +2159,11 @@ export default function Home() {
   const [detailCard, setDetailCard] = useState<LessonCard | LibraryItem | null>(null);
   const [editingLibraryItem, setEditingLibraryItem] = useState<LibraryItem | null>(null);
   const [libraryEditDraft, setLibraryEditDraft] = useState<LibraryEditDraft | null>(null);
+  const [editingIdeaMediaFile, setEditingIdeaMediaFile] = useState<File | null>(null);
+  const [removeEditingIdeaMedia, setRemoveEditingIdeaMedia] = useState(false);
+  const [isSavingLibraryEdit, setIsSavingLibraryEdit] = useState(false);
   const [removeCandidate, setRemoveCandidate] = useState<LibraryItem | null>(null);
+  const [isDeletingIdea, setIsDeletingIdea] = useState(false);
   const [hasLoadedLocalLesson, setHasLoadedLocalLesson] = useState(false);
   const [libraryRowHeight, setLibraryRowHeight] = useState(LIBRARY_ROW_HEIGHT_DEFAULT);
   const [hasLoadedLibraryView, setHasLoadedLibraryView] = useState(false);
@@ -2064,7 +2171,7 @@ export default function Home() {
   const [librarySearch, setLibrarySearch] = useState("");
   const [gemIds, setGemIds] = useState<string[]>(INITIAL_DEMO_GEM_IDS);
   const [customLibraryCards, setCustomLibraryCards] = useState<LibraryItem[]>([]);
-  const [ideaPhotoUrls, setIdeaPhotoUrls] = useState<Record<string, string>>({});
+  const [ideaMediaUrls, setIdeaMediaUrls] = useState<Record<string, string>>({});
   const [recentIdeaIds, setRecentIdeaIds] = useState<string[]>([]);
   const [archivedIdeaIds, setArchivedIdeaIds] = useState<string[]>([]);
   const [restoredIdeaIds, setRestoredIdeaIds] = useState<string[]>([]);
@@ -2076,8 +2183,10 @@ export default function Home() {
   const [newIdeaKind, setNewIdeaKind] = useState<LessonCard["kind"]>("DRILL");
   const [newIdeaTags, setNewIdeaTags] = useState("");
   const [newIdeaMats, setNewIdeaMats] = useState("");
-  const [newIdeaPhotoFile, setNewIdeaPhotoFile] = useState<File | null>(null);
+  const [newIdeaMediaFile, setNewIdeaMediaFile] = useState<File | null>(null);
   const [isSavingNewIdea, setIsSavingNewIdea] = useState(false);
+  const newIdeaMediaPreviewUrl = useLocalFileUrl(newIdeaMediaFile);
+  const editingIdeaMediaPreviewUrl = useLocalFileUrl(editingIdeaMediaFile);
   const [libraryTransferImport, setLibraryTransferImport] = useState<LibraryTransferImportState | null>(null);
   const [visualLabelDraft, setVisualLabelDraft] = useState("");
   const [hasLoadedLibraryPreferences, setHasLoadedLibraryPreferences] = useState(false);
@@ -2098,7 +2207,7 @@ export default function Home() {
   const setLibraryRowHeightVisual = useCallback((value: number) => {
     const next = clampLibraryRowHeight(value);
     const descriptionProgress = Math.max(0, Math.min(1, (next - 82) / (LIBRARY_ROW_HEIGHT_MAX - 82)));
-    const extraProgress = Math.max(0, Math.min(1, (next - 116) / (LIBRARY_ROW_HEIGHT_MAX - 116)));
+    const extraProgress = Math.max(0, Math.min(1, (next - 100) / (LIBRARY_ROW_HEIGHT_MAX - 100)));
     libraryRowHeightRef.current = next;
     const stack = libraryStackRef.current;
     if (stack) {
@@ -2585,6 +2694,8 @@ export default function Home() {
     setDetailCard(null);
     setEditingLibraryItem(null);
     setLibraryEditDraft(null);
+    setEditingIdeaMediaFile(null);
+    setRemoveEditingIdeaMedia(false);
     setRemoveCandidate(null);
     setBoardToolById({});
     setSelectedCustomSpotByBoardId({});
@@ -2983,6 +3094,15 @@ export default function Home() {
           setRestoredIdeaIds([...new Set(parsed.restoredIdeaIds)]);
           setItemOverridesById(Object.fromEntries(Object.entries(parsed.itemOverridesById).map(([id, card]) => [id, copyLibraryItem(card)])));
           setRemovedIdeaIds([...new Set(parsed.removedIdeaIds)]);
+        } else if (isStoredLibraryPreferencesV5(parsed)) {
+          setGemIds([...new Set(parsed.gemIds)]);
+          setCustomLibraryCards(parsed.customCards.map(copyLibraryItem));
+          setRecentIdeaIds([...new Set(parsed.recentIdeaIds)]);
+          setArchivedIdeaIds([...new Set(parsed.archivedIdeaIds)]);
+          setRestoredIdeaIds([...new Set(parsed.restoredIdeaIds)]);
+          setItemOverridesById(Object.fromEntries(Object.entries(parsed.itemOverridesById).map(([id, card]) => [id, copyLibraryItem(card)])));
+          setRemovedIdeaIds([...new Set(parsed.removedIdeaIds)]);
+          setNotice("LOCAL LIBRARY RESTORED · PHOTOS UPGRADED FOR PHOTO OR VIDEO ATTACHMENTS");
         } else if (isStoredLibraryPreferencesV4(parsed)) {
           setGemIds([...new Set(parsed.gemIds)]);
           setCustomLibraryCards(parsed.customCards.map(copyLibraryItem));
@@ -3014,7 +3134,7 @@ export default function Home() {
   useEffect(() => {
     if (!hasLoadedLibraryPreferences) return;
     const savedPreferences: StoredLibraryPreferences = {
-      version: 5,
+      version: 6,
       gemIds,
       customCards: customLibraryCards,
       recentIdeaIds,
@@ -3038,7 +3158,7 @@ export default function Home() {
       if (event.key !== LOCAL_LIBRARY_STORAGE_KEY || !event.newValue || event.newValue === libraryStorageSnapshotRef.current) return;
       try {
         const parsed: unknown = JSON.parse(event.newValue);
-        if (!isStoredLibraryPreferences(parsed)) return;
+        if (!isStoredLibraryPreferences(parsed) && !isStoredLibraryPreferencesV5(parsed)) return;
         libraryStorageSnapshotRef.current = event.newValue;
         setGemIds([...new Set(parsed.gemIds)]);
         setCustomLibraryCards(parsed.customCards.map(copyLibraryItem));
@@ -3145,18 +3265,18 @@ export default function Home() {
     if (!hasLoadedLibraryPreferences) return;
     let active = true;
     const urls: string[] = [];
-    const photoIds = [...new Set(allLibraryItems.flatMap((item) => item.photoId ? [item.photoId] : []))];
-    void Promise.all(photoIds.map(async (photoId) => {
-      const photo = await loadIdeaPhoto(photoId);
-      if (!photo || !active) return [photoId, ""] as const;
-      const url = URL.createObjectURL(photo.blob);
+    const mediaIds = [...new Set(allLibraryItems.flatMap((item) => item.mediaId ? [item.mediaId] : []))];
+    void Promise.all(mediaIds.map(async (mediaId) => {
+      const media = await loadIdeaMedia(mediaId);
+      if (!media || !active) return [mediaId, ""] as const;
+      const url = URL.createObjectURL(media.blob);
       urls.push(url);
-      return [photoId, url] as const;
+      return [mediaId, url] as const;
     })).then((entries) => {
       if (!active) return;
-      setIdeaPhotoUrls(Object.fromEntries(entries.filter(([, url]) => Boolean(url))));
+      setIdeaMediaUrls(Object.fromEntries(entries.filter(([, url]) => Boolean(url))));
     }).catch(() => {
-      if (active) setNotice("IDEA LIBRARY RESTORED · ONE OR MORE LOCAL REFERENCE PHOTOS ARE UNAVAILABLE ON THIS DEVICE");
+      if (active) setNotice("IDEA LIBRARY RESTORED · ONE OR MORE LOCAL ATTACHMENTS ARE UNAVAILABLE ON THIS DEVICE");
     });
     return () => {
       active = false;
@@ -3807,6 +3927,8 @@ export default function Home() {
       setIsAddingIdea(false);
       setEditingLibraryItem(null);
       setLibraryEditDraft(null);
+      setEditingIdeaMediaFile(null);
+      setRemoveEditingIdeaMedia(false);
       setRemoveCandidate(null);
       setIsClassManagerOpen(false);
       setRemoveClassCandidate(null);
@@ -4904,41 +5026,112 @@ export default function Home() {
     setRemoveCandidate(null);
     setEditingLibraryItem(copyLibraryItem(card));
     setLibraryEditDraft(libraryEditDraftFor(card));
+    setEditingIdeaMediaFile(null);
+    setRemoveEditingIdeaMedia(false);
+  }
+
+  function closeLibraryEdit() {
+    if (isSavingLibraryEdit) return;
+    setEditingLibraryItem(null);
+    setLibraryEditDraft(null);
+    setEditingIdeaMediaFile(null);
+    setRemoveEditingIdeaMedia(false);
+    if (editIdeaCameraInputRef.current) editIdeaCameraInputRef.current.value = "";
+    if (editIdeaMediaInputRef.current) editIdeaMediaInputRef.current.value = "";
   }
 
   function updateLibraryEditDraft<Key extends keyof LibraryEditDraft>(key: Key, value: LibraryEditDraft[Key]) {
     setLibraryEditDraft((current) => current ? { ...current, [key]: value } : current);
   }
 
-  function saveLibraryEdit() {
-    if (!editingLibraryItem || !libraryEditDraft) return;
+  function chooseLibraryIdeaMedia(file: File | null, target: "new" | "edit") {
+    if (!file) return;
+    const validationMessage = ideaMediaValidationMessage(file);
+    if (validationMessage) {
+      setNotice(validationMessage);
+      return;
+    }
+    if (target === "new") {
+      setNewIdeaMediaFile(file);
+      return;
+    }
+    setEditingIdeaMediaFile(file);
+    setRemoveEditingIdeaMedia(false);
+  }
+
+  async function storeLibraryIdeaMedia(ideaId: string, file: File): Promise<LibraryMediaMetadata> {
+    const metadata = await libraryMediaMetadataForFile(file);
+    const mediaId = createIdeaMediaId(ideaId);
+    await saveIdeaMedia({
+      id: mediaId,
+      ideaId,
+      blob: file,
+      filename: metadata.mediaFilename ?? file.name,
+      mimeType: metadata.mediaMimeType ?? file.type,
+      kind: metadata.mediaKind,
+      width: metadata.mediaWidth,
+      height: metadata.mediaHeight,
+      durationSeconds: metadata.mediaDurationSeconds,
+      createdAt: new Date().toISOString(),
+    });
+    return { ...metadata, mediaId };
+  }
+
+  async function saveLibraryEdit() {
+    if (!editingLibraryItem || !libraryEditDraft || isSavingLibraryEdit) return;
     const title = libraryEditDraft.title.trim();
     if (!title) {
       setNotice("IDEA NAME IS REQUIRED · NOTHING WAS CHANGED");
       return;
     }
-    const edited: LibraryItem = {
-      ...editingLibraryItem,
-      title,
-      kind: libraryEditDraft.kind,
-      description: libraryEditDraft.description.trim() || "Add the rules, coaching notes, or reference details when you are ready.",
-      safety: libraryEditDraft.safety.trim() || undefined,
-      mats: parseEditableList(libraryEditDraft.mats),
-      tags: parseEditableList(libraryEditDraft.tags),
-      events: parseEditableList(libraryEditDraft.events),
-      skills: parseEditableList(libraryEditDraft.skills),
-      goals: parseEditableList(libraryEditDraft.goals),
-      instructions: parseEditableList(libraryEditDraft.instructions),
-      coachingCues: parseEditableList(libraryEditDraft.coachingCues),
-    };
-    if (customLibraryCards.some((card) => card.id === edited.id)) {
-      setCustomLibraryCards((cards) => cards.map((card) => card.id === edited.id ? edited : card));
-    } else {
-      setItemOverridesById((current) => ({ ...current, [edited.id]: edited }));
+    setIsSavingLibraryEdit(true);
+    let newMediaId: string | null = null;
+    try {
+      const currentMedia = normalizedLibraryMedia(editingLibraryItem);
+      let nextMedia = removeEditingIdeaMedia ? {} : currentMedia;
+      if (editingIdeaMediaFile) {
+        nextMedia = await storeLibraryIdeaMedia(editingLibraryItem.id, editingIdeaMediaFile);
+        newMediaId = nextMedia.mediaId ?? null;
+      }
+      const oldMediaId = replacedLibraryMediaId(currentMedia.mediaId, nextMedia.mediaId);
+      if (oldMediaId) await removeIdeaMedia(oldMediaId);
+      const edited: LibraryItem = {
+        ...withoutLibraryMedia(editingLibraryItem),
+        ...nextMedia,
+        title,
+        kind: libraryEditDraft.kind,
+        description: libraryEditDraft.description.trim() || "Add the rules, coaching notes, or reference details when you are ready.",
+        safety: libraryEditDraft.safety.trim() || undefined,
+        mats: parseEditableList(libraryEditDraft.mats),
+        tags: parseEditableList(libraryEditDraft.tags),
+        events: parseEditableList(libraryEditDraft.events),
+        skills: parseEditableList(libraryEditDraft.skills),
+        goals: parseEditableList(libraryEditDraft.goals),
+        instructions: parseEditableList(libraryEditDraft.instructions),
+        coachingCues: parseEditableList(libraryEditDraft.coachingCues),
+      };
+      if (customLibraryCards.some((card) => card.id === edited.id)) {
+        setCustomLibraryCards((cards) => cards.map((card) => card.id === edited.id ? edited : card));
+      } else {
+        setItemOverridesById((current) => ({ ...current, [edited.id]: edited }));
+      }
+      setEditingLibraryItem(null);
+      setLibraryEditDraft(null);
+      setEditingIdeaMediaFile(null);
+      setRemoveEditingIdeaMedia(false);
+      setNotice(`${edited.title.toUpperCase()} SAVED${edited.mediaId ? ` WITH A LOCAL ${edited.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · THIS BROWSER'S LIBRARY COPY WAS UPDATED`);
+    } catch {
+      if (newMediaId) {
+        try {
+          await removeIdeaMedia(newMediaId);
+        } catch {
+          // The inaccessible new record is not linked from the saved idea.
+        }
+      }
+      setNotice("THE IDEA OR ITS ATTACHMENT COULD NOT BE SAVED · YOUR EXISTING IDEA WAS LEFT OPEN");
+    } finally {
+      setIsSavingLibraryEdit(false);
     }
-    setEditingLibraryItem(null);
-    setLibraryEditDraft(null);
-    setNotice(`${edited.title.toUpperCase()} SAVED · THIS BROWSER'S LIBRARY COPY WAS UPDATED`);
   }
 
   function requestLibraryRemoval(card: LibraryItem) {
@@ -4952,6 +5145,37 @@ export default function Home() {
     setRemovedIdeaIds((ids) => [...new Set([...ids, removeCandidate.id])]);
     setRemoveCandidate(null);
     setNotice(`${title.toUpperCase()} HIDDEN FROM ACTIVE LIBRARY · RESTORE IT FROM ARCHIVE · SOURCE UNTOUCHED`);
+  }
+
+  async function confirmPermanentLibraryDeletion() {
+    if (!removeCandidate || isDeletingIdea) return;
+    setIsDeletingIdea(true);
+    try {
+      const deletion = permanentlyDeleteLibraryIdea({
+        gemIds,
+        customCards: customLibraryCards,
+        recentIdeaIds,
+        archivedIdeaIds,
+        restoredIdeaIds,
+        itemOverridesById,
+        removedIdeaIds,
+      }, removeCandidate);
+      if (deletion.mediaId) await removeIdeaMedia(deletion.mediaId);
+      setGemIds(deletion.next.gemIds);
+      setCustomLibraryCards(deletion.next.customCards);
+      setRecentIdeaIds(deletion.next.recentIdeaIds);
+      setArchivedIdeaIds(deletion.next.archivedIdeaIds);
+      setRestoredIdeaIds(deletion.next.restoredIdeaIds);
+      setItemOverridesById(deletion.next.itemOverridesById);
+      setRemovedIdeaIds(deletion.next.removedIdeaIds);
+      const title = removeCandidate.title;
+      setRemoveCandidate(null);
+      setNotice(`${title.toUpperCase()} PERMANENTLY DELETED FROM THIS LIBRARY · PLACED LESSON COPIES WERE KEPT`);
+    } catch {
+      setNotice("THE IDEA COULD NOT BE COMPLETELY DELETED · NOTHING WAS REMOVED");
+    } finally {
+      setIsDeletingIdea(false);
+    }
   }
 
   function restoreLibraryItem(card: LibraryItem) {
@@ -4997,7 +5221,7 @@ export default function Home() {
     link.click();
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setNotice(`${allLibraryItems.length} IDEA${allLibraryItems.length === 1 ? "" : "S"} EXPORTED · PHOTOS STAYED ON THIS IPAD`);
+    setNotice(`${allLibraryItems.length} IDEA${allLibraryItems.length === 1 ? "" : "S"} EXPORTED · ATTACHMENTS STAYED ON THIS DEVICE`);
   }
 
   async function previewIdeaLibraryImport(file: File | null) {
@@ -5283,18 +5507,9 @@ export default function Home() {
     setNewIdeaDescription("");
     setNewIdeaTags("");
     setNewIdeaMats("");
-    setNewIdeaPhotoFile(null);
+    setNewIdeaMediaFile(null);
     if (newIdeaCameraInputRef.current) newIdeaCameraInputRef.current.value = "";
-    if (newIdeaPhotoInputRef.current) newIdeaPhotoInputRef.current.value = "";
-  }
-
-  function chooseNewIdeaPhoto(file: File | null) {
-    if (!file) return;
-    if (!isAllowedCustomBoardPhoto(file)) {
-      setNotice("USE A JPEG, PNG, WEBP, HEIC, OR HEIF PHOTO UNDER 35 MB");
-      return;
-    }
-    setNewIdeaPhotoFile(file);
+    if (newIdeaMediaInputRef.current) newIdeaMediaInputRef.current.value = "";
   }
 
   async function saveNewIdea() {
@@ -5308,29 +5523,9 @@ export default function Home() {
     const ideaId = `local-idea-${Date.now()}`;
     setIsSavingNewIdea(true);
     try {
-      let photoMetadata: Pick<LibraryItem, "photoId" | "photoFilename" | "photoWidth" | "photoHeight"> = {};
-      if (newIdeaPhotoFile) {
-        const dimensions = await readCustomPhotoDimensions(newIdeaPhotoFile);
-        if (!dimensions.width || !dimensions.height) throw new Error("empty image");
-        const photoId = createIdeaPhotoId(ideaId);
-        const createdAt = new Date().toISOString();
-        await saveIdeaPhoto({
-          id: photoId,
-          ideaId,
-          blob: newIdeaPhotoFile,
-          filename: newIdeaPhotoFile.name || "idea-reference-photo",
-          mimeType: newIdeaPhotoFile.type || "image/*",
-          width: dimensions.width,
-          height: dimensions.height,
-          createdAt,
-        });
-        photoMetadata = {
-          photoId,
-          photoFilename: newIdeaPhotoFile.name || "idea-reference-photo",
-          photoWidth: dimensions.width,
-          photoHeight: dimensions.height,
-        };
-      }
+      const mediaMetadata = newIdeaMediaFile
+        ? await storeLibraryIdeaMedia(ideaId, newIdeaMediaFile)
+        : {};
       const idea: LibraryItem = {
         ...makeLocalLibraryItem({
           id: ideaId,
@@ -5341,21 +5536,32 @@ export default function Home() {
           accent: newIdeaKind === "SKILL" ? "pink" : newIdeaKind === "ACTIVITY" ? "green" : newIdeaKind === "REFERENCE" ? "yellow" : "cyan",
           mats: parseEditableList(newIdeaMats),
         }),
-        ...photoMetadata,
+        ...mediaMetadata,
       };
       setCustomLibraryCards((cards) => [idea, ...cards]);
       resetNewIdeaDraft();
       setIsAddingIdea(false);
       setLibraryFilter("all");
       setNotice(mode === "VIEW"
-        ? `${idea.title.toUpperCase()} SAVED TO YOUR LOCAL IDEA LIBRARY${idea.photoId ? " WITH A LOCAL PHOTO" : ""} · READY TO PLACE WHEN YOU RETURN TO EDIT`
-        : `${idea.title.toUpperCase()} SAVED TO YOUR LOCAL IDEA LIBRARY${idea.photoId ? " WITH A LOCAL PHOTO" : ""} · SELECT IT TO PLACE IT`);
+        ? `${idea.title.toUpperCase()} SAVED TO YOUR LOCAL IDEA LIBRARY${idea.mediaId ? ` WITH A LOCAL ${idea.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · READY TO PLACE WHEN YOU RETURN TO EDIT`
+        : `${idea.title.toUpperCase()} SAVED TO YOUR LOCAL IDEA LIBRARY${idea.mediaId ? ` WITH A LOCAL ${idea.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · SELECT IT TO PLACE IT`);
     } catch {
-      setNotice("THE IDEA PHOTO COULD NOT BE SAVED · THE IDEA IS STILL OPEN SO YOU CAN TRY AGAIN");
+      setNotice("THE IDEA ATTACHMENT COULD NOT BE SAVED · THE IDEA IS STILL OPEN SO YOU CAN TRY AGAIN");
     } finally {
       setIsSavingNewIdea(false);
     }
   }
+
+  const editingSavedMedia = editingLibraryItem ? normalizedLibraryMedia(editingLibraryItem) : {};
+  const editingMediaKind = editingIdeaMediaFile
+    ? ideaMediaKindForFile(editingIdeaMediaFile)
+    : editingSavedMedia.mediaKind;
+  const editingMediaUrl = editingIdeaMediaFile
+    ? editingIdeaMediaPreviewUrl
+    : removeEditingIdeaMedia || !editingSavedMedia.mediaId
+      ? null
+      : ideaMediaUrls[editingSavedMedia.mediaId] ?? null;
+  const editingMediaFilename = editingIdeaMediaFile?.name ?? editingSavedMedia.mediaFilename;
 
   const newIdeaForm = isAddingIdea ? (
     <form className="new-idea-form" onSubmit={(event) => { event.preventDefault(); void saveNewIdea(); }}>
@@ -5373,8 +5579,8 @@ export default function Home() {
       <label>RULES / COACHING NOTE<textarea value={newIdeaDescription} onChange={(event) => setNewIdeaDescription(event.target.value)} placeholder="What should you remember or explain?" maxLength={280} /></label>
       <label>MATS NEEDED <small>one per line or comma</small><textarea value={newIdeaMats} onChange={(event) => setNewIdeaMats(event.target.value)} placeholder="panel mat, 8-inch mat" maxLength={220} /></label>
       <label>TAGS<input value={newIdeaTags} onChange={(event) => setNewIdeaTags(event.target.value)} placeholder="floor, L3, warmup" maxLength={120} /></label>
-      <div className="new-idea-photo-actions">
-        <b>REFERENCE PHOTO <small>optional · stays only in this browser</small></b>
+      <div className="new-idea-media-actions">
+        <b>REFERENCE PHOTO OR VIDEO <small>optional · one attachment · stays only in this browser</small></b>
         <input
           ref={newIdeaCameraInputRef}
           className="new-idea-file-input"
@@ -5384,21 +5590,29 @@ export default function Home() {
           hidden
           aria-hidden="true"
           tabIndex={-1}
-          onChange={(event) => { chooseNewIdeaPhoto(event.currentTarget.files?.[0] ?? null); event.currentTarget.value = ""; }}
+          onChange={(event) => { chooseLibraryIdeaMedia(event.currentTarget.files?.[0] ?? null, "new"); event.currentTarget.value = ""; }}
         />
         <input
-          ref={newIdeaPhotoInputRef}
+          ref={newIdeaMediaInputRef}
           className="new-idea-file-input"
           type="file"
-          accept="image/*"
+          accept="image/*,video/*,.mov,.m4v"
           hidden
           aria-hidden="true"
           tabIndex={-1}
-          onChange={(event) => { chooseNewIdeaPhoto(event.currentTarget.files?.[0] ?? null); event.currentTarget.value = ""; }}
+          onChange={(event) => { chooseLibraryIdeaMedia(event.currentTarget.files?.[0] ?? null, "new"); event.currentTarget.value = ""; }}
         />
         <button type="button" onClick={() => newIdeaCameraInputRef.current?.click()}>TAKE PHOTO</button>
-        <button type="button" onClick={() => newIdeaPhotoInputRef.current?.click()}>CHOOSE PHOTO</button>
-        {newIdeaPhotoFile ? <span>PHOTO READY: {newIdeaPhotoFile.name || "NEW CAMERA PHOTO"}</span> : <span>NO PHOTO ATTACHED</span>}
+        <button type="button" onClick={() => newIdeaMediaInputRef.current?.click()}>CHOOSE PHOTO / VIDEO</button>
+        {newIdeaMediaFile ? <button type="button" className="media-clear" onClick={() => setNewIdeaMediaFile(null)}>CLEAR ATTACHMENT</button> : null}
+        {newIdeaMediaFile ? <span>{ideaMediaKindForFile(newIdeaMediaFile)?.toUpperCase()} READY: {newIdeaMediaFile.name || "NEW CAMERA PHOTO"}</span> : <span>NO ATTACHMENT</span>}
+        {newIdeaMediaFile && newIdeaMediaPreviewUrl ? (
+          <figure className="idea-media-preview">
+            {ideaMediaKindForFile(newIdeaMediaFile) === "video"
+              ? <video src={newIdeaMediaPreviewUrl} controls playsInline preload="metadata" />
+              : <img src={newIdeaMediaPreviewUrl} alt="New idea attachment preview" />}
+          </figure>
+        ) : null}
       </div>
       <div className="new-idea-actions"><button type="submit" disabled={isSavingNewIdea}>{isSavingNewIdea ? "SAVING…" : "SAVE IDEA"}</button><button type="button" disabled={isSavingNewIdea} onClick={() => { resetNewIdeaDraft(); setIsAddingIdea(false); }}>CANCEL</button></div>
     </form>
@@ -5445,7 +5659,7 @@ export default function Home() {
             <span>{libraryTransferImport.fileName}</span>
             {libraryTransferImport.kind === "ready" ? (
               <>
-                <p><b>{libraryTransferImport.newCount} NEW</b> · {libraryTransferImport.duplicateCount} ALREADY HERE · PHOTOS NOT INCLUDED</p>
+                <p><b>{libraryTransferImport.newCount} NEW</b> · {libraryTransferImport.duplicateCount} ALREADY HERE · ATTACHMENTS NOT INCLUDED</p>
                 <div>
                   <button type="button" disabled={!libraryTransferImport.newCount} onClick={applyIdeaLibraryImport}>
                     {libraryTransferImport.newCount ? `MERGE ${libraryTransferImport.newCount} NEW` : "NOTHING NEW"}
@@ -6848,10 +7062,12 @@ export default function Home() {
               <Card card={detailCard} />
               {isLibraryItem(detailCard) ? (
                 <>
-                  {detailCard.photoId && ideaPhotoUrls[detailCard.photoId] ? (
-                    <figure className="idea-reference-photo">
-                      <figcaption>LOCAL REFERENCE PHOTO · {detailCard.photoFilename ?? "IDEA PHOTO"}</figcaption>
-                      <img src={ideaPhotoUrls[detailCard.photoId]} alt={`Reference photo for ${detailCard.title}`} />
+                  {detailCard.mediaId && ideaMediaUrls[detailCard.mediaId] ? (
+                    <figure className="idea-reference-media">
+                      <figcaption>LOCAL REFERENCE {detailCard.mediaKind === "video" ? "VIDEO" : "PHOTO"} · {detailCard.mediaFilename ?? "IDEA ATTACHMENT"}</figcaption>
+                      {detailCard.mediaKind === "video"
+                        ? <video src={ideaMediaUrls[detailCard.mediaId]} controls playsInline preload="metadata" aria-label={`Reference video for ${detailCard.title}`} />
+                        : <img src={ideaMediaUrls[detailCard.mediaId]} alt={`Reference photo for ${detailCard.title}`} />}
                     </figure>
                   ) : null}
                   <section className="idea-detail-facts" aria-label="Saved coaching details">
@@ -6908,16 +7124,16 @@ export default function Home() {
       ) : null}
 
       {editingLibraryItem && libraryEditDraft ? (
-        <div className="idea-detail-scrim" role="presentation" onMouseDown={() => { setEditingLibraryItem(null); setLibraryEditDraft(null); }}>
+        <div className="idea-detail-scrim" role="presentation" onMouseDown={closeLibraryEdit}>
           <form
             className="idea-detail-dialog retro-window idea-editor-dialog"
             role="dialog"
             aria-modal="true"
             aria-label={`Edit ${editingLibraryItem.title}`}
             onMouseDown={(event) => event.stopPropagation()}
-            onSubmit={(event) => { event.preventDefault(); saveLibraryEdit(); }}
+            onSubmit={(event) => { event.preventDefault(); void saveLibraryEdit(); }}
           >
-            <div className="window-title">EDIT LOCAL LIBRARY IDEA <button type="button" onClick={() => { setEditingLibraryItem(null); setLibraryEditDraft(null); }} aria-label="Close idea editor">×</button></div>
+            <div className="window-title">EDIT LOCAL LIBRARY IDEA <button type="button" disabled={isSavingLibraryEdit} onClick={closeLibraryEdit} aria-label="Close idea editor">×</button></div>
             <div className="idea-detail-body idea-editor-body">
               <p className="idea-editor-note">Changes stay in this browser. The saved vault/Freeform source stays untouched.</p>
               <div className="idea-editor-grid">
@@ -6941,9 +7157,53 @@ export default function Home() {
                 <label className="wide">INSTRUCTIONS <small>one per line or comma</small><textarea value={libraryEditDraft.instructions} onChange={(event) => updateLibraryEditDraft("instructions", event.target.value)} /></label>
                 <label className="wide">SAFETY NOTE<input value={libraryEditDraft.safety} onChange={(event) => updateLibraryEditDraft("safety", event.target.value)} maxLength={260} /></label>
               </div>
+              <section className="idea-editor-media" aria-label="Idea picture or video attachment">
+                <b>REFERENCE PHOTO OR VIDEO <small>one local attachment · 35 MB photo / 100 MB video</small></b>
+                <input
+                  ref={editIdeaCameraInputRef}
+                  className="new-idea-file-input"
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  hidden
+                  aria-hidden="true"
+                  tabIndex={-1}
+                  onChange={(event) => { chooseLibraryIdeaMedia(event.currentTarget.files?.[0] ?? null, "edit"); event.currentTarget.value = ""; }}
+                />
+                <input
+                  ref={editIdeaMediaInputRef}
+                  className="new-idea-file-input"
+                  type="file"
+                  accept="image/*,video/*,.mov,.m4v"
+                  hidden
+                  aria-hidden="true"
+                  tabIndex={-1}
+                  onChange={(event) => { chooseLibraryIdeaMedia(event.currentTarget.files?.[0] ?? null, "edit"); event.currentTarget.value = ""; }}
+                />
+                <div>
+                  <button type="button" disabled={isSavingLibraryEdit} onClick={() => editIdeaCameraInputRef.current?.click()}>TAKE PHOTO</button>
+                  <button type="button" disabled={isSavingLibraryEdit} onClick={() => editIdeaMediaInputRef.current?.click()}>CHOOSE PHOTO / VIDEO</button>
+                  <button
+                    type="button"
+                    className="detail-remove"
+                    disabled={isSavingLibraryEdit || (!editingIdeaMediaFile && !editingSavedMedia.mediaId)}
+                    onClick={() => { setEditingIdeaMediaFile(null); setRemoveEditingIdeaMedia(true); }}
+                  >
+                    REMOVE ATTACHMENT
+                  </button>
+                </div>
+                {editingMediaUrl ? (
+                  <figure className="idea-media-preview">
+                    <figcaption>{editingMediaKind?.toUpperCase()} · {editingMediaFilename}</figcaption>
+                    {editingMediaKind === "video"
+                      ? <video src={editingMediaUrl} controls playsInline preload="metadata" />
+                      : <img src={editingMediaUrl} alt={`Attachment preview for ${editingLibraryItem.title}`} />}
+                  </figure>
+                ) : <span>{removeEditingIdeaMedia ? "ATTACHMENT WILL BE REMOVED WHEN YOU SAVE" : "NO ATTACHMENT"}</span>}
+              </section>
               <div className="idea-editor-actions">
-                <button type="button" onClick={() => { setEditingLibraryItem(null); setLibraryEditDraft(null); }}>CANCEL</button>
-                <button type="submit">SAVE LOCAL EDIT</button>
+                <button type="button" disabled={isSavingLibraryEdit} onClick={closeLibraryEdit}>CANCEL</button>
+                <button type="submit" disabled={isSavingLibraryEdit}>{isSavingLibraryEdit ? "SAVING…" : "SAVE LOCAL EDIT"}</button>
               </div>
             </div>
           </form>
@@ -6951,7 +7211,7 @@ export default function Home() {
       ) : null}
 
       {removeCandidate ? (
-        <div className="idea-detail-scrim" role="presentation" onMouseDown={() => setRemoveCandidate(null)}>
+        <div className="idea-detail-scrim" role="presentation" onMouseDown={() => { if (!isDeletingIdea) setRemoveCandidate(null); }}>
           <section
             className="idea-detail-dialog retro-window remove-confirm-dialog"
             role="dialog"
@@ -6959,13 +7219,16 @@ export default function Home() {
             aria-label={`Confirm removal of ${removeCandidate.title}`}
             onMouseDown={(event) => event.stopPropagation()}
           >
-            <div className="window-title">CONFIRM LOCAL REMOVAL <button type="button" onClick={() => setRemoveCandidate(null)} aria-label="Cancel removal">×</button></div>
+            <div className="window-title">ARCHIVE OR DELETE IDEA <button type="button" disabled={isDeletingIdea} onClick={() => setRemoveCandidate(null)} aria-label="Cancel removal">×</button></div>
             <div className="idea-detail-body">
-              <p><strong>{removeCandidate.title}</strong> will be hidden from the active library in this browser only.</p>
-              <p>It will remain saved in Archive, and the vault/Freeform source will not be changed.</p>
+              <p><strong>{removeCandidate.title}</strong> can be moved to Archive or permanently deleted from this browser’s Idea Library.</p>
+              <p>Permanent deletion also removes its local attachment and cannot be undone. Copies already placed in current or past lessons stay unchanged.</p>
               <div className="idea-editor-actions">
-                <button type="button" onClick={() => setRemoveCandidate(null)}>KEEP IT</button>
-                <button type="button" className="detail-remove" onClick={confirmLibraryRemoval}>YES, HIDE IT</button>
+                <button type="button" disabled={isDeletingIdea} onClick={() => setRemoveCandidate(null)}>KEEP IT</button>
+                <button type="button" disabled={isDeletingIdea} onClick={confirmLibraryRemoval}>MOVE TO ARCHIVE</button>
+                <button type="button" disabled={isDeletingIdea} className="detail-remove" onClick={() => { void confirmPermanentLibraryDeletion(); }}>
+                  {isDeletingIdea ? "DELETING…" : "DELETE PERMANENTLY"}
+                </button>
               </div>
             </div>
           </section>
