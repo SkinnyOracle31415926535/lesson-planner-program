@@ -1,6 +1,6 @@
 # Project Status
 
-**Updated:** 2026-07-19  
+**Updated:** 2026-07-23
 **Stage:** Foundation implementation in progress; local/mock data only.
 
 ## What is complete
@@ -8,7 +8,7 @@
 - Product requirements, intentional decisions, architecture direction, migration strategy, and rollout criteria are documented.
 - Existing vault structure, schedule database, automation boundaries, drill library, visual lesson boards, and Freeform pattern have been inspected.
 - The project folder is established as a portable iCloud handoff packet.
-- The generated app projects currently retain their own local Git metadata; a project-wide source-control topology has intentionally not been changed as an incidental setup action. See [`DEVELOPMENT.md`](DEVELOPMENT.md).
+- The full project is tracked in the private `SkinnyOracle31415926535/lesson-planner-program` root monorepo. The prior nested Git metadata was preserved outside the project during migration. See [`DEVELOPMENT.md`](DEVELOPMENT.md).
 - A 90s NGA/Freeform-inspired Mac editor exists in [`web-editor/`](web-editor/) and has not been deployed. It uses mock data only and persists its lesson-local data in that browser's local storage. Its library supports title/tag search, Relevant/Recent/Archive shelves, star-only device-local gems, and browser-local idea creation. A selected idea is not saved until the coach selects an explicit text target or a single visible placement anchor. Normal visual plans show only their compact placed labels; tapping a label opens its fuller local detail/media placeholder. All 24 owner-supplied station boards—including FX-only and F5—are now presented directly at their source proportions rather than re-cropping the larger gym image, with selected zones only. Each direct board fits the same compact 16:10 plan canvas; the image letterboxes inside it, and projected labels are contained in the outer canvas rather than allowed to run off-screen. The PB multi-shape interpretation shows a compact `MAP DRAFT` cue in Edit mode only. Event labels can contain multiple ordered phases; `+ PHASE IN THIS EVENT` and `TRANSITION EARLY` intentionally have different scheduling effects. Edit mode exposes zone selection and plan editing; View mode hides those editor controls, renders a legacy-style text run-of-show, and keeps attendance live. The old inert header zoom-style control is gone; visible controls now either act or are rendered as status text, and coarse-pointer targets are sized for iPad use.
 - A native SwiftUI iPad prototype exists in [`ipad-app/LessonPlanner/`](ipad-app/LessonPlanner/). It has an event-block model with ordered phases, direct idea placement into a selected station/text run-list, browser-equivalent new-idea and star flows, live attendance in View mode, and a chronological text lesson view. It uses TS = Tumble Strip and F1–F4 as horizontal floor slices. The same 24 supplied station boards, including FX-only and F5, are bundled as local app assets, take precedence over inferred crops, and retain their source proportions. Its registry contains all 201 current canonical anchors and preserves their relative neutral-layer positions for stations without a direct board. Its static schedule advisory remains advisory only and cannot create, move, or overwrite phases. It still uses local/mock data and has no live schedule, media, or remote sync connection.
 - [`contracts/gym-map-semantics.json`](contracts/gym-map-semantics.json) now defines durable gym-zone identities, floor-slice ordering, TS versus Tumble Track, composite PB/HB and SR/PH boards, and overlap rules. [`contracts/gym-layout-geometry-draft.json`](contracts/gym-layout-geometry-draft.json) records only Skeleton-Freeform-derived geometry with explicit confidence/review limits; it does not use PDF visual coordinates.
@@ -41,8 +41,7 @@ Turn the foundation into a planning core:
 1. Review the generated zone-alias candidates and add a safe crop-manifest/media metadata importer without copying media.
 2. Wire normalized bridge output into private local development adapters without copying sensitive roster/media records or bundling real schedule fixtures into the browser client.
 3. Owner-review and map the remaining Freeform zones (starting with Strap Bar, beams, and Tumble Track), then add an explicit move/reposition action without guessing their geometry.
-4. Set up private source control intentionally around the two generated app repositories.
-5. Add private sync/media only after an owner-controlled backend is available.
+4. Add private sync/media only after an owner-controlled backend is available.
 
 ## External setup needed later
 

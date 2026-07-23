@@ -168,6 +168,8 @@ export const scheduleDayAdvisoryDemo: ScheduleAdvisoryPreview = {
   supportBlocks: [],
 };
 
+export type LibraryMediaKind = "image" | "video";
+
 /** A coach-created idea saved locally in this browser. */
 export type LibraryItem = LessonCard & {
   events: string[];
@@ -180,7 +182,15 @@ export type LibraryItem = LessonCard & {
   sourceStatus: string;
   sourceType: string;
   defaultArchived?: boolean;
-  /** Optional browser-local reference photo. The Blob stays in IndexedDB. */
+  /** Optional browser-local reference media. The Blob stays in IndexedDB. */
+  mediaId?: string;
+  mediaKind?: LibraryMediaKind;
+  mediaFilename?: string;
+  mediaMimeType?: string;
+  mediaWidth?: number;
+  mediaHeight?: number;
+  mediaDurationSeconds?: number;
+  /** Legacy version-5 photo metadata, read only during local migration. */
   photoId?: string;
   photoFilename?: string;
   photoWidth?: number;

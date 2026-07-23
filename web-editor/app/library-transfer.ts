@@ -6,6 +6,13 @@ export const MAX_LIBRARY_TRANSFER_FILE_BYTES = 5 * 1024 * 1024;
 
 export type LibraryTransferIdea = Omit<
   LibraryItem,
+  | "mediaId"
+  | "mediaKind"
+  | "mediaFilename"
+  | "mediaMimeType"
+  | "mediaWidth"
+  | "mediaHeight"
+  | "mediaDurationSeconds"
   | "photoId"
   | "photoFilename"
   | "photoWidth"
@@ -204,7 +211,7 @@ export function parseLibraryTransferJson(
     return { ok: false, error: "Use a version 1 Lesson Planner Idea Library JSON file." };
   }
   if (parsed.photosIncluded !== false) {
-    return { ok: false, error: "This transfer format does not import photos." };
+    return { ok: false, error: "This transfer format does not import attachments." };
   }
   if (!isText(parsed.exportedAt, 100) || !Number.isFinite(Date.parse(parsed.exportedAt))) {
     return { ok: false, error: "The export date is missing or invalid." };

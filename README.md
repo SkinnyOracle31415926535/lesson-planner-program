@@ -44,4 +44,4 @@ Do **not** modify the existing gymnastics vault or its current automation during
 
 ## Transfer and versioning
 
-iCloud makes this folder a good handoff medium between Macs, but it is not source control. Once implementation begins, initialize a private Git repository in this folder and make small, descriptive commits. Keep the Markdown documents in Git alongside the code; they are the durable decision history.
+iCloud remains a convenient handoff medium between Macs. The folder is also tracked as the private `SkinnyOracle31415926535/lesson-planner-program` root monorepo; use small descriptive commits and keep the Markdown decision history beside both apps.

@@ -9,9 +9,7 @@
 
 ## Source-control note
 
-Xcode created a local Git repository for `ipad-app/LessonPlanner/` with its starter commit; the web starter also has its own uncommitted Git metadata. A project-wide repository has **not** been created yet. Preserve those generated repositories for now rather than deleting or nesting them blindly.
-
-Before the first shared release, make one deliberate source-control decision: either migrate everything into one root monorepo (after safely preserving the generated metadata) or keep explicit repositories with a documented coordination workflow. The recommended direction is a root monorepo because the contracts and bridge are shared by both clients, but this is intentionally not performed as an incidental cleanup step.
+The project uses the private `SkinnyOracle31415926535/lesson-planner-program` root monorepo because the contracts and bridge are shared by both clients. The former nested Git metadata was preserved outside the project before the root repository was initialized.
 
 ## Mac editor
 
