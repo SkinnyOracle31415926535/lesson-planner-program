@@ -6890,7 +6890,7 @@ export default function Home() {
                             {stationAnchorLayer}
                           </>
                         ) : <>
-                          {layout && usesFreeformGeometry ? <img className="gym-layout-art" src="/gym-layout-skeleton.png" alt="" aria-hidden="true" style={imageStyleForViewport(layout.viewport)} /> : null}
+                          {layout && usesFreeformGeometry ? <img className="gym-layout-art" src="gym-layout-skeleton.png" alt="" aria-hidden="true" style={imageStyleForViewport(layout.viewport)} /> : null}
                           {stationAnchorLayer}
                         </>}
                       </div>
