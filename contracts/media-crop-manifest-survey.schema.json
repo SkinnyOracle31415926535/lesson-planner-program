@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lesson-planner.local/contracts/media-crop-manifest-survey.schema.json",
+  "title": "Private Media Crop Manifest Survey",
+  "description": "Aggregate-only survey for planning a future private media migration. It must not contain media bytes, record text, filenames, paths, URLs, identifiers, or student data.",
+  "type": "object",
+  "required": ["schemaVersion", "privacy", "source", "survey"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "privacy": {
+      "type": "object",
+      "required": [
+        "mediaFilesRead",
+        "mediaBytesIncluded",
+        "mediaRecordTextIncluded",
+        "filenamesIncluded",
+        "filesystemPathsIncluded",
+        "urlsIncluded",
+        "identifiersIncluded",
+        "studentRecordsIncluded",
+        "unrelatedVaultDocumentsRead"
+      ],
+      "properties": {
+        "mediaFilesRead": { "const": false },
+        "mediaBytesIncluded": { "const": false },
+        "mediaRecordTextIncluded": { "const": false },
+        "filenamesIncluded": { "const": false },
+        "filesystemPathsIncluded": { "const": false },
+        "urlsIncluded": { "const": false },
+        "identifiersIncluded": { "const": false },
+        "studentRecordsIncluded": { "const": false },
+        "unrelatedVaultDocumentsRead": { "const": false }
+      },
+      "additionalProperties": false
+    },
+    "source": {
+      "type": "object",
+      "required": ["kind", "revisionSha256", "manifestFormatRevision"],
+      "properties": {
+        "kind": { "const": "crop-manifest" },
+        "revisionSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "manifestFormatRevision": {
+          "type": ["integer", "string", "null"],
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "survey": {
+      "type": "object",
+      "required": [
+        "manifestShape",
+        "cropRecordCount",
+        "supplementalObjectCollectionCount",
+        "recordFieldShape",
+        "capabilityCoverage"
+      ],
+      "properties": {
+        "manifestShape": {
+          "enum": [
+            "array-record-collection",
+            "object-record-collection",
+            "nested-record-collection",
+            "no-mapping-record-collection"
+          ]
+        },
+        "cropRecordCount": { "type": "integer", "minimum": 0 },
+        "supplementalObjectCollectionCount": { "type": "integer", "minimum": 0 },
+        "recordFieldShape": {
+          "type": "object",
+          "required": ["minimumFieldCount", "maximumFieldCount", "uniformFieldShape"],
+          "properties": {
+            "minimumFieldCount": { "type": "integer", "minimum": 0 },
+            "maximumFieldCount": { "type": "integer", "minimum": 0 },
+            "uniformFieldShape": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        },
+        "capabilityCoverage": {
+          "type": "object",
+          "required": [
+            "cropGeometry",
+            "mediaReferences",
+            "textAnnotations",
+            "sourceProvenance",
+            "classificationLabels",
+            "duplicateOrReviewState"
+          ],
+          "properties": {
+            "cropGeometry": { "type": "integer", "minimum": 0 },
+            "mediaReferences": { "type": "integer", "minimum": 0 },
+            "textAnnotations": { "type": "integer", "minimum": 0 },
+            "sourceProvenance": { "type": "integer", "minimum": 0 },
+            "classificationLabels": { "type": "integer", "minimum": 0 },
+            "duplicateOrReviewState": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

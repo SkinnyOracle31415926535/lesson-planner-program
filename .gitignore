@@ -1,0 +1,31 @@
+# macOS
+.DS_Store
+
+# Local editor and environment state
+.idea/
+.vscode/
+.env
+.env.*
+!.env.example
+
+# Apple/Xcode generated state
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+
+# JavaScript/web generated state
+node_modules/
+.next/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Local media staging and generated previews
+local/
+tmp/
+app-preview/
+
+# Python bridge generated state
+__pycache__/
+*.py[cod]

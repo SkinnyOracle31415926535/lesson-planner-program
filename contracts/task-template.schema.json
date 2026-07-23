@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lesson-planner.local/contracts/task-template.schema.json",
+  "title": "Lesson Planner Task Templates and Occurrences",
+  "type": "object",
+  "required": ["schemaVersion", "templates", "occurrences"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "templates": { "type": "array", "items": { "$ref": "#/$defs/taskTemplate" } },
+    "occurrences": { "type": "array", "items": { "$ref": "#/$defs/taskOccurrence" } }
+  },
+  "$defs": {
+    "scope": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["all_classes", "classes", "phase", "lesson"] },
+        "classIds": { "type": "array", "items": { "type": "string" } },
+        "phaseId": { "type": "string" },
+        "lessonId": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "taskTemplate": {
+      "type": "object",
+      "required": ["id", "title", "scope", "recurrence", "active"],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "minLength": 1 },
+        "scope": { "$ref": "#/$defs/scope" },
+        "recurrence": { "enum": ["every_applicable_lesson", "weekly", "one_time"] },
+        "active": { "type": "boolean" },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "oneOf": [{ "type": "string", "format": "date" }, { "type": "null" }] },
+        "rollForwardUntilCompleted": {
+          "type": "boolean",
+          "description": "Required behavior for a finite temporary task that must remain visible on its applicable later lessons until completed."
+        }
+      },
+      "additionalProperties": false
+    },
+    "taskOccurrence": {
+      "type": "object",
+      "required": ["id", "templateId", "lessonId", "state"],
+      "properties": {
+        "id": { "type": "string" },
+        "templateId": { "type": "string" },
+        "lessonId": { "type": "string" },
+        "state": { "enum": ["open", "completed", "skipped"] },
+        "completedAt": { "oneOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }] }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

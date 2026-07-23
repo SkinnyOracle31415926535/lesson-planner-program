@@ -1,0 +1,137 @@
+{
+  "advisories": [
+    "The source schedule has unresolved collision warnings; treat this draft as advisory until reviewed."
+  ],
+  "date": {
+    "day": "Fri",
+    "iso": "2026-07-17"
+  },
+  "plan": {
+    "openings": [],
+    "rotationBlocks": [
+      {
+        "activityType": "rotation",
+        "bookingId": "summer-2026-fri-odd-23-930-boys",
+        "confidence": "high",
+        "endMinute": 945,
+        "equipment": [
+          "HB",
+          "PB",
+          "PH",
+          "SR"
+        ],
+        "eventLabel": "boys",
+        "reviewStatus": "auto_extracted",
+        "startMinute": 930
+      },
+      {
+        "activityType": "rotation",
+        "bookingId": "summer-2026-fri-odd-23-945-wr",
+        "confidence": "high",
+        "endMinute": 960,
+        "equipment": [
+          "WR"
+        ],
+        "eventLabel": "WR",
+        "reviewStatus": "auto_extracted",
+        "startMinute": 945
+      },
+      {
+        "activityType": "rotation",
+        "bookingId": "summer-2026-fri-odd-23-960-pb-hb",
+        "confidence": "high",
+        "endMinute": 975,
+        "equipment": [
+          "HB",
+          "PB"
+        ],
+        "eventLabel": "PB/HB",
+        "reviewStatus": "auto_extracted",
+        "startMinute": 960
+      },
+      {
+        "activityType": "rotation",
+        "bookingId": "summer-2026-fri-odd-23-975-sr-ph",
+        "confidence": "high",
+        "endMinute": 1005,
+        "equipment": [
+          "PH",
+          "SR"
+        ],
+        "eventLabel": "SR/PH",
+        "reviewStatus": "auto_extracted",
+        "startMinute": 975
+      },
+      {
+        "activityType": "rotation",
+        "bookingId": "summer-2026-fri-odd-23-1005-f2",
+        "confidence": "high",
+        "endMinute": 1025,
+        "equipment": [
+          "F2"
+        ],
+        "eventLabel": "F2",
+        "reviewStatus": "auto_extracted",
+        "startMinute": 1005
+      },
+      {
+        "activityType": "rotation",
+        "bookingId": "summer-2026-fri-odd-23-1025-f2",
+        "confidence": "high",
+        "endMinute": 1050,
+        "equipment": [
+          "F2"
+        ],
+        "eventLabel": "F2",
+        "reviewStatus": "auto_extracted",
+        "startMinute": 1025
+      }
+    ],
+    "supportBlocks": []
+  },
+  "privacy": {
+    "mediaBytesIncluded": false,
+    "rawSourceLabelsIncluded": false,
+    "studentRecordsIncluded": false
+  },
+  "rotation": {
+    "availableWeekChoices": [
+      "Even",
+      "Odd"
+    ],
+    "manualConfirmationRequired": false,
+    "monthWeekOrdinal": 3,
+    "resolvedWeek": "Odd",
+    "status": "auto"
+  },
+  "schemaVersion": 1,
+  "selection": {
+    "availableGroups": [
+      "B.NGA",
+      "B3",
+      "B5/6",
+      "B7-10",
+      "G3",
+      "G4",
+      "GRF",
+      "Gadv",
+      "Gint",
+      "Neuro",
+      "Ninja",
+      "Pre Rec",
+      "Pre-Team",
+      "T&T",
+      "TMT",
+      "TNT",
+      "Xcel G/P/D",
+      "Xcel Prep"
+    ],
+    "selectedGroup": "B3",
+    "status": "ready"
+  },
+  "source": {
+    "revision": "03fe22b4714b736bceb7b037efcf8737a72c22ace900e0734f103a8186bc7f0f",
+    "scheduleId": "summer_2026",
+    "sourceId": "schedule:summer_2026"
+  }
+}

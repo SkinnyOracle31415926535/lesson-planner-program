@@ -1,0 +1,37 @@
+{
+  "privacy": {
+    "filenamesIncluded": false,
+    "filesystemPathsIncluded": false,
+    "identifiersIncluded": false,
+    "mediaBytesIncluded": false,
+    "mediaFilesRead": false,
+    "mediaRecordTextIncluded": false,
+    "studentRecordsIncluded": false,
+    "unrelatedVaultDocumentsRead": false,
+    "urlsIncluded": false
+  },
+  "schemaVersion": 1,
+  "source": {
+    "kind": "crop-manifest",
+    "manifestFormatRevision": null,
+    "revisionSha256": "5fc90a27b5958cb6ffd461c62cf2660b060832401c7898f483cb64622b1b2146"
+  },
+  "survey": {
+    "capabilityCoverage": {
+      "classificationLabels": 179,
+      "cropGeometry": 179,
+      "duplicateOrReviewState": 179,
+      "mediaReferences": 0,
+      "sourceProvenance": 179,
+      "textAnnotations": 179
+    },
+    "cropRecordCount": 179,
+    "manifestShape": "object-record-collection",
+    "recordFieldShape": {
+      "maximumFieldCount": 9,
+      "minimumFieldCount": 8,
+      "uniformFieldShape": false
+    },
+    "supplementalObjectCollectionCount": 1
+  }
+}

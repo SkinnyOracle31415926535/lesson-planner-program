@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lesson-planner.local/contracts/incoming-update-feed.schema.json",
+  "title": "Lesson Planner Normalized Incoming Update Feed",
+  "description": "A reviewable handoff from approved crawls. Clients must not parse raw email or Markdown directly.",
+  "type": "object",
+  "required": ["schemaVersion", "updates"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "updates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/incomingUpdate" }
+    }
+  },
+  "$defs": {
+    "incomingUpdate": {
+      "type": "object",
+      "required": [
+        "id",
+        "sourceKind",
+        "sourceRevision",
+        "title",
+        "summary",
+        "classScopes",
+        "confidence",
+        "sourceStatus",
+        "eventDate",
+        "decision",
+        "decisionRevision",
+        "manualAction"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable source-derived identifier, for example weekly:<source-id>:<item-id>."
+        },
+        "sourceKind": { "enum": ["weekly_notes", "email_crawl", "manual", "other"] },
+        "sourceRevision": {
+          "type": "string",
+          "description": "Revision/fingerprint that lets a rejected older revision reappear only when content changes."
+        },
+        "sourceRef": {
+          "type": "string",
+          "description": "Stable provenance reference. Never an absolute file path or public media URL."
+        },
+        "title": { "type": "string", "minLength": 1 },
+        "summary": { "type": "string", "minLength": 1 },
+        "classScopes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "confidence": { "enum": ["high", "medium", "low"] },
+        "sourceStatus": { "enum": ["open", "needs_review", "resolved", "cancelled", "superseded"] },
+        "eventDate": {
+          "oneOf": [{ "type": "string", "format": "date" }, { "type": "null" }]
+        },
+        "endDate": {
+          "oneOf": [{ "type": "string", "format": "date" }, { "type": "null" }]
+        },
+        "decision": { "enum": ["undecided", "important", "later", "rejected", "converted"] },
+        "decisionRevision": {
+          "oneOf": [{ "type": "string" }, { "type": "null" }],
+          "description": "The source revision to which the manual decision applies."
+        },
+        "manualAction": { "enum": ["none", "announcement", "task", "lesson_note"] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "decision": { "const": "rejected" } }, "required": ["decision"] },
+          "then": { "properties": { "decisionRevision": { "type": "string", "minLength": 1 } } }
+        }
+      ],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Lesson Planner Core Contract",
+  "type": "object",
+  "required": ["workspace", "classes", "gymLayouts", "libraryItems", "lessons"],
+  "properties": {
+    "workspace": { "type": "object", "required": ["id", "timezone"], "properties": { "id": { "type": "string" }, "timezone": { "type": "string" } } },
+    "classes": { "type": "array", "items": { "$ref": "#/$defs/classProfile" } },
+    "gymLayouts": { "type": "array", "items": { "$ref": "#/$defs/gymLayout" } },
+    "libraryItems": { "type": "array", "items": { "$ref": "#/$defs/libraryItem" } },
+    "lessons": { "type": "array", "items": { "$ref": "#/$defs/lesson" } }
+  },
+  "$defs": {
+    "classProfile": {
+      "type": "object",
+      "required": ["id", "name", "template"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "template": { "type": "object" },
+        "rosterId": { "type": "string" }
+      }
+    },
+    "gymLayout": {
+      "type": "object",
+      "required": ["id", "name", "zones"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "zones": { "type": "array", "items": { "$ref": "#/$defs/gymZone" } }
+      }
+    },
+    "gymZone": {
+      "type": "object",
+      "required": ["id", "name", "aliases"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "aliases": { "type": "array", "items": { "type": "string" } },
+        "color": { "type": "string" }
+      }
+    },
+    "libraryItem": {
+      "type": "object",
+      "required": ["id", "type", "title", "state"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "enum": ["drill", "activity", "reference"] },
+        "title": { "type": "string" },
+        "state": { "enum": ["inbox", "active", "archive"] },
+        "variants": { "type": "array", "items": { "type": "object" } },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "safety": { "type": "array", "items": { "type": "string" } },
+        "source": { "type": "object" }
+      }
+    },
+    "lesson": {
+      "type": "object",
+      "required": ["id", "classId", "date", "status", "phases"],
+      "properties": {
+        "id": { "type": "string" },
+        "classId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "status": { "enum": ["draft", "ready", "in_class", "completed", "archived"] },
+        "scheduleRevision": { "type": "string" },
+        "phases": { "type": "array", "items": { "$ref": "#/$defs/phase" } }
+      }
+    },
+    "phase": {
+      "type": "object",
+      "required": ["id", "title", "mode", "zoneIds"],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "mode": { "enum": ["text", "visual", "mixed"] },
+        "zoneIds": { "type": "array", "items": { "type": "string" } },
+        "lanes": { "type": "array", "items": { "type": "object" } },
+        "safetyAcknowledged": { "type": "boolean" }
+      }
+    }
+  }
+}

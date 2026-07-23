@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "privacy": {
+    "mediaBytesIncluded": false,
+    "filesystemPathsIncluded": false,
+    "publicUrlsIncluded": false,
+    "rawSourceLocationsIncluded": false,
+    "personIdentifyingDataIncluded": false
+  },
+  "readinessPolicy": {
+    "readyLesson": {
+      "requiredAssetAvailability": "available",
+      "verifyDeclaredChecksum": true,
+      "allowOptionalAssetsToRemainUnavailable": true
+    },
+    "upcomingLessonPrefetch": {
+      "enabled": true,
+      "windowHours": 48,
+      "targetAvailability": "available",
+      "onlyReferencedAssets": true,
+      "retryWhenNetworkAvailable": true
+    }
+  },
+  "assets": [
+    {
+      "id": "asset:demo-image-001",
+      "kind": "image",
+      "title": "Synthetic station diagram placeholder",
+      "caption": "Synthetic sample only. A future station diagram can be shown beside a lesson phase.",
+      "durationSeconds": null,
+      "pageCount": null,
+      "provenance": {
+        "kind": "test-fixture",
+        "opaqueSourceId": "source:demo-fixture-001"
+      },
+      "storage": {
+        "storageId": "storage:demo-local-001",
+        "scope": "app-managed-local"
+      },
+      "localReadiness": {
+        "availability": "available",
+        "downloadStatus": "downloaded",
+        "expectedByteCount": 245760,
+        "lastVerifiedAt": "2026-07-19T12:00:00Z"
+      },
+      "integrity": {
+        "state": "verified",
+        "checksum": {
+          "algorithm": "sha256",
+          "digest": "b68f0f4d4f31fe3f0b8a085fd60f8fb8ae2d2127594a5b0a39cf8d2c313c8953"
+        }
+      },
+      "contentClassification": {
+        "personVisibility": "none",
+        "coachPresentationOnly": true
+      },
+      "deliveryTier": "required-for-ready",
+      "opaqueLessonRefs": ["lesson:demo-tuesday-001"]
+    },
+    {
+      "id": "asset:demo-video-001",
+      "kind": "video",
+      "title": "Synthetic video reference placeholder",
+      "caption": "Synthetic sample only. A future private video reference can be queued for an upcoming lesson.",
+      "durationSeconds": 75,
+      "pageCount": null,
+      "provenance": {
+        "kind": "test-fixture",
+        "opaqueSourceId": "source:demo-fixture-002"
+      },
+      "storage": {
+        "storageId": "storage:demo-local-002",
+        "scope": "managed-sync-cache"
+      },
+      "localReadiness": {
+        "availability": "unavailable",
+        "downloadStatus": "queued",
+        "expectedByteCount": 7340032,
+        "lastVerifiedAt": null
+      },
+      "integrity": {
+        "state": "not-calculated",
+        "checksum": null
+      },
+      "contentClassification": {
+        "personVisibility": "none",
+        "coachPresentationOnly": true
+      },
+      "deliveryTier": "prefetch-for-upcoming",
+      "opaqueLessonRefs": ["lesson:demo-tuesday-001"]
+    },
+    {
+      "id": "asset:demo-document-001",
+      "kind": "document",
+      "title": "Synthetic rules card placeholder",
+      "caption": "Synthetic sample only. A future activity rules card can remain available on demand.",
+      "durationSeconds": null,
+      "pageCount": 1,
+      "provenance": {
+        "kind": "test-fixture",
+        "opaqueSourceId": "source:demo-fixture-003"
+      },
+      "storage": {
+        "storageId": "storage:demo-local-003",
+        "scope": "app-managed-local"
+      },
+      "localReadiness": {
+        "availability": "unknown",
+        "downloadStatus": "not-requested",
+        "expectedByteCount": null,
+        "lastVerifiedAt": null
+      },
+      "integrity": {
+        "state": "not-calculated",
+        "checksum": null
+      },
+      "contentClassification": {
+        "personVisibility": "none",
+        "coachPresentationOnly": true
+      },
+      "deliveryTier": "on-demand",
+      "opaqueLessonRefs": ["activity:demo-game-001"]
+    }
+  ]
+}

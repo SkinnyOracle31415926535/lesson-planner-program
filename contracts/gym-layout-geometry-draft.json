@@ -1,0 +1,145 @@
+{
+  "contractFormat": "lesson-planner-gym-layout-geometry-draft/v1",
+  "title": "Lesson Planner Gym Layout Geometry Draft",
+  "status": "owner-skeleton-derived-draft-review-pending",
+  "coordinateSystem": {
+    "kind": "normalized-1000",
+    "origin": "top-left",
+    "xDirection": "right",
+    "yDirection": "down",
+    "referenceCanvas": {
+      "width": 1000,
+      "height": 1000
+    },
+    "sourcePixelTolerance": 5,
+    "normalizedTolerance": 10
+  },
+  "sourceOfTruth": {
+    "description": "Owner-provided Skeleton Freeform board",
+    "allowedUse": [
+      "relative positions",
+      "normalized zone bounds",
+      "combined-zone viewport bounds",
+      "floor slice order and shape",
+      "disconnected-shape detection"
+    ],
+    "mustNotUse": [
+      "exported PDF visual positions",
+      "guessed equipment shapes",
+      "unconfirmed zone-to-shape assignments"
+    ]
+  },
+  "semanticRegistry": "gym-map-semantics.json",
+  "geometry": {
+    "zone-floor-fx": {
+      "kind": "container",
+      "rect": { "x": 145, "y": 281, "width": 348, "height": 400 },
+      "confidence": "high",
+      "childrenInVisualOrder": [
+        "zone-floor-f4",
+        "zone-floor-f3",
+        "zone-floor-f2",
+        "zone-floor-f1"
+      ]
+    },
+    "zone-floor-f4": {
+      "kind": "rect",
+      "rect": { "x": 145, "y": 281, "width": 348, "height": 96 },
+      "confidence": "high"
+    },
+    "zone-floor-f3": {
+      "kind": "rect",
+      "rect": { "x": 145, "y": 383, "width": 348, "height": 96 },
+      "confidence": "high"
+    },
+    "zone-floor-f2": {
+      "kind": "rect",
+      "rect": { "x": 145, "y": 483, "width": 348, "height": 96 },
+      "confidence": "high"
+    },
+    "zone-floor-f1": {
+      "kind": "rect",
+      "rect": { "x": 145, "y": 583, "width": 348, "height": 98 },
+      "confidence": "high"
+    },
+    "zone-tumble-strip": {
+      "kind": "rect",
+      "rect": { "x": 84, "y": 281, "width": 60, "height": 403 },
+      "confidence": "high",
+      "verificationNote": "The live Skeleton Freeform board shows the narrow vertical tumble-strip lane with its red end markers in this rectangle. TS is distinct from Tumble Track."
+    },
+    "zone-vault": {
+      "kind": "rect",
+      "rect": { "x": 0, "y": 77, "width": 84, "height": 607 },
+      "confidence": "high",
+      "verificationNote": "The live Skeleton Freeform board shows the vault lane and its two vault-table locations in this rectangle."
+    },
+    "zone-still-rings": {
+      "kind": "rect",
+      "rect": { "x": 505, "y": 77, "width": 60, "height": 181 },
+      "confidence": "high"
+    },
+    "zone-pommel-horse": {
+      "kind": "rect",
+      "rect": { "x": 567, "y": 77, "width": 150, "height": 181 },
+      "confidence": "high"
+    },
+    "zone-high-bar-boys-bar": {
+      "kind": "rect",
+      "rect": { "x": 167, "y": 4, "width": 127, "height": 162 },
+      "confidence": "high"
+    },
+    "zone-parallel-bars": {
+      "kind": "multi-rect",
+      "rects": [
+        { "x": 293, "y": 4, "width": 212, "height": 162 },
+        { "x": 507, "y": 4, "width": 208, "height": 73 }
+      ],
+      "confidence": "medium",
+      "reviewRequired": "The Skeleton board visibly shows two disconnected PB-like shapes. They remain one semantic PB destination until the owner confirms their exact physical interpretation."
+    }
+  },
+  "derivedCompositeViews": {
+    "group-srph": {
+      "memberZoneIds": ["zone-still-rings", "zone-pommel-horse"],
+      "viewport": { "x": 505, "y": 77, "width": 212, "height": 181 },
+      "presentation": "one-board-with-member-overlays",
+      "confidence": "high"
+    },
+    "group-pbhb": {
+      "memberZoneIds": ["zone-parallel-bars", "zone-high-bar-boys-bar"],
+      "viewport": { "x": 167, "y": 4, "width": 548, "height": 162 },
+      "presentation": "one-board-with-member-overlays",
+      "confidence": "medium",
+      "reviewRequired": "Do not turn either PB shape into a PB1/PB2 destination."
+    }
+  },
+  "intentionallyUnmappedZoneIds": [
+    "zone-floor-f5",
+    "zone-tumble-track",
+    "zone-beam-1",
+    "zone-beam-2-a",
+    "zone-beam-2-b",
+    "zone-wr",
+    "zone-ninja-room",
+    "zone-ub-1",
+    "zone-ub-2",
+    "zone-ub-3",
+    "zone-strap-bar",
+    "zone-trampoline",
+    "zone-preschool",
+    "zone-pit-pb",
+    "zone-pit-rings-high-bar",
+    "landmark-green-foam-pit",
+    "landmark-cubby-storage",
+    "landmark-wall",
+    "landmark-preschool-wall",
+    "landmark-wood-floor"
+  ],
+  "consumerRules": [
+    "Only geometry with high confidence may be rendered as an exact physical shape without a review warning.",
+    "A composite viewport is a view, not a selectable third destination.",
+    "Floor cards must be placed on F4, F3, F2, or F1 rather than the FX container.",
+    "Do not draw an intentionally unmapped zone from a PDF export. Use a labeled fallback panel until its Skeleton geometry is reviewed."
+  ]
+}

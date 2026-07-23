@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lesson-planner.local/contracts/drill-catalog.schema.json",
+  "title": "Lesson Planner Local Drill Catalog",
+  "description": "A detailed, media-free catalog exported read-only from the drill ideas vault source.",
+  "type": "object",
+  "required": ["schemaVersion", "privacy", "source", "items"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "privacy": {
+      "type": "object",
+      "required": ["studentRecordsIncluded", "mediaBytesIncluded", "absoluteSourcePathsIncluded", "publicUrlsIncluded", "urlsIncluded", "traversalPathsIncluded", "rawVaultLocationIncluded"],
+      "properties": {
+        "studentRecordsIncluded": { "const": false },
+        "mediaBytesIncluded": { "const": false },
+        "absoluteSourcePathsIncluded": { "const": false },
+        "publicUrlsIncluded": { "const": false },
+        "urlsIncluded": { "const": false },
+        "traversalPathsIncluded": { "const": false },
+        "rawVaultLocationIncluded": { "const": false }
+      },
+      "additionalProperties": false
+    },
+    "source": {
+      "type": "object",
+      "required": ["kind", "revision"],
+      "properties": {
+        "kind": { "const": "drill_ideas" },
+        "sourceSchemaVersion": {},
+        "revision": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "items": { "type": "array", "items": { "$ref": "#/$defs/drill" } }
+  },
+  "$defs": {
+    "drill": {
+      "type": "object",
+      "required": ["id", "title", "sourceStatus", "sourceType", "events", "skills", "goals", "instructions", "coachingCues", "tags", "sourceRefs", "variants"],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "sourceStatus": { "type": "string" },
+        "sourceType": { "type": "string" },
+        "events": { "type": "array", "items": { "type": "string" } },
+        "skills": { "type": "array", "items": { "type": "string" } },
+        "goals": { "type": "array", "items": { "type": "string" } },
+        "instructions": { "type": "array", "items": { "type": "string" } },
+        "coachingCues": { "type": "array", "items": { "type": "string" } },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "sourceRefs": { "type": "array", "items": { "type": "string" } },
+        "variants": { "type": "array", "items": { "$ref": "#/$defs/variant" } }
+      },
+      "additionalProperties": false
+    },
+    "variant": {
+      "type": "object",
+      "required": ["id", "title", "instructions", "sourceRefs"],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "instructions": { "type": "array", "items": { "type": "string" } },
+        "sourceRefs": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

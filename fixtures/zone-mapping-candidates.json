@@ -1,0 +1,1424 @@
+{
+  "candidates": [
+    {
+      "candidateId": "zone-vault",
+      "confidence": "high",
+      "displayName": "Vault",
+      "equipment": [
+        "Vault"
+      ],
+      "logicalZoneId": "vault",
+      "mayRepresentDisconnectedAreas": false,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "canonical_label_mentions_all_member_equipment",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "conditioning": 2,
+          "rotation": 73
+        },
+        "bookingCount": 75,
+        "canonicalLabels": [
+          "Cond Vault",
+          "Vault",
+          "Vault cond"
+        ],
+        "labelMentionsAllEquipmentCount": 75,
+        "sourceConfidenceCounts": {
+          "high": 75
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 63,
+          "color_inferred": 12
+        }
+      },
+      "suggestedBoardKind": "single_area"
+    },
+    {
+      "candidateId": "zone-pit",
+      "confidence": "high",
+      "displayName": "Pit",
+      "equipment": [
+        "Pit"
+      ],
+      "logicalZoneId": "pit",
+      "mayRepresentDisconnectedAreas": false,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "canonical_label_mentions_all_member_equipment",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 40
+        },
+        "bookingCount": 40,
+        "canonicalLabels": [
+          "Pit"
+        ],
+        "labelMentionsAllEquipmentCount": 40,
+        "sourceConfidenceCounts": {
+          "high": 40
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 40
+        }
+      },
+      "suggestedBoardKind": "single_area"
+    },
+    {
+      "candidateId": "zone-pit-pb",
+      "confidence": "high",
+      "displayName": "Pit PB",
+      "equipment": [
+        "Pit PB"
+      ],
+      "logicalZoneId": "pit-pb",
+      "mayRepresentDisconnectedAreas": false,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "canonical_label_mentions_all_member_equipment",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 1
+        },
+        "bookingCount": 1,
+        "canonicalLabels": [
+          "Pit PB"
+        ],
+        "labelMentionsAllEquipmentCount": 1,
+        "sourceConfidenceCounts": {
+          "high": 1
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 1
+        }
+      },
+      "suggestedBoardKind": "single_area"
+    },
+    {
+      "candidateId": "zone-strap-bar",
+      "confidence": "medium",
+      "displayName": "Strap Bar",
+      "equipment": [
+        "Strap Bar"
+      ],
+      "logicalZoneId": "strap-bar",
+      "mayRepresentDisconnectedAreas": false,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 2
+        },
+        "bookingCount": 2,
+        "canonicalLabels": [
+          "strap"
+        ],
+        "labelMentionsAllEquipmentCount": 0,
+        "sourceConfidenceCounts": {
+          "high": 2
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 2
+        }
+      },
+      "suggestedBoardKind": "single_area"
+    },
+    {
+      "candidateId": "zone-beam-1",
+      "confidence": "high",
+      "displayName": "Beam 1",
+      "equipment": [
+        "Beam 1"
+      ],
+      "logicalZoneId": "beam-1",
+      "mayRepresentDisconnectedAreas": false,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "canonical_label_mentions_all_member_equipment",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 42,
+          "warmup": 2
+        },
+        "bookingCount": 44,
+        "canonicalLabels": [
+          "Beam 1",
+          "Beam 1 cond",
+          "WU Beam 1"
+        ],
+        "labelMentionsAllEquipmentCount": 44,
+        "sourceConfidenceCounts": {
+          "high": 44
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 44
+        }
+      },
+      "suggestedBoardKind": "single_area"
+    },
+    {
+      "candidateId": "zone-beam-2",
+      "confidence": "medium",
+      "displayName": "Beam 2",
+      "equipment": [
+        "Beam 2"
+      ],
+      "logicalZoneId": "beam-2",
+      "mayRepresentDisconnectedAreas": false,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "canonical_label_mentions_all_member_equipment",
+        "source_contains_review_needed_evidence",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 90,
+          "warmup": 5
+        },
+        "bookingCount": 95,
+        "canonicalLabels": [
+          "Beam 2",
+          "WU Beam 2"
+        ],
+        "labelMentionsAllEquipmentCount": 95,
+        "sourceConfidenceCounts": {
+          "high": 90,
+          "medium": 5
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 90,
+          "color_inferred_needs_review": 5
+        }
+      },
+      "suggestedBoardKind": "single_area"
+    },
+    {
+      "candidateId": "zone-ub-3",
+      "confidence": "low",
+      "displayName": "UB 3",
+      "equipment": [
+        "UB 3"
+      ],
+      "logicalZoneId": "ub-3",
+      "mayRepresentDisconnectedAreas": false,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "canonical_label_mentions_all_member_equipment",
+        "source_contains_low_confidence_evidence",
+        "source_contains_review_needed_evidence",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 81,
+          "warmup": 4
+        },
+        "bookingCount": 85,
+        "canonicalLabels": [
+          "UB 3",
+          "UB 3 Cond",
+          "UB 3 cond",
+          "WU UB 3",
+          "WU UB 3 UB 3"
+        ],
+        "labelMentionsAllEquipmentCount": 85,
+        "sourceConfidenceCounts": {
+          "high": 83,
+          "low": 2
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 83,
+          "color_inferred_needs_review": 2
+        }
+      },
+      "suggestedBoardKind": "single_area"
+    },
+    {
+      "candidateId": "zone-f1",
+      "confidence": "high",
+      "displayName": "F1",
+      "equipment": [
+        "F1"
+      ],
+      "logicalZoneId": "f1",
+      "mayRepresentDisconnectedAreas": false,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "canonical_label_mentions_all_member_equipment",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 50
+        },
+        "bookingCount": 50,
+        "canonicalLabels": [
+          "F1",
+          "Vault F1"
+        ],
+        "labelMentionsAllEquipmentCount": 50,
+        "sourceConfidenceCounts": {
+          "high": 50
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 47,
+          "color_inferred": 3
+        }
+      },
+      "suggestedBoardKind": "single_area"
+    },
+    {
+      "candidateId": "zone-f2",
+      "confidence": "high",
+      "displayName": "F2",
+      "equipment": [
+        "F2"
+      ],
+      "logicalZoneId": "f2",
+      "mayRepresentDisconnectedAreas": false,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "canonical_label_mentions_all_member_equipment",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 40
+        },
+        "bookingCount": 40,
+        "canonicalLabels": [
+          "F2",
+          "F2 Cond",
+          "Vault F2"
+        ],
+        "labelMentionsAllEquipmentCount": 40,
+        "sourceConfidenceCounts": {
+          "high": 40
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 36,
+          "color_inferred": 4
+        }
+      },
+      "suggestedBoardKind": "single_area"
+    },
+    {
+      "candidateId": "zone-f3",
+      "confidence": "high",
+      "displayName": "F3",
+      "equipment": [
+        "F3"
+      ],
+      "logicalZoneId": "f3",
+      "mayRepresentDisconnectedAreas": false,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "canonical_label_mentions_all_member_equipment",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "conditioning": 1,
+          "rotation": 57
+        },
+        "bookingCount": 58,
+        "canonicalLabels": [
+          "Cond F3",
+          "F3",
+          "F3 Cond",
+          "Vault F3"
+        ],
+        "labelMentionsAllEquipmentCount": 58,
+        "sourceConfidenceCounts": {
+          "high": 58
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 56,
+          "color_inferred": 2
+        }
+      },
+      "suggestedBoardKind": "single_area"
+    },
+    {
+      "candidateId": "zone-f4",
+      "confidence": "high",
+      "displayName": "F4",
+      "equipment": [
+        "F4"
+      ],
+      "logicalZoneId": "f4",
+      "mayRepresentDisconnectedAreas": false,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "canonical_label_mentions_all_member_equipment",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "conditioning": 1,
+          "rotation": 83
+        },
+        "bookingCount": 84,
+        "canonicalLabels": [
+          "Cond F4",
+          "F4",
+          "Vault F4"
+        ],
+        "labelMentionsAllEquipmentCount": 84,
+        "sourceConfidenceCounts": {
+          "high": 84
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 80,
+          "color_inferred": 4
+        }
+      },
+      "suggestedBoardKind": "single_area"
+    },
+    {
+      "candidateId": "zone-f5",
+      "confidence": "medium",
+      "displayName": "F5",
+      "equipment": [
+        "F5"
+      ],
+      "logicalZoneId": "f5",
+      "mayRepresentDisconnectedAreas": false,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "canonical_label_mentions_all_member_equipment",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "conditioning": 3,
+          "rotation": 141,
+          "warmup": 2
+        },
+        "bookingCount": 146,
+        "canonicalLabels": [
+          "Cond F5",
+          "F5",
+          "F5 S",
+          "F5 WU",
+          "F5 cond",
+          "F5S",
+          "Vault F5",
+          "WU F5 F5"
+        ],
+        "labelMentionsAllEquipmentCount": 143,
+        "sourceConfidenceCounts": {
+          "high": 146
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 141,
+          "color_inferred": 5
+        }
+      },
+      "suggestedBoardKind": "single_area"
+    },
+    {
+      "candidateId": "zone-f6",
+      "confidence": "low",
+      "displayName": "F6",
+      "equipment": [
+        "F6"
+      ],
+      "logicalZoneId": "f6",
+      "mayRepresentDisconnectedAreas": false,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "canonical_label_mentions_all_member_equipment",
+        "source_contains_low_confidence_evidence",
+        "source_contains_review_needed_evidence",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "conditioning": 1,
+          "rotation": 81,
+          "warmup": 1
+        },
+        "bookingCount": 83,
+        "canonicalLabels": [
+          "Cond F6",
+          "F6",
+          "F6 S",
+          "F6 form",
+          "F6S",
+          "Vault F6",
+          "WU F6"
+        ],
+        "labelMentionsAllEquipmentCount": 82,
+        "sourceConfidenceCounts": {
+          "high": 82,
+          "low": 1
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 79,
+          "color_inferred": 3,
+          "color_inferred_needs_review": 1
+        }
+      },
+      "suggestedBoardKind": "single_area"
+    },
+    {
+      "candidateId": "zone-pb",
+      "confidence": "high",
+      "displayName": "PB",
+      "equipment": [
+        "PB"
+      ],
+      "logicalZoneId": "pb",
+      "mayRepresentDisconnectedAreas": false,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "canonical_label_mentions_all_member_equipment",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 13,
+          "warmup": 1
+        },
+        "bookingCount": 14,
+        "canonicalLabels": [
+          "PB",
+          "PB WU PB WU"
+        ],
+        "labelMentionsAllEquipmentCount": 14,
+        "sourceConfidenceCounts": {
+          "high": 14
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 14
+        }
+      },
+      "suggestedBoardKind": "single_area"
+    },
+    {
+      "candidateId": "zone-hb",
+      "confidence": "low",
+      "displayName": "HB",
+      "equipment": [
+        "HB"
+      ],
+      "logicalZoneId": "hb",
+      "mayRepresentDisconnectedAreas": false,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "canonical_label_mentions_all_member_equipment",
+        "source_contains_low_confidence_evidence",
+        "source_contains_review_needed_evidence",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 10
+        },
+        "bookingCount": 10,
+        "canonicalLabels": [
+          "Boys strap",
+          "HB"
+        ],
+        "labelMentionsAllEquipmentCount": 5,
+        "sourceConfidenceCounts": {
+          "high": 9,
+          "low": 1
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 9,
+          "color_inferred_needs_review": 1
+        }
+      },
+      "suggestedBoardKind": "single_area"
+    },
+    {
+      "candidateId": "zone-sr",
+      "confidence": "high",
+      "displayName": "SR",
+      "equipment": [
+        "SR"
+      ],
+      "logicalZoneId": "sr",
+      "mayRepresentDisconnectedAreas": false,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "canonical_label_mentions_all_member_equipment",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 9
+        },
+        "bookingCount": 9,
+        "canonicalLabels": [
+          "SR"
+        ],
+        "labelMentionsAllEquipmentCount": 9,
+        "sourceConfidenceCounts": {
+          "high": 9
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 9
+        }
+      },
+      "suggestedBoardKind": "single_area"
+    },
+    {
+      "candidateId": "zone-ph",
+      "confidence": "high",
+      "displayName": "PH",
+      "equipment": [
+        "PH"
+      ],
+      "logicalZoneId": "ph",
+      "mayRepresentDisconnectedAreas": false,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "canonical_label_mentions_all_member_equipment",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 8,
+          "warmup": 3
+        },
+        "bookingCount": 11,
+        "canonicalLabels": [
+          "PH",
+          "PH WU",
+          "WU PH",
+          "WU PH PH"
+        ],
+        "labelMentionsAllEquipmentCount": 11,
+        "sourceConfidenceCounts": {
+          "high": 11
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 11
+        }
+      },
+      "suggestedBoardKind": "single_area"
+    },
+    {
+      "candidateId": "zone-tr",
+      "confidence": "high",
+      "displayName": "TR",
+      "equipment": [
+        "TR"
+      ],
+      "logicalZoneId": "tr",
+      "mayRepresentDisconnectedAreas": false,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "canonical_label_mentions_all_member_equipment",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 107
+        },
+        "bookingCount": 107,
+        "canonicalLabels": [
+          "TR",
+          "TR TR"
+        ],
+        "labelMentionsAllEquipmentCount": 107,
+        "sourceConfidenceCounts": {
+          "high": 107
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 104,
+          "color_inferred": 3
+        }
+      },
+      "suggestedBoardKind": "single_area"
+    },
+    {
+      "candidateId": "zone-tt",
+      "confidence": "high",
+      "displayName": "TT",
+      "equipment": [
+        "TT"
+      ],
+      "logicalZoneId": "tt",
+      "mayRepresentDisconnectedAreas": false,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "canonical_label_mentions_all_member_equipment",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 106
+        },
+        "bookingCount": 106,
+        "canonicalLabels": [
+          "TT"
+        ],
+        "labelMentionsAllEquipmentCount": 106,
+        "sourceConfidenceCounts": {
+          "high": 106
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 104,
+          "color_inferred": 2
+        }
+      },
+      "suggestedBoardKind": "single_area"
+    },
+    {
+      "candidateId": "zone-ts",
+      "confidence": "high",
+      "displayName": "TS",
+      "equipment": [
+        "TS"
+      ],
+      "logicalZoneId": "ts",
+      "mayRepresentDisconnectedAreas": false,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "canonical_label_mentions_all_member_equipment",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 69,
+          "warmup": 2
+        },
+        "bookingCount": 71,
+        "canonicalLabels": [
+          "TS",
+          "TS S",
+          "WU TS"
+        ],
+        "labelMentionsAllEquipmentCount": 71,
+        "sourceConfidenceCounts": {
+          "high": 71
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 61,
+          "color_inferred": 10
+        }
+      },
+      "suggestedBoardKind": "single_area"
+    },
+    {
+      "candidateId": "zone-vault-f5",
+      "confidence": "medium",
+      "displayName": "Vault + F5",
+      "equipment": [
+        "Vault",
+        "F5"
+      ],
+      "logicalZoneId": "vault-f5",
+      "mayRepresentDisconnectedAreas": true,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "multi_area_bundle_does_not_assume_contiguous_layout",
+        "canonical_label_mentions_all_member_equipment",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 2
+        },
+        "bookingCount": 2,
+        "canonicalLabels": [
+          "F5 Vault"
+        ],
+        "labelMentionsAllEquipmentCount": 2,
+        "sourceConfidenceCounts": {
+          "high": 2
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 2
+        }
+      },
+      "suggestedBoardKind": "parallel_area_bundle"
+    },
+    {
+      "candidateId": "zone-pit-strap-bar",
+      "confidence": "medium",
+      "displayName": "Pit + Strap Bar",
+      "equipment": [
+        "Pit",
+        "Strap Bar"
+      ],
+      "logicalZoneId": "pit-strap-bar",
+      "mayRepresentDisconnectedAreas": true,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "multi_area_bundle_does_not_assume_contiguous_layout",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 1
+        },
+        "bookingCount": 1,
+        "canonicalLabels": [
+          "Pit strap"
+        ],
+        "labelMentionsAllEquipmentCount": 0,
+        "sourceConfidenceCounts": {
+          "high": 1
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 1
+        }
+      },
+      "suggestedBoardKind": "parallel_area_bundle"
+    },
+    {
+      "candidateId": "zone-pit-sr",
+      "confidence": "medium",
+      "displayName": "Pit + SR",
+      "equipment": [
+        "Pit",
+        "SR"
+      ],
+      "logicalZoneId": "pit-sr",
+      "mayRepresentDisconnectedAreas": true,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "multi_area_bundle_does_not_assume_contiguous_layout",
+        "canonical_label_mentions_all_member_equipment",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 2
+        },
+        "bookingCount": 2,
+        "canonicalLabels": [
+          "Pit SR"
+        ],
+        "labelMentionsAllEquipmentCount": 2,
+        "sourceConfidenceCounts": {
+          "high": 2
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 2
+        }
+      },
+      "suggestedBoardKind": "parallel_area_bundle"
+    },
+    {
+      "candidateId": "zone-beam-1-beam-2",
+      "confidence": "medium",
+      "displayName": "Beam 1 + Beam 2",
+      "equipment": [
+        "Beam 1",
+        "Beam 2"
+      ],
+      "logicalZoneId": "beam-1-beam-2",
+      "mayRepresentDisconnectedAreas": true,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "multi_area_bundle_does_not_assume_contiguous_layout",
+        "canonical_label_mentions_all_member_equipment",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 13,
+          "warmup": 2
+        },
+        "bookingCount": 15,
+        "canonicalLabels": [
+          "Beam 1 Beam 2",
+          "Beam 1 Beam 2 WU"
+        ],
+        "labelMentionsAllEquipmentCount": 15,
+        "sourceConfidenceCounts": {
+          "high": 15
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 15
+        }
+      },
+      "suggestedBoardKind": "parallel_area_bundle"
+    },
+    {
+      "candidateId": "zone-ub-1-ub-2",
+      "confidence": "medium",
+      "displayName": "UB 1 + UB 2",
+      "equipment": [
+        "UB 1",
+        "UB 2"
+      ],
+      "logicalZoneId": "ub-1-ub-2",
+      "mayRepresentDisconnectedAreas": true,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "multi_area_bundle_does_not_assume_contiguous_layout",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 9
+        },
+        "bookingCount": 9,
+        "canonicalLabels": [
+          "UB 1+2",
+          "UB 1,2"
+        ],
+        "labelMentionsAllEquipmentCount": 0,
+        "sourceConfidenceCounts": {
+          "high": 9
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 9
+        }
+      },
+      "suggestedBoardKind": "parallel_area_bundle"
+    },
+    {
+      "candidateId": "zone-pb-hb",
+      "confidence": "medium",
+      "displayName": "PB / HB",
+      "equipment": [
+        "PB",
+        "HB"
+      ],
+      "logicalZoneId": "pb-hb",
+      "mayRepresentDisconnectedAreas": true,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "known_combined_area_signature",
+        "combined_schedule_label_requires_layout_confirmation",
+        "canonical_label_mentions_all_member_equipment",
+        "source_contains_review_needed_evidence",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 59,
+          "warmup": 1
+        },
+        "bookingCount": 60,
+        "canonicalLabels": [
+          "PB/HB",
+          "PB/HB Cond",
+          "WU PB/HB"
+        ],
+        "labelMentionsAllEquipmentCount": 60,
+        "sourceConfidenceCounts": {
+          "high": 50,
+          "medium": 10
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 50,
+          "color_inferred_needs_review": 10
+        }
+      },
+      "suggestedBoardKind": "combined_area"
+    },
+    {
+      "candidateId": "zone-sr-ph",
+      "confidence": "medium",
+      "displayName": "SR / PH",
+      "equipment": [
+        "SR",
+        "PH"
+      ],
+      "logicalZoneId": "sr-ph",
+      "mayRepresentDisconnectedAreas": true,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "known_combined_area_signature",
+        "combined_schedule_label_requires_layout_confirmation",
+        "canonical_label_mentions_all_member_equipment",
+        "source_contains_review_needed_evidence",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 73
+        },
+        "bookingCount": 73,
+        "canonicalLabels": [
+          "PH/SR",
+          "SR/PH",
+          "SR/PH Cond"
+        ],
+        "labelMentionsAllEquipmentCount": 73,
+        "sourceConfidenceCounts": {
+          "high": 68,
+          "medium": 5
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 68,
+          "color_inferred_needs_review": 5
+        }
+      },
+      "suggestedBoardKind": "combined_area"
+    },
+    {
+      "candidateId": "zone-tr-tt",
+      "confidence": "high",
+      "displayName": "TR / TT",
+      "equipment": [
+        "TR",
+        "TT"
+      ],
+      "logicalZoneId": "tr-tt",
+      "mayRepresentDisconnectedAreas": true,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "known_combined_area_signature",
+        "combined_schedule_label_requires_layout_confirmation",
+        "canonical_label_mentions_all_member_equipment",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 99,
+          "warmup": 1
+        },
+        "bookingCount": 100,
+        "canonicalLabels": [
+          "TR/TT",
+          "TT/TR",
+          "WU TR/TT"
+        ],
+        "labelMentionsAllEquipmentCount": 100,
+        "sourceConfidenceCounts": {
+          "high": 100
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 92,
+          "color_inferred": 8
+        }
+      },
+      "suggestedBoardKind": "combined_area"
+    },
+    {
+      "candidateId": "zone-pit-ub-1-ub-2",
+      "confidence": "medium",
+      "displayName": "Pit + UB 1 + UB 2",
+      "equipment": [
+        "Pit",
+        "UB 1",
+        "UB 2"
+      ],
+      "logicalZoneId": "pit-ub-1-ub-2",
+      "mayRepresentDisconnectedAreas": true,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "multi_area_bundle_does_not_assume_contiguous_layout",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 2
+        },
+        "bookingCount": 2,
+        "canonicalLabels": [
+          "UB 1,2, Pit"
+        ],
+        "labelMentionsAllEquipmentCount": 0,
+        "sourceConfidenceCounts": {
+          "high": 2
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 2
+        }
+      },
+      "suggestedBoardKind": "parallel_area_bundle"
+    },
+    {
+      "candidateId": "zone-f1-f2-f3-f4",
+      "confidence": "medium",
+      "displayName": "F1 + F2 + F3 + F4",
+      "equipment": [
+        "F1",
+        "F2",
+        "F3",
+        "F4"
+      ],
+      "logicalZoneId": "f1-f2-f3-f4",
+      "mayRepresentDisconnectedAreas": true,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "multi_area_bundle_does_not_assume_contiguous_layout",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 21
+        },
+        "bookingCount": 21,
+        "canonicalLabels": [
+          "FX"
+        ],
+        "labelMentionsAllEquipmentCount": 0,
+        "sourceConfidenceCounts": {
+          "high": 21
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 19,
+          "color_inferred": 2
+        }
+      },
+      "suggestedBoardKind": "parallel_area_bundle"
+    },
+    {
+      "candidateId": "zone-pb-hb-sr-ph",
+      "confidence": "medium",
+      "displayName": "PB + HB + SR + PH",
+      "equipment": [
+        "PB",
+        "HB",
+        "SR",
+        "PH"
+      ],
+      "logicalZoneId": "pb-hb-sr-ph",
+      "mayRepresentDisconnectedAreas": true,
+      "ownerReview": {
+        "configurationEligible": false,
+        "confirmed": false,
+        "status": "owner_confirmation_required"
+      },
+      "reasonCodes": [
+        "equipment_exactly_matches_schedule_inventory",
+        "multi_area_bundle_does_not_assume_contiguous_layout",
+        "source_contains_review_needed_evidence",
+        "owner_confirmation_required"
+      ],
+      "sourceEvidence": {
+        "activityTypeCounts": {
+          "rotation": 30,
+          "warmup": 2
+        },
+        "bookingCount": 32,
+        "canonicalLabels": [
+          "Boys",
+          "Boys WU",
+          "Boys area",
+          "boys"
+        ],
+        "labelMentionsAllEquipmentCount": 0,
+        "sourceConfidenceCounts": {
+          "high": 31,
+          "medium": 1
+        },
+        "sourceReviewStatusCounts": {
+          "auto_extracted": 26,
+          "color_inferred": 5,
+          "color_inferred_needs_review": 1
+        }
+      },
+      "suggestedBoardKind": "parallel_area_bundle"
+    }
+  ],
+  "ownerConfirmation": {
+    "configurationEligible": false,
+    "confirmed": false,
+    "message": "Review every candidate before using it as zone-board configuration. Confirm, edit, split, merge, or reject it; this generator never approves one.",
+    "required": true
+  },
+  "privacy": {
+    "mediaBytesIncluded": false,
+    "rawScheduleLabelsIncluded": false,
+    "rawVaultPathsIncluded": false,
+    "studentRecordsIncluded": false
+  },
+  "schemaVersion": 1,
+  "source": {
+    "revision": "03fe22b4714b736bceb7b037efcf8737a72c22ace900e0734f103a8186bc7f0f",
+    "scheduleId": "summer_2026",
+    "sourceId": "schedule:summer_2026"
+  },
+  "status": "owner_confirmation_required",
+  "summary": {
+    "candidateCount": 31,
+    "recognizedInventoryBlockCount": 1448,
+    "sourceTimeBlockCount": 2106
+  },
+  "unresolvedEvidence": {
+    "emptyEquipmentBlockCount": 175,
+    "unrecognizedEquipmentBlockCount": 483,
+    "unrecognizedEquipmentTokenCounts": [
+      {
+        "blockCount": 114,
+        "token": "P1"
+      },
+      {
+        "blockCount": 108,
+        "token": "P2"
+      },
+      {
+        "blockCount": 72,
+        "token": "WR"
+      },
+      {
+        "blockCount": 48,
+        "token": "PR"
+      },
+      {
+        "blockCount": 38,
+        "token": "UB"
+      },
+      {
+        "blockCount": 29,
+        "token": "F"
+      },
+      {
+        "blockCount": 24,
+        "token": "O"
+      },
+      {
+        "blockCount": 21,
+        "token": "C"
+      },
+      {
+        "blockCount": 11,
+        "token": "wk"
+      },
+      {
+        "blockCount": 9,
+        "token": "4"
+      },
+      {
+        "blockCount": 3,
+        "token": "PS"
+      },
+      {
+        "blockCount": 2,
+        "token": "2nd"
+      },
+      {
+        "blockCount": 2,
+        "token": "Flex"
+      },
+      {
+        "blockCount": 2,
+        "token": "Shaping"
+      },
+      {
+        "blockCount": 2,
+        "token": "V"
+      },
+      {
+        "blockCount": 2,
+        "token": "WU/cond"
+      },
+      {
+        "blockCount": 2,
+        "token": "event"
+      },
+      {
+        "blockCount": 2,
+        "token": "ex"
+      },
+      {
+        "blockCount": 2,
+        "token": "\ufb02"
+      },
+      {
+        "blockCount": 1,
+        "token": "430"
+      },
+      {
+        "blockCount": 1,
+        "token": "4wk"
+      },
+      {
+        "blockCount": 1,
+        "token": "515"
+      },
+      {
+        "blockCount": 1,
+        "token": "600"
+      },
+      {
+        "blockCount": 1,
+        "token": "Drills"
+      },
+      {
+        "blockCount": 1,
+        "token": "F2/3"
+      },
+      {
+        "blockCount": 1,
+        "token": "PH/PB"
+      },
+      {
+        "blockCount": 1,
+        "token": "Shape"
+      },
+      {
+        "blockCount": 1,
+        "token": "no"
+      },
+      {
+        "blockCount": 1,
+        "token": "or"
+      }
+    ]
+  }
+}

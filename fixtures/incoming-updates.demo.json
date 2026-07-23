@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "updates": [
+    {
+      "id": "weekly:demo-week:form-reminder",
+      "sourceKind": "weekly_notes",
+      "sourceRevision": "demo-revision-1",
+      "sourceRef": "weekly:demo-week",
+      "title": "Form reminder for Level 3",
+      "summary": "Review the form cue before adding it to a lesson or announcement.",
+      "classScopes": ["L3"],
+      "confidence": "medium",
+      "sourceStatus": "needs_review",
+      "eventDate": null,
+      "endDate": null,
+      "decision": "undecided",
+      "decisionRevision": null,
+      "manualAction": "none"
+    },
+    {
+      "id": "email:demo-pickup-note",
+      "sourceKind": "email_crawl",
+      "sourceRevision": "demo-revision-1",
+      "sourceRef": "email:demo-pickup-note",
+      "title": "Pickup timing note",
+      "summary": "Review before deciding whether an announcement is useful.",
+      "classScopes": ["all"],
+      "confidence": "low",
+      "sourceStatus": "needs_review",
+      "eventDate": null,
+      "endDate": null,
+      "decision": "later",
+      "decisionRevision": "demo-revision-1",
+      "manualAction": "none"
+    }
+  ]
+}

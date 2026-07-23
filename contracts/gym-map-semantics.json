@@ -1,0 +1,380 @@
+{
+  "contractFormat": "lesson-planner-gym-map-semantic-registry/v1",
+  "title": "Lesson Planner Gym Map Semantic Registry",
+  "description": "The authoritative identity, naming, selection, and composite-membership registry for the gym. It intentionally contains no physical geometry.",
+  "schemaVersion": 1,
+  "contractStatus": "semantic_registry_and_geometry_draft_ready_owner_review_pending",
+  "sourceOfTruthPolicy": {
+    "semanticAuthority": {
+      "sources": [
+        {
+          "sourceId": "owner-gym-layout-2026-07-19",
+          "label": "GYM LAYOUT.pdf",
+          "allowedUse": [
+            "zone identities",
+            "visible labels",
+            "selectable-versus-landmark classification",
+            "parent-child relationships",
+            "composite group relationships"
+          ]
+        },
+        {
+          "sourceId": "owner-gym-layout-zones-2026-07-19",
+          "label": "GYM LAYOUT ZONES.pdf",
+          "allowedUse": [
+            "zone identities",
+            "visible labels",
+            "selectable-versus-landmark classification",
+            "parent-child relationships",
+            "composite group relationships"
+          ]
+        }
+      ],
+      "status": "owner_supplied_semantic_reference"
+    },
+    "geometryAuthority": {
+      "source": "Skeleton Freeform board supplied by the owner",
+      "status": "draft_geometry_extracted_owner_review_pending",
+      "futureArtifact": "gym-layout-geometry-draft.json",
+      "mustUse": [
+        "normalized zone boundaries",
+        "relative positions",
+        "scale",
+        "orientation",
+        "overlap geometry",
+        "landmark placement",
+        "rendering order"
+      ],
+      "mustNotInferFromAnnotatedPdfs": true,
+      "reason": "The owner reported that the exported PDFs visually displaced or distorted some equipment and floor objects."
+    },
+    "consumerRequirements": [
+      "Do not add coordinates, bounds, rotation, z-index, or physical-layout assumptions to this registry.",
+      "Do not make an unconfirmed duplicate label collapse into one physical destination.",
+      "Do not use a schedule alias as an automatic instruction to add a zone to a phase.",
+      "A composite group renders as one combined board containing its member-zone overlays, never as a new third physical station."
+    ]
+  },
+  "categoryDefinitions": {
+    "selectable_station": "A physical apparatus or station that can receive lesson content.",
+    "selectable_area": "A named usable area that can receive lesson content.",
+    "selectable_floor_slice": "A usable horizontal slice of the main floor that can receive lesson content.",
+    "logical_container": "A selectable-by-expansion grouping that cannot receive a card directly.",
+    "landmark": "Context-only geometry or room feature. It cannot be a lesson-content destination."
+  },
+  "zoneRules": {
+    "lessonDestinationCategories": [
+      "selectable_station",
+      "selectable_area",
+      "selectable_floor_slice"
+    ],
+    "logicalContainerSelectionBehavior": "expand_to_children",
+    "floorSliceOrder": [
+      "zone-floor-f4",
+      "zone-floor-f3",
+      "zone-floor-f2",
+      "zone-floor-f1"
+    ],
+    "floorSliceRelationship": "F4, F3, F2, and F1 are horizontal slices of the single FX floor area.",
+    "overlappingZonesAllowed": true,
+    "distinctIdsRequiredForSameVisibleLabel": true
+  },
+  "zones": [
+    {
+      "id": "zone-floor-fx",
+      "displayName": "FX",
+      "aliases": ["FX", "Floor"],
+      "category": "logical_container",
+      "selectionBehavior": "expand_to_children",
+      "childZoneIds": [
+        "zone-floor-f4",
+        "zone-floor-f3",
+        "zone-floor-f2",
+        "zone-floor-f1"
+      ],
+      "placementEligible": false
+    },
+    {
+      "id": "zone-floor-f4",
+      "displayName": "F4",
+      "aliases": ["F4"],
+      "category": "selectable_floor_slice",
+      "parentZoneId": "zone-floor-fx",
+      "sliceOrder": 1,
+      "placementEligible": true
+    },
+    {
+      "id": "zone-floor-f3",
+      "displayName": "F3",
+      "aliases": ["F3"],
+      "category": "selectable_floor_slice",
+      "parentZoneId": "zone-floor-fx",
+      "sliceOrder": 2,
+      "placementEligible": true
+    },
+    {
+      "id": "zone-floor-f2",
+      "displayName": "F2",
+      "aliases": ["F2"],
+      "category": "selectable_floor_slice",
+      "parentZoneId": "zone-floor-fx",
+      "sliceOrder": 3,
+      "placementEligible": true
+    },
+    {
+      "id": "zone-floor-f1",
+      "displayName": "F1",
+      "aliases": ["F1"],
+      "category": "selectable_floor_slice",
+      "parentZoneId": "zone-floor-fx",
+      "sliceOrder": 4,
+      "placementEligible": true
+    },
+    {
+      "id": "zone-floor-f5",
+      "displayName": "F5",
+      "aliases": ["F5"],
+      "category": "selectable_area",
+      "placementEligible": true,
+      "relationshipStatus": "independent_area_pending_skeleton_geometry"
+    },
+    {
+      "id": "zone-tumble-strip",
+      "displayName": "Tumble Strip",
+      "aliases": ["TS", "Tumble Strip"],
+      "category": "selectable_area",
+      "placementEligible": true,
+      "distinctFromZoneId": "zone-tumble-track"
+    },
+    {
+      "id": "zone-tumble-track",
+      "displayName": "Tumble Track",
+      "aliases": ["TT", "Tumble Track", "Tumbletrack"],
+      "category": "selectable_area",
+      "placementEligible": true,
+      "distinctFromZoneId": "zone-tumble-strip"
+    },
+    {
+      "id": "zone-vault",
+      "displayName": "Vault",
+      "aliases": ["Vault", "VT"],
+      "category": "selectable_station",
+      "placementEligible": true
+    },
+    {
+      "id": "zone-parallel-bars",
+      "displayName": "PB",
+      "aliases": ["PB", "P Bars", "Parallel Bars"],
+      "category": "selectable_station",
+      "placementEligible": true
+    },
+    {
+      "id": "zone-high-bar-boys-bar",
+      "displayName": "HB / Boys Bar",
+      "aliases": ["HB", "High Bar", "Boys Bar", "HB / Boys Bar"],
+      "category": "selectable_station",
+      "placementEligible": true
+    },
+    {
+      "id": "zone-beam-1",
+      "displayName": "Beam 1",
+      "aliases": ["Beam 1", "B1"],
+      "category": "selectable_station",
+      "placementEligible": true
+    },
+    {
+      "id": "zone-beam-2-a",
+      "displayName": "Beam 2",
+      "aliases": ["Beam 2", "B2"],
+      "category": "selectable_station",
+      "placementEligible": true,
+      "editorDisambiguator": "A",
+      "instanceStatus": "distinct_physical_station_pending_owner_disambiguation"
+    },
+    {
+      "id": "zone-beam-2-b",
+      "displayName": "Beam 2",
+      "aliases": ["Beam 2", "B2"],
+      "category": "selectable_station",
+      "placementEligible": true,
+      "editorDisambiguator": "B",
+      "instanceStatus": "distinct_physical_station_pending_owner_disambiguation"
+    },
+    {
+      "id": "zone-still-rings",
+      "displayName": "SR",
+      "aliases": ["SR", "Still Rings", "Rings"],
+      "category": "selectable_station",
+      "placementEligible": true
+    },
+    {
+      "id": "zone-pommel-horse",
+      "displayName": "PH",
+      "aliases": ["PH", "Pommel Horse"],
+      "category": "selectable_station",
+      "placementEligible": true
+    },
+    {
+      "id": "zone-wr",
+      "displayName": "WR",
+      "aliases": ["WR"],
+      "category": "selectable_area",
+      "placementEligible": true
+    },
+    {
+      "id": "zone-ninja-room",
+      "displayName": "Ninja Room",
+      "aliases": ["Ninja Room", "Ninja"],
+      "category": "selectable_area",
+      "placementEligible": true
+    },
+    {
+      "id": "zone-ub-1",
+      "displayName": "UB1",
+      "aliases": ["UB1", "UB 1"],
+      "category": "selectable_station",
+      "placementEligible": true
+    },
+    {
+      "id": "zone-ub-2",
+      "displayName": "UB2",
+      "aliases": ["UB2", "UB 2"],
+      "category": "selectable_station",
+      "placementEligible": true
+    },
+    {
+      "id": "zone-ub-3",
+      "displayName": "UB3",
+      "aliases": ["UB3", "UB 3"],
+      "category": "selectable_station",
+      "placementEligible": true
+    },
+    {
+      "id": "zone-strap-bar",
+      "displayName": "Strap Bar",
+      "aliases": ["Strap Bar", "Straps Bar"],
+      "category": "selectable_station",
+      "placementEligible": true
+    },
+    {
+      "id": "zone-trampoline",
+      "displayName": "Trampoline",
+      "aliases": ["Trampoline", "Tramp"],
+      "category": "selectable_station",
+      "placementEligible": true
+    },
+    {
+      "id": "zone-preschool",
+      "displayName": "Preschool",
+      "aliases": ["Preschool"],
+      "category": "selectable_area",
+      "placementEligible": true
+    },
+    {
+      "id": "zone-pit-pb",
+      "displayName": "Pit PB",
+      "aliases": ["Pit PB", "Pit Parallel Bars"],
+      "category": "selectable_station",
+      "placementEligible": true
+    },
+    {
+      "id": "zone-pit-rings-high-bar",
+      "displayName": "Pit Rings and High Bar",
+      "aliases": ["Pit Rings and High Bar", "Pit Rings", "Pit High Bar"],
+      "category": "selectable_station",
+      "placementEligible": true
+    },
+    {
+      "id": "landmark-green-foam-pit",
+      "displayName": "Green Foam Pit",
+      "aliases": ["Green Foam Pit", "Foam Pit"],
+      "category": "landmark",
+      "placementEligible": false
+    },
+    {
+      "id": "landmark-cubby-storage",
+      "displayName": "Cubby Areas / Storage",
+      "aliases": ["Cubby", "Storage", "Cubby Areas"],
+      "category": "landmark",
+      "placementEligible": false
+    },
+    {
+      "id": "landmark-wall",
+      "displayName": "Wall",
+      "aliases": ["Wall"],
+      "category": "landmark",
+      "placementEligible": false
+    },
+    {
+      "id": "landmark-preschool-wall",
+      "displayName": "Preschool Wall",
+      "aliases": ["Preschool Wall"],
+      "category": "landmark",
+      "placementEligible": false
+    },
+    {
+      "id": "landmark-wood-floor",
+      "displayName": "Wood Floor",
+      "aliases": ["Wood Floor"],
+      "category": "landmark",
+      "placementEligible": false
+    }
+  ],
+  "compositeGroups": [
+    {
+      "id": "group-pbhb",
+      "displayName": "PB + HB",
+      "aliases": ["PBHB", "PB/HB", "PB + HB"],
+      "kind": "union",
+      "memberZoneIds": [
+        "zone-parallel-bars",
+        "zone-high-bar-boys-bar"
+      ],
+      "boardPresentation": "single_combined_board",
+      "relationshipStatus": "geometry_draft_uses_multishape_pb_owner_confirmation_pending"
+    },
+    {
+      "id": "group-srph",
+      "displayName": "SR + PH",
+      "aliases": ["SRPH", "SR/PH", "SR + PH"],
+      "kind": "union",
+      "memberZoneIds": [
+        "zone-still-rings",
+        "zone-pommel-horse"
+      ],
+      "boardPresentation": "single_combined_board",
+      "relationshipStatus": "geometry_draft_ready_owner_review_pending"
+    },
+    {
+      "id": "group-fx-all",
+      "displayName": "FX (all floor slices)",
+      "aliases": ["FX", "Full Floor"],
+      "kind": "union",
+      "memberZoneIds": [
+        "zone-floor-f4",
+        "zone-floor-f3",
+        "zone-floor-f2",
+        "zone-floor-f1"
+      ],
+      "boardPresentation": "single_combined_board",
+      "relationshipStatus": "confirmed_by_owner_statement"
+    }
+  ],
+  "openReviewItems": [
+    {
+      "id": "review-beam-2-instances",
+      "status": "pending_owner_confirmation",
+      "detail": "Two separate physical areas are labeled Beam 2. They retain different IDs and the same visible label until the owner chooses final disambiguators."
+    },
+    {
+      "id": "review-pbhb-member-instance",
+      "status": "pb_multishape_mapping_owner_confirmation_pending",
+      "detail": "PB + HB uses one semantic PB destination with two draft geometry shapes. The owner should confirm whether both shapes belong to the same PB destination; do not create PB1/PB2 in the meantime."
+    },
+    {
+      "id": "review-final-geometry",
+      "status": "draft_available_owner_review_pending",
+      "detail": "A bounded geometry draft now exists from the owner-provided Skeleton Freeform board. Exported PDFs remain forbidden as a source for physical coordinates."
+    }
+  ]
+}

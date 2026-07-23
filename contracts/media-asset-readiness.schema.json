@@ -1,0 +1,203 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lesson-planner.local/contracts/media-asset-readiness.schema.json",
+  "title": "Lesson Planner Media Asset and Local Readiness Manifest",
+  "description": "Metadata-only local media manifest. It deliberately contains no media bytes, filesystem paths, public URLs, source locations, or person-identifying details. All identifiers are opaque application-managed tokens.",
+  "type": "object",
+  "required": ["schemaVersion", "privacy", "readinessPolicy", "assets"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1,
+      "description": "Increment only for a deliberate breaking contract revision."
+    },
+    "privacy": {
+      "$ref": "#/$defs/privacyBoundary"
+    },
+    "readinessPolicy": {
+      "$ref": "#/$defs/readinessPolicy"
+    },
+    "assets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/mediaAsset" },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "opaqueId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,31}:[a-z0-9][a-z0-9-]{1,95}$",
+      "description": "Opaque application-managed identifier only. Never encode a filesystem path, public URL, person name, or raw source location."
+    },
+    "privacyBoundary": {
+      "type": "object",
+      "required": [
+        "mediaBytesIncluded",
+        "filesystemPathsIncluded",
+        "publicUrlsIncluded",
+        "rawSourceLocationsIncluded",
+        "personIdentifyingDataIncluded"
+      ],
+      "properties": {
+        "mediaBytesIncluded": { "const": false },
+        "filesystemPathsIncluded": { "const": false },
+        "publicUrlsIncluded": { "const": false },
+        "rawSourceLocationsIncluded": { "const": false },
+        "personIdentifyingDataIncluded": { "const": false }
+      },
+      "additionalProperties": false
+    },
+    "readinessPolicy": {
+      "type": "object",
+      "required": ["readyLesson", "upcomingLessonPrefetch"],
+      "properties": {
+        "readyLesson": {
+          "type": "object",
+          "required": [
+            "requiredAssetAvailability",
+            "verifyDeclaredChecksum",
+            "allowOptionalAssetsToRemainUnavailable"
+          ],
+          "properties": {
+            "requiredAssetAvailability": { "const": "available" },
+            "verifyDeclaredChecksum": { "type": "boolean" },
+            "allowOptionalAssetsToRemainUnavailable": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        },
+        "upcomingLessonPrefetch": {
+          "type": "object",
+          "required": [
+            "enabled",
+            "windowHours",
+            "targetAvailability",
+            "onlyReferencedAssets",
+            "retryWhenNetworkAvailable"
+          ],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "windowHours": { "type": "integer", "minimum": 1, "maximum": 336 },
+            "targetAvailability": { "const": "available" },
+            "onlyReferencedAssets": { "type": "boolean" },
+            "retryWhenNetworkAvailable": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "mediaAsset": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "title",
+        "caption",
+        "durationSeconds",
+        "provenance",
+        "storage",
+        "localReadiness",
+        "integrity",
+        "contentClassification",
+        "deliveryTier"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/opaqueId" },
+        "kind": { "enum": ["image", "video", "document"] },
+        "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "caption": { "type": "string", "minLength": 1, "maxLength": 600 },
+        "durationSeconds": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Duration for playable media; null for still images and documents."
+        },
+        "pageCount": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "Optional document page count; null when not applicable or not yet indexed."
+        },
+        "provenance": {
+          "type": "object",
+          "required": ["kind", "opaqueSourceId"],
+          "properties": {
+            "kind": {
+              "enum": [
+                "manual-import",
+                "lesson-planner-capture",
+                "legacy-freeform-reference",
+                "migration",
+                "test-fixture"
+              ]
+            },
+            "opaqueSourceId": { "$ref": "#/$defs/opaqueId" }
+          },
+          "additionalProperties": false
+        },
+        "storage": {
+          "type": "object",
+          "required": ["storageId", "scope"],
+          "properties": {
+            "storageId": { "$ref": "#/$defs/opaqueId" },
+            "scope": { "enum": ["app-managed-local", "managed-sync-cache"] }
+          },
+          "additionalProperties": false
+        },
+        "localReadiness": {
+          "type": "object",
+          "required": ["availability", "downloadStatus", "expectedByteCount", "lastVerifiedAt"],
+          "properties": {
+            "availability": { "enum": ["available", "unavailable", "unknown", "failed"] },
+            "downloadStatus": {
+              "enum": ["not-requested", "queued", "downloading", "downloaded", "failed", "not-applicable"]
+            },
+            "expectedByteCount": { "type": ["integer", "null"], "minimum": 0 },
+            "lastVerifiedAt": { "type": ["string", "null"], "format": "date-time" }
+          },
+          "additionalProperties": false
+        },
+        "integrity": {
+          "type": "object",
+          "required": ["state", "checksum"],
+          "properties": {
+            "state": { "enum": ["not-calculated", "declared", "verified", "mismatch"] },
+            "checksum": {
+              "oneOf": [
+                { "type": "null" },
+                {
+                  "type": "object",
+                  "required": ["algorithm", "digest"],
+                  "properties": {
+                    "algorithm": { "const": "sha256" },
+                    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+                  },
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "contentClassification": {
+          "type": "object",
+          "required": ["personVisibility", "coachPresentationOnly"],
+          "properties": {
+            "personVisibility": { "enum": ["none", "unidentified", "potentially-identifiable"] },
+            "coachPresentationOnly": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        },
+        "deliveryTier": {
+          "enum": ["required-for-ready", "prefetch-for-upcoming", "on-demand"],
+          "description": "How the readiness policy should treat this asset when it is referenced by a lesson."
+        },
+        "opaqueLessonRefs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/opaqueId" },
+          "uniqueItems": true,
+          "description": "Optional opaque lesson or activity references used for prefetch targeting."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

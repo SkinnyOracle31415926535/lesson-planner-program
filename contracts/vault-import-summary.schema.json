@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lesson-planner.local/contracts/vault-import-summary.schema.json",
+  "title": "Lesson Planner Sanitized Vault Import Summary",
+  "type": "object",
+  "required": ["contractVersion", "privacy", "schedule", "drillLibrary", "weeklyLedger"],
+  "properties": {
+    "contractVersion": { "const": "1.0" },
+    "privacy": {
+      "type": "object",
+      "required": [
+        "studentRecordsIncluded",
+        "mediaBytesIncluded",
+        "rawWeeklyNoteTextIncluded",
+        "absoluteSourcePathsIncluded"
+      ],
+      "properties": {
+        "studentRecordsIncluded": { "const": false },
+        "mediaBytesIncluded": { "const": false },
+        "rawWeeklyNoteTextIncluded": { "const": false },
+        "absoluteSourcePathsIncluded": { "const": false }
+      }
+    },
+    "schedule": {
+      "type": "object",
+      "required": [
+        "sourceId",
+        "revision",
+        "scheduleId",
+        "timezone",
+        "calendarWeekRule",
+        "timeBlocks",
+        "equipment",
+        "exceptions",
+        "collisionWarnings"
+      ],
+      "properties": {
+        "sourceId": { "type": "string", "pattern": "^schedule:" },
+        "revision": { "type": "string" },
+        "scheduleId": { "type": "string" },
+        "timezone": { "type": "string" },
+        "calendarWeekRule": {
+          "type": "object",
+          "required": ["weekFiveOrLaterRequiresManualConfirmation"],
+          "properties": {
+            "weekFiveOrLaterRequiresManualConfirmation": { "type": "boolean" }
+          }
+        },
+        "timeBlocks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["bookingId", "equipment", "startMinute", "endMinute"],
+            "properties": {
+              "bookingId": { "type": "string" },
+              "equipment": { "type": "array", "items": { "type": "string" } },
+              "startMinute": { "type": "integer" },
+              "endMinute": { "type": "integer" }
+            }
+          }
+        },
+        "collisionWarnings": {
+          "type": "object",
+          "required": ["warningCount", "statusCounts"],
+          "properties": {
+            "warningCount": { "type": "integer", "minimum": 0 },
+            "statusCounts": { "type": "object" }
+          }
+        }
+      }
+    },
+    "drillLibrary": {
+      "type": "object",
+      "required": ["parentCount", "variantCount", "items"],
+      "properties": {
+        "parentCount": { "type": "integer", "minimum": 0 },
+        "variantCount": { "type": "integer", "minimum": 0 },
+        "items": { "type": "array" }
+      }
+    },
+    "weeklyLedger": {
+      "type": "object",
+      "required": ["present", "recordCount", "itemCount", "statusCounts", "sourceIds"],
+      "properties": {
+        "present": { "type": "boolean" },
+        "recordCount": { "type": "integer", "minimum": 0 },
+        "itemCount": { "type": "integer", "minimum": 0 },
+        "statusCounts": { "type": "object" },
+        "sourceIds": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

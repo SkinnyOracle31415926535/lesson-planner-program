@@ -1,0 +1,2048 @@
+{
+  "items": [
+    {
+      "coachingCues": [],
+      "events": [
+        "floor"
+      ],
+      "goals": [],
+      "id": "arabesque-handstand-bridge-kickover",
+      "instructions": [
+        "Fall from arabesque to handstand.",
+        "Use a bridge against a block before kicking over to lunge."
+      ],
+      "skills": [
+        "arabesque",
+        "handstand",
+        "bridge kickover"
+      ],
+      "sourceRefs": [
+        "crop_manifest: floor/floor_shapes_arabesque"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "progression",
+      "tags": [
+        "arabesque",
+        "handstand",
+        "bridge",
+        "floor"
+      ],
+      "title": "Arabesque to Handstand and Bridge Kickover",
+      "variants": []
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "beam"
+      ],
+      "goals": [],
+      "id": "beam-pullover-progression",
+      "instructions": [
+        "Use a beam for the pullover.",
+        "Begin with a spot, then progress to independent pullovers when the athlete is comfortable."
+      ],
+      "skills": [
+        "pullover"
+      ],
+      "sourceRefs": [
+        "implementation_ideas:46-49"
+      ],
+      "sourceStatus": "idea",
+      "sourceType": "progression",
+      "tags": [
+        "beam",
+        "pullover",
+        "grip",
+        "core"
+      ],
+      "title": "Beam Pullover: Spot to Independent",
+      "variants": []
+    },
+    {
+      "coachingCues": [
+        "Look at the hands.",
+        "Keep the belly and shoulders open."
+      ],
+      "events": [
+        "floor"
+      ],
+      "goals": [
+        "open shoulders",
+        "handstand line",
+        "backward rotation"
+      ],
+      "id": "bridge-backwalkover-cartwheel-progression",
+      "instructions": [],
+      "skills": [
+        "bridge",
+        "back walkover",
+        "cartwheel",
+        "front handspring step-out"
+      ],
+      "sourceRefs": [
+        "crop_manifest: floor/bridge_backwalkover_cartwheel"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "progression",
+      "tags": [
+        "bridge",
+        "walkover",
+        "backward",
+        "floor"
+      ],
+      "title": "Bridge, Back Walkover, and Cartwheel Progression",
+      "variants": [
+        {
+          "id": "bridge-backwalkover-cartwheel-progression:variant:0",
+          "instructions": [
+            "Use bridge work at a block, then finish with an arch rock."
+          ],
+          "sourceRefs": [
+            "past: L4_lesson_04-23-2026.md",
+            "crop_manifest: floor/bridge_backwalkover_cartwheel"
+          ],
+          "title": "Bridge to block and arch rock"
+        },
+        {
+          "id": "bridge-backwalkover-cartwheel-progression:variant:1",
+          "instructions": [
+            "Use lunge to handstand with blocks, or connect lunge, handstand, bridge kickover, and lunge."
+          ],
+          "sourceRefs": [
+            "past: L4_lesson_04-23-2026.md"
+          ],
+          "title": "Handstand line to bridge kickover"
+        },
+        {
+          "id": "bridge-backwalkover-cartwheel-progression:variant:2",
+          "instructions": [
+            "Choose a head-spring-over-resi, boulder head-spring, cheese/mailbox front-handspring step-out, or rod-floor front-handspring step-out."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \ud835\udc0b\ud835\udc1e\ud835\udc2f\ud835\udc1e\ud835\udc25 \ud835\udfd2 \ud835\udc01\ud835\udc28\ud835\udc32\ud835\udc2c \ud835\udc0b\ud835\udc1e\ud835\udc2c\ud835\udc2c\ud835\udc28\ud835\udc27 \ud80c\ude87 \u2727-1.md"
+          ],
+          "title": "Front-handspring step-out ladder"
+        }
+      ]
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "floor"
+      ],
+      "goals": [],
+      "id": "cartwheel-block-progressions",
+      "instructions": [],
+      "skills": [
+        "cartwheel",
+        "handstand",
+        "forward roll"
+      ],
+      "sourceRefs": [
+        "crop_manifest: floor/cartwheel_to_belly_handstand"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "progression",
+      "tags": [
+        "cartwheel",
+        "handstand",
+        "block",
+        "floor"
+      ],
+      "title": "Cartwheel Block Progressions",
+      "variants": [
+        {
+          "id": "cartwheel-block-progressions:variant:0",
+          "instructions": [
+            "Cartwheel to the belly on a block, then step the feet together."
+          ],
+          "sourceRefs": [
+            "past: ADV_lesson_04-21-2026.md",
+            "past: ADV_lesson_04-28-2026.md",
+            "past: ADV_lesson_05-05-2026.md",
+            "crop_manifest: floor/cartwheel_to_belly_handstand"
+          ],
+          "title": "Cartwheel to belly on block"
+        },
+        {
+          "id": "cartwheel-block-progressions:variant:1",
+          "instructions": [
+            "Cartwheel to belly on the block, hold 10 seconds, then perform a straight-arm forward roll."
+          ],
+          "sourceRefs": [
+            "past: NGA_lesson_05-01-2026.md"
+          ],
+          "title": "Cartwheel-belly hold to straight-arm forward roll"
+        },
+        {
+          "id": "cartwheel-block-progressions:variant:2",
+          "instructions": [
+            "Cartwheel to the belly on a block, hold a handstand, then stomach drop or forward roll to a stick."
+          ],
+          "sourceRefs": [
+            "crop_manifest: floor/cartwheel_to_belly_handstand"
+          ],
+          "title": "Cartwheel to belly-handstand-roll"
+        },
+        {
+          "id": "cartwheel-block-progressions:variant:3",
+          "instructions": [
+            "Cartwheel onto a big block, hold a straddle handstand, then step the feet together."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \ud835\udc00\ud835\udc1d\ud835\udc2f\ud835\udc1a\ud835\udc27\ud835\udc1c\ud835\udc1e\ud835\udc1d \ud835\udc01\ud835\udc28\ud835\udc32\ud835\udc2c \ud835\udc0b\ud835\udc1e\ud835\udc2c\ud835\udc2c\ud835\udc28\ud835\udc27 \ud80c\ude87 \u2727-6.md"
+          ],
+          "title": "Cartwheel to straddle-handstand"
+        },
+        {
+          "id": "cartwheel-block-progressions:variant:4",
+          "instructions": [
+            "Use a block or wall station for cartwheel, cartwheel, then step together."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \ud835\udc0b\ud835\udc1e\ud835\udc2f\ud835\udc1e\ud835\udc25 \ud835\udfd1 \ud835\udc01\ud835\udc28\ud835\udc32\ud835\udc2c \ud835\udc05\ud835\udc2b\ud835\udc22\ud835\udc1d\ud835\udc1a\ud835\udc32\ud80c\ude87 \u2727.md"
+          ],
+          "title": "Wall cartwheel finish line"
+        },
+        {
+          "id": "cartwheel-block-progressions:variant:5",
+          "instructions": [
+            "Hold the cartwheel finish while the coach gives a light nudge; build a tight, balanced finish."
+          ],
+          "sourceRefs": [
+            "past: \ud835\udc41\ud835\udc5c\ud835\udc61\ud835\udc52\ud835\udc60.md"
+          ],
+          "title": "Cartwheel finish balance test"
+        }
+      ]
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "high_bar"
+      ],
+      "goals": [],
+      "id": "drop-kip-kippers-station",
+      "instructions": [],
+      "skills": [
+        "drop kip",
+        "kip",
+        "undershoot",
+        "back hip circle",
+        "flyaway"
+      ],
+      "sourceRefs": [
+        "crop_manifest: high_bar/drop_kip_flyaway"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "station_drill",
+      "tags": [
+        "drop-kip",
+        "kip",
+        "high-bar",
+        "station"
+      ],
+      "title": "Drop-Kip and Kippers Station",
+      "variants": [
+        {
+          "id": "drop-kip-kippers-station:variant:0",
+          "instructions": [
+            "Use a low or raised bar plus mat setup for drop-kip drills and track successful turns."
+          ],
+          "sourceRefs": [
+            "past: NGA_lesson_02-25-2026.md",
+            "past: NGA_lesson_03-04-2026.md"
+          ],
+          "title": "Drop-kip setup"
+        },
+        {
+          "id": "drop-kip-kippers-station:variant:1",
+          "instructions": [
+            "3s: undershoots, hops, hang half turns, and back hip circles. 4s: flyaways, kips, and kip-cast-horizontal."
+          ],
+          "sourceRefs": [
+            "past: NGA_lesson_02-25-2026.md",
+            "past: NGA_lesson_03-04-2026.md"
+          ],
+          "title": "NGA 3s/4s bar menu"
+        }
+      ]
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "floor"
+      ],
+      "goals": [],
+      "id": "floor-form-and-turn-preparation",
+      "instructions": [],
+      "skills": [
+        "lunge",
+        "hurdle",
+        "full turn",
+        "forward roll",
+        "stick"
+      ],
+      "sourceRefs": [
+        "implementation_ideas:53-61",
+        "floor_form_challenge:10-17"
+      ],
+      "sourceStatus": "mixed",
+      "sourceType": "form_drill",
+      "tags": [
+        "form",
+        "lunge",
+        "turn",
+        "hurdle",
+        "floor"
+      ],
+      "title": "Floor Form and Turn Preparation",
+      "variants": [
+        {
+          "id": "floor-form-and-turn-preparation:variant:0",
+          "instructions": [
+            "Move from stand to a correct lunge position and hold the shape."
+          ],
+          "sourceRefs": [
+            "floor_form_challenge:10"
+          ],
+          "title": "Stand-to-lunge holds"
+        },
+        {
+          "id": "floor-form-and-turn-preparation:variant:1",
+          "instructions": [
+            "Perform controlled power hurdles."
+          ],
+          "sourceRefs": [
+            "floor_form_challenge:11"
+          ],
+          "title": "Power hurdles"
+        },
+        {
+          "id": "floor-form-and-turn-preparation:variant:2",
+          "instructions": [
+            "Identify the turning side, use the backward-swinging arm to cue direction, then progress from arm swings to half turns to full turns."
+          ],
+          "sourceRefs": [
+            "implementation_ideas:53-61",
+            "floor_form_challenge:12-14"
+          ],
+          "title": "Full-turn arm-swing progression"
+        },
+        {
+          "id": "floor-form-and-turn-preparation:variant:3",
+          "instructions": [
+            "Stand on the good leg, use an arm swing or circle into a straight jump, swing the arms up, and stick."
+          ],
+          "sourceRefs": [
+            "warmup_ideas:18-21"
+          ],
+          "title": "Arm-circle straight jump and stick"
+        },
+        {
+          "id": "floor-form-and-turn-preparation:variant:4",
+          "instructions": [
+            "Stand on one leg, arm circle, punch with feet in front, and swing the arms up."
+          ],
+          "sourceRefs": [
+            "warmup_ideas:25-28"
+          ],
+          "title": "Arm-circle power-punch preparation"
+        },
+        {
+          "id": "floor-form-and-turn-preparation:variant:5",
+          "instructions": [
+            "Lunge into a handstand and return to a correct lunge."
+          ],
+          "sourceRefs": [
+            "floor_form_challenge:15"
+          ],
+          "title": "Lunge-handstand-lunge"
+        },
+        {
+          "id": "floor-form-and-turn-preparation:variant:6",
+          "instructions": [
+            "Forward roll to a stuck landing while keeping feet and knees together."
+          ],
+          "sourceRefs": [
+            "floor_form_challenge:16"
+          ],
+          "title": "Forward roll to stuck landing"
+        }
+      ]
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "floor"
+      ],
+      "goals": [
+        "straight-leg handstand entry",
+        "controlled cartwheel finish",
+        "safe rolling shapes"
+      ],
+      "id": "floor-handstand-cartwheel-form-circuit",
+      "instructions": [],
+      "skills": [
+        "handstand",
+        "cartwheel",
+        "backward roll",
+        "forward roll"
+      ],
+      "sourceRefs": [
+        "crop_manifest: floor/handstand_cartwheel_rebound"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "circuit",
+      "tags": [
+        "handstand",
+        "cartwheel",
+        "form",
+        "floor"
+      ],
+      "title": "Floor Handstand and Cartwheel Form Circuit",
+      "variants": [
+        {
+          "id": "floor-handstand-cartwheel-form-circuit:variant:0",
+          "instructions": [
+            "Perform 10 straight-leg donkey kicks to a raised mat or target."
+          ],
+          "sourceRefs": [
+            "past: ADV_lesson_02-24-2026.md",
+            "past: ADV_lesson_03-03-2026.md"
+          ],
+          "title": "Straight-leg donkey kicks"
+        },
+        {
+          "id": "floor-handstand-cartwheel-form-circuit:variant:1",
+          "instructions": [
+            "Rebound upward from a handstand using the raised target or block setup."
+          ],
+          "sourceRefs": [
+            "past: ADV_lesson_02-24-2026.md",
+            "past: ADV_lesson_03-03-2026.md"
+          ],
+          "title": "Handstand rebound-up station"
+        },
+        {
+          "id": "floor-handstand-cartwheel-form-circuit:variant:2",
+          "instructions": [
+            "Travel along the line with a lunge, cartwheel, and lunge finish."
+          ],
+          "sourceRefs": [
+            "past: ADV_lesson_02-24-2026.md",
+            "past: ADV_lesson_03-03-2026.md"
+          ],
+          "title": "Lunge-cartwheel-lunge line"
+        },
+        {
+          "id": "floor-handstand-cartwheel-form-circuit:variant:3",
+          "instructions": [
+            "Backward roll into a push-up shape and hold for 10 seconds."
+          ],
+          "sourceRefs": [
+            "past: ADV_lesson_02-24-2026.md"
+          ],
+          "title": "Backward-roll push-up hold"
+        },
+        {
+          "id": "floor-handstand-cartwheel-form-circuit:variant:4",
+          "instructions": [
+            "Cartwheel, step the feet together, and hold for 10 seconds."
+          ],
+          "sourceRefs": [
+            "past: ADV_lesson_02-24-2026.md"
+          ],
+          "title": "Cartwheel step-together hold"
+        },
+        {
+          "id": "floor-handstand-cartwheel-form-circuit:variant:5",
+          "instructions": [
+            "Connect a lunge, handstand, forward roll, and stuck finish."
+          ],
+          "sourceRefs": [
+            "past: ADV_lesson_02-24-2026.md",
+            "warmup_ideas:30",
+            "floor_form_challenge:17"
+          ],
+          "title": "Lunge-handstand-forward-roll-stick"
+        }
+      ]
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "floor"
+      ],
+      "goals": [],
+      "id": "floor-routine-sequence-circuit",
+      "instructions": [
+        "Set one routine skill at each station in routine order.",
+        "Have athletes cycle through every station, then recall the full routine."
+      ],
+      "skills": [
+        "routine construction",
+        "routine recall"
+      ],
+      "sourceRefs": [
+        "lesson_todos:22"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "circuit",
+      "tags": [
+        "routine",
+        "stations",
+        "floor"
+      ],
+      "title": "Floor Routine-Sequence Circuit",
+      "variants": []
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "floor"
+      ],
+      "goals": [],
+      "id": "floor-shapes-and-inversion-warmup",
+      "instructions": [],
+      "skills": [
+        "hollow shape",
+        "arch shape",
+        "compression",
+        "handstand control"
+      ],
+      "sourceRefs": [
+        "warmup_ideas:29-43"
+      ],
+      "sourceStatus": "idea",
+      "sourceType": "warmup",
+      "tags": [
+        "warmup",
+        "body-shapes",
+        "handstand",
+        "floor"
+      ],
+      "title": "Floor Shapes and Inversion Warm-Up",
+      "variants": [
+        {
+          "id": "floor-shapes-and-inversion-warmup:variant:0",
+          "instructions": [
+            "Roll down the floor through hollow, arch, then hollow body shapes."
+          ],
+          "sourceRefs": [
+            "warmup_ideas:29"
+          ],
+          "title": "Hollow-arch-hollow rolls"
+        },
+        {
+          "id": "floor-shapes-and-inversion-warmup:variant:1",
+          "instructions": [
+            "Travel down the floor using straddle scootches."
+          ],
+          "sourceRefs": [
+            "warmup_ideas:31"
+          ],
+          "title": "Straddle scootches"
+        },
+        {
+          "id": "floor-shapes-and-inversion-warmup:variant:2",
+          "instructions": [
+            "Travel down the floor using pike scootches."
+          ],
+          "sourceRefs": [
+            "warmup_ideas:32"
+          ],
+          "title": "Pike scootches"
+        },
+        {
+          "id": "floor-shapes-and-inversion-warmup:variant:3",
+          "instructions": [
+            "Use handstand walks, handstand pirouettes, and handstand block turns."
+          ],
+          "sourceRefs": [
+            "warmup_ideas:36-38"
+          ],
+          "title": "Handstand control line"
+        },
+        {
+          "id": "floor-shapes-and-inversion-warmup:variant:4",
+          "instructions": [
+            "Perform cartwheels on both sides."
+          ],
+          "sourceRefs": [
+            "warmup_ideas:39"
+          ],
+          "title": "Cartwheels on both sides"
+        },
+        {
+          "id": "floor-shapes-and-inversion-warmup:variant:5",
+          "instructions": [
+            "Begin with back extension rolls, then progress to handstand or to half pirouette and forward roll."
+          ],
+          "sourceRefs": [
+            "warmup_ideas:40-43"
+          ],
+          "title": "Back extension roll series"
+        }
+      ]
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "floor"
+      ],
+      "goals": [],
+      "id": "forward-roll-to-front-tuck-progressions",
+      "instructions": [],
+      "skills": [
+        "forward roll",
+        "dive roll",
+        "front tuck"
+      ],
+      "sourceRefs": [
+        "crop_manifest: floor/forward_roll_front_tuck"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "progression",
+      "tags": [
+        "forward-roll",
+        "front-tuck",
+        "tumbling",
+        "floor"
+      ],
+      "title": "Forward Roll to Front Tuck Progressions",
+      "variants": [
+        {
+          "id": "forward-roll-to-front-tuck-progressions:variant:0",
+          "instructions": [
+            "Forward roll up a mat, then progress to a jump forward roll, dive roll, or front tuck."
+          ],
+          "sourceRefs": [
+            "past: ADV_lesson_03-17-2026.md",
+            "past: ADV_lesson_03-24-2026.md",
+            "past: ADV_lesson_03-31-2026.md",
+            "past: ADV_lesson_05-26-2026.md"
+          ],
+          "title": "Uphill forward roll to front tuck"
+        },
+        {
+          "id": "forward-roll-to-front-tuck-progressions:variant:1",
+          "instructions": [
+            "Use a large Norbert, T-trainer, or chin foam for 10 jump-tuck plunges."
+          ],
+          "sourceRefs": [
+            "past: NGA_lesson_04-01-2026.md"
+          ],
+          "title": "Jump-tuck plunge"
+        },
+        {
+          "id": "forward-roll-to-front-tuck-progressions:variant:2",
+          "instructions": [
+            "Use a springboard to a cheese over a high block for a jump forward roll."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \ud835\udc00\ud835\udc1d\ud835\udc2f\ud835\udc1a\ud835\udc27\ud835\udc1c\ud835\udc1e\ud835\udc1d \ud835\udc01\ud835\udc28\ud835\udc32\ud835\udc2c \ud835\udc0b\ud835\udc1e\ud835\udc2c\ud835\udc2c\ud835\udc28\ud835\udc27 \ud80c\ude87 \u2727-6.md"
+          ],
+          "title": "Jump forward roll over block"
+        },
+        {
+          "id": "forward-roll-to-front-tuck-progressions:variant:3",
+          "instructions": [
+            "Use a half resi and Euro tramp for front-tuck or dive-roll progressions."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \ud835\udc00\ud835\udc1d\ud835\udc2f\ud835\udc1a\ud835\udc27\ud835\udc1c\ud835\udc1e\ud835\udc1d \ud835\udc01\ud835\udc28\ud835\udc32\ud835\udc2c \ud835\udc0b\ud835\udc1e\ud835\udc2c\ud835\udc2c\ud835\udc28\ud835\udc27 \ud80c\ude87 \u2727-6.md"
+          ],
+          "title": "Front tuck or dive roll to resi"
+        },
+        {
+          "id": "forward-roll-to-front-tuck-progressions:variant:4",
+          "instructions": [
+            "Use a running entry into a front tuck."
+          ],
+          "sourceRefs": [
+            "warmup_ideas:48"
+          ],
+          "title": "Run to front tuck"
+        }
+      ]
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "floor"
+      ],
+      "goals": [],
+      "id": "handstand-strength-and-control-series",
+      "instructions": [],
+      "skills": [
+        "handstand",
+        "press handstand",
+        "body tension"
+      ],
+      "sourceRefs": [
+        "warmup_ideas:33-34"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "progression",
+      "tags": [
+        "handstand",
+        "press",
+        "strength",
+        "floor"
+      ],
+      "title": "Handstand Strength and Control Series",
+      "variants": [
+        {
+          "id": "handstand-strength-and-control-series:variant:0",
+          "instructions": [
+            "Take one handstand attempt on parallettes, target at least three seconds, and track makes/misses."
+          ],
+          "sourceRefs": [
+            "past: NGA_lesson_05-01-2026.md"
+          ],
+          "title": "Parallette handstand time trial"
+        },
+        {
+          "id": "handstand-strength-and-control-series:variant:1",
+          "instructions": [
+            "Do 15 mini straddle presses with the feet held within one inch of the floor."
+          ],
+          "sourceRefs": [
+            "past: NGA_lesson_05-01-2026.md"
+          ],
+          "title": "Mini straddle presses"
+        },
+        {
+          "id": "handstand-strength-and-control-series:variant:2",
+          "instructions": [
+            "Press to handstand with the back against the wall."
+          ],
+          "sourceRefs": [
+            "past: NGA_lesson_05-01-2026.md"
+          ],
+          "title": "Wall press to handstand"
+        },
+        {
+          "id": "handstand-strength-and-control-series:variant:3",
+          "instructions": [
+            "Use a T-trainer, floor bar/weights, and an 8-inch or cloud mat to bounce to handstand and land flat on the back."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \ud835\udc0b\ud835\udc1e\ud835\udc2f\ud835\udc1e\ud835\udc25 \ud835\udfd2 \ud835\udc01\ud835\udc28\ud835\udc32\ud835\udc2c \ud835\udc0b\ud835\udc1e\ud835\udc2c\ud835\udc2c\ud835\udc28\ud835\udc27 \ud80c\ude87 \u2727-1.md"
+          ],
+          "title": "Bounce handstand flatback"
+        },
+        {
+          "id": "handstand-strength-and-control-series:variant:4",
+          "instructions": [
+            "Bounce to handstand, hold 30 seconds with the wall, then work toward a 10-second hold without it."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \ud835\udc0b\ud835\udc1e\ud835\udc2f\ud835\udc1e\ud835\udc25 \ud835\udfd2 \ud835\udc01\ud835\udc28\ud835\udc32\ud835\udc2c \ud835\udc0b\ud835\udc1e\ud835\udc2c\ud835\udc2c\ud835\udc28\ud835\udc27 \ud80c\ude87 \u2727-1.md"
+          ],
+          "title": "Wall handstand hold progression"
+        },
+        {
+          "id": "handstand-strength-and-control-series:variant:5",
+          "instructions": [
+            "Use a floor bar, boulder, and block: handstand backward to the boulder, then hollow down to push-up."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \ud835\udc0b\ud835\udc1e\ud835\udc2f\ud835\udc1e\ud835\udc25 \ud835\udfd2 \ud835\udc01\ud835\udc28\ud835\udc32\ud835\udc2c \ud835\udc0b\ud835\udc1e\ud835\udc2c\ud835\udc2c\ud835\udc28\ud835\udc27 \ud80c\ude87 \u2727-1.md"
+          ],
+          "title": "Handstand back to boulder hollow push-up"
+        },
+        {
+          "id": "handstand-strength-and-control-series:variant:6",
+          "instructions": [
+            "Perform a pike press to handstand."
+          ],
+          "sourceRefs": [
+            "warmup_ideas:33"
+          ],
+          "title": "Pike press handstand"
+        },
+        {
+          "id": "handstand-strength-and-control-series:variant:7",
+          "instructions": [
+            "Start in a pike headstand, shoot to handstand, then finish with a forward roll."
+          ],
+          "sourceRefs": [
+            "warmup_ideas:34"
+          ],
+          "title": "Pike headstand-shoot handstand-forward roll"
+        }
+      ]
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "high_bar"
+      ],
+      "goals": [],
+      "id": "high-bar-free-hip-and-swing-progressions",
+      "instructions": [],
+      "skills": [
+        "free hip",
+        "handstand",
+        "giant",
+        "swing"
+      ],
+      "sourceRefs": [
+        "crop_manifest: high_bar/free_hip_handstand_giants",
+        "crop_manifest: high_bar/kip_free_hip_handstand"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "progression",
+      "tags": [
+        "free-hip",
+        "handstand",
+        "giant",
+        "high-bar"
+      ],
+      "title": "High-Bar Free-Hip and Swing Progressions",
+      "variants": [
+        {
+          "id": "high-bar-free-hip-and-swing-progressions:variant:0",
+          "instructions": [
+            "Use backward-roll/handstand and hollow-support shapes before free-hip handstands and giant preparation."
+          ],
+          "sourceRefs": [
+            "crop_manifest: high_bar/free_hip_handstand_giants"
+          ],
+          "title": "Free-hip handstand to giant preparation"
+        },
+        {
+          "id": "high-bar-free-hip-and-swing-progressions:variant:1",
+          "instructions": [
+            "Connect kip or back hip circle to free hip, then snap the toes toward bar into handstand."
+          ],
+          "sourceRefs": [
+            "crop_manifest: high_bar/kip_free_hip_handstand"
+          ],
+          "title": "Kip-free-hip-handstand connection"
+        },
+        {
+          "id": "high-bar-free-hip-and-swing-progressions:variant:2",
+          "instructions": [
+            "Use a bungee on beam or bar for three to five swings before transitioning to full-bar swings."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \ud835\udc01\ud835\udc28\ud835\udc32\ud835\udc2c \ud835\udc00\ud835\udc1d\ud835\udc2f\ud835\udc1a\ud835\udc27\ud835\udc1c\ud835\udc1e\ud835\udc1d \ud835\udc0b\ud835\udc1e\ud835\udc2c\ud835\udc2c\ud835\udc28\ud835\udc27\ud80c\ude87 \u2727.md"
+          ],
+          "title": "Bungee swing progression"
+        }
+      ]
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "high_bar"
+      ],
+      "goals": [],
+      "id": "high-bar-shape-and-cast-stations",
+      "instructions": [],
+      "skills": [
+        "pullover",
+        "cast",
+        "back hip circle",
+        "hollow",
+        "arch"
+      ],
+      "sourceRefs": [
+        "crop_manifest: high_bar/free_hip_handstand_giants"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "progression",
+      "tags": [
+        "cast",
+        "hollow",
+        "arch",
+        "high-bar"
+      ],
+      "title": "High-Bar Shape and Cast Stations",
+      "variants": [
+        {
+          "id": "high-bar-shape-and-cast-stations:variant:0",
+          "instructions": [
+            "Pullover to cast and hold the body position with or against a block for 10 seconds."
+          ],
+          "sourceRefs": [
+            "past: ADV_lesson_02-24-2026.md",
+            "past: ADV_lesson_03-03-2026.md"
+          ],
+          "title": "Pullover-cast block hold"
+        },
+        {
+          "id": "high-bar-shape-and-cast-stations:variant:1",
+          "instructions": [
+            "Use hollow rocks and a tight arch held against felt as a shape-feedback station."
+          ],
+          "sourceRefs": [
+            "past: ADV_lesson_02-24-2026.md",
+            "past: ADV_lesson_03-03-2026.md"
+          ],
+          "title": "Hollow rocks and tight-arch felt check"
+        },
+        {
+          "id": "high-bar-shape-and-cast-stations:variant:2",
+          "instructions": [
+            "On a red or low bar: pullover, casts, and back hip circle, progressing toward kip."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \u0299\u1d0f\u028f\ua731 \u026a\u0274\u1d1b\u1d07\u0280\u1d0d\u1d07\u1d05\u026a\u1d00\u1d1b\u1d07 & \u1d00\u1d05\u1d20\u1d00\u0274\u1d04\u1d07\u1d05 \ud80c\ude87 \u2727.md"
+          ],
+          "title": "Pullover-cast-back hip circle sequence"
+        },
+        {
+          "id": "high-bar-shape-and-cast-stations:variant:3",
+          "instructions": [
+            "On strap bar: cast, back hip circle, and undershoot with a high-swing focus."
+          ],
+          "sourceRefs": [
+            "crop_manifest: high_bar/undershoot_hollow_swing"
+          ],
+          "title": "Cast-back hip circle-undershoot sequence"
+        }
+      ]
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "high_bar"
+      ],
+      "goals": [],
+      "id": "high-bar-undershoot-progressions",
+      "instructions": [],
+      "skills": [
+        "undershoot",
+        "front kip",
+        "hollow swing",
+        "flyaway"
+      ],
+      "sourceRefs": [
+        "crop_manifest: high_bar/front_kip_undershoot",
+        "crop_manifest: high_bar/hollow_roll_undershoot"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "progression",
+      "tags": [
+        "undershoot",
+        "front-kip",
+        "high-bar",
+        "flyaway"
+      ],
+      "title": "High-Bar Undershoot Progressions",
+      "variants": [
+        {
+          "id": "high-bar-undershoot-progressions:variant:0",
+          "instructions": [
+            "Undershoot, perform three tap swings, push off, and stick the landing."
+          ],
+          "sourceRefs": [
+            "past: ADV_lesson_02-24-2026.md",
+            "past: ADV_lesson_03-03-2026.md"
+          ],
+          "title": "Undershoot, three tap swings, push-off stick"
+        },
+        {
+          "id": "high-bar-undershoot-progressions:variant:1",
+          "instructions": [
+            "Start in front-kip position, snap the toes to bar before touching the block, then return to front-kip position."
+          ],
+          "sourceRefs": [
+            "past: ADV_lesson_05-12-2026.md",
+            "past: L3_lesson_05-06-2026.md",
+            "past: L3_lesson_05-11-2026.md"
+          ],
+          "title": "Front-kip toes-to-bar pattern"
+        },
+        {
+          "id": "high-bar-undershoot-progressions:variant:2",
+          "instructions": [
+            "Use glide swings to support, drop and lean shift, then cast to undershoot, backswing, and kip."
+          ],
+          "sourceRefs": [
+            "crop_manifest: high_bar/front_kip_undershoot"
+          ],
+          "title": "Front-kip to undershoot"
+        },
+        {
+          "id": "high-bar-undershoot-progressions:variant:3",
+          "instructions": [
+            "Use hollow hold and backward-roll shapes, then undershoot to three swings and flyaway."
+          ],
+          "sourceRefs": [
+            "crop_manifest: high_bar/hollow_roll_undershoot"
+          ],
+          "title": "Hollow-roll undershoot"
+        },
+        {
+          "id": "high-bar-undershoot-progressions:variant:4",
+          "instructions": [
+            "Progress from assisted undershoot plus one backswing stick to more swings, then cast or cast-back-hip-circle to undershoot."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \ud835\udc01\ud835\udc28\ud835\udc32\ud835\udc2c \ud835\udc00\ud835\udc1d\ud835\udc2f\ud835\udc1a\ud835\udc27\ud835\udc1c\ud835\udc1e\ud835\udc1d \ud835\udc0b\ud835\udc1e\ud835\udc2c\ud835\udc2c\ud835\udc28\ud835\udc27\ud80c\ude87 \u2727.md"
+          ],
+          "title": "Undershoot ladder"
+        }
+      ]
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "parallel_bars"
+      ],
+      "goals": [],
+      "id": "parallel-bars-dismount-and-hold-series",
+      "instructions": [],
+      "skills": [
+        "swing dismount",
+        "flank dismount",
+        "L hold",
+        "V hold",
+        "straddle V"
+      ],
+      "sourceRefs": [
+        "crop_manifest: parallel_bars/swing_dismount_l_hold"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "progression",
+      "tags": [
+        "parallel-bars",
+        "dismount",
+        "L-hold",
+        "V-hold"
+      ],
+      "title": "Parallel Bars Dismount and Hold Series",
+      "variants": [
+        {
+          "id": "parallel-bars-dismount-and-hold-series:variant:0",
+          "instructions": [
+            "Use a low-bar station to set a controlled swing dismount."
+          ],
+          "sourceRefs": [
+            "past: ADV_lesson_02-24-2026.md",
+            "past: ADV_lesson_03-03-2026.md"
+          ],
+          "title": "Low-bar swing-dismount setting station"
+        },
+        {
+          "id": "parallel-bars-dismount-and-hold-series:variant:1",
+          "instructions": [
+            "Set bars to five notches and perform three swings into a flank dismount."
+          ],
+          "sourceRefs": [
+            "past: ADV_lesson_05-12-2026.md",
+            "past: ADV_lesson_05-26-2026.md"
+          ],
+          "title": "Three swings to flank dismount"
+        },
+        {
+          "id": "parallel-bars-dismount-and-hold-series:variant:2",
+          "instructions": [
+            "Use bungee assistance for L, V, and straddle-V hold shapes; hold straddle-V for five seconds before lowering to straddle."
+          ],
+          "sourceRefs": [
+            "past: ADV_lesson_02-24-2026.md",
+            "past: ADV_lesson_03-03-2026.md",
+            "past: NGA_lesson_02-25-2026.md"
+          ],
+          "title": "Bungee L/V/straddle-V holds"
+        },
+        {
+          "id": "parallel-bars-dismount-and-hold-series:variant:3",
+          "instructions": [
+            "Use a rings/bungee or floor/panel station for repeated tuck-planche kickouts, including a 10-second tucked-planche to kickout and 10-second hold."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \ud835\udc00\ud835\udc1d\ud835\udc2f\ud835\udc1a\ud835\udc27\ud835\udc1c\ud835\udc1e\ud835\udc1d \ud835\udc01\ud835\udc28\ud835\udc32\ud835\udc2c \ud835\udc0b\ud835\udc1e\ud835\udc2c\ud835\udc2c\ud835\udc28\ud835\udc27 \ud80c\ude87 \u2727-6.md",
+            "past: \u2727 \ud80c\ude86 \ud835\udc0b\ud835\udc1e\ud835\udc2f\ud835\udc1e\ud835\udc25 \ud835\udfd1 \ud835\udc01\ud835\udc28\ud835\udc32\ud835\udc2c \ud835\udc05\ud835\udc2b\ud835\udc22\ud835\udc1d\ud835\udc1a\ud835\udc32\ud80c\ude87 \u2727.md"
+          ],
+          "title": "Tuck-planche kickouts"
+        },
+        {
+          "id": "parallel-bars-dismount-and-hold-series:variant:4",
+          "instructions": [
+            "Use low PB to move from straddle V into straight-body front support."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \ud835\udc0b\ud835\udc1e\ud835\udc2f\ud835\udc1e\ud835\udc25 \ud835\udfd1 \ud835\udc01\ud835\udc28\ud835\udc32\ud835\udc2c \ud835\udc05\ud835\udc2b\ud835\udc22\ud835\udc1d\ud835\udc1a\ud835\udc32\ud80c\ude87 \u2727.md"
+          ],
+          "title": "Straddle-V to front support"
+        }
+      ]
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "parallel_bars"
+      ],
+      "goals": [],
+      "id": "parallel-bars-handstand-and-press-progressions",
+      "instructions": [],
+      "skills": [
+        "handstand",
+        "straddle press",
+        "swing"
+      ],
+      "sourceRefs": [
+        "crop_manifest: parallel_bars/swing_dismount_handstand"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "progression",
+      "tags": [
+        "parallel-bars",
+        "handstand",
+        "press",
+        "bailout"
+      ],
+      "title": "Parallel Bars Handstand and Press Progressions",
+      "variants": [
+        {
+          "id": "parallel-bars-handstand-and-press-progressions:variant:0",
+          "instructions": [
+            "Use a low or targeted PB setup to bounce into handstand, with gripped guide swings or overgrip as a progression."
+          ],
+          "sourceRefs": [
+            "past: L3_lesson_05-06-2026.md",
+            "past: L3_lesson_05-11-2026.md"
+          ],
+          "title": "P-bar bounce to handstand"
+        },
+        {
+          "id": "parallel-bars-handstand-and-press-progressions:variant:1",
+          "instructions": [
+            "Use low PB beside a resi: self-swing to handstand from the edge and bail safely onto the resi."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \ud835\udc0b\ud835\udc1e\ud835\udc2f\ud835\udc1e\ud835\udc25 \ud835\udfd2 \ud835\udc01\ud835\udc28\ud835\udc32\ud835\udc2c \ud835\udc0b\ud835\udc1e\ud835\udc2c\ud835\udc2c\ud835\udc28\ud835\udc27 \ud80c\ude87 \u2727-1.md"
+          ],
+          "title": "Self-swing handstand bailout"
+        },
+        {
+          "id": "parallel-bars-handstand-and-press-progressions:variant:2",
+          "instructions": [
+            "Use parallettes and two bungees for a straddle press handstand."
+          ],
+          "sourceRefs": [
+            "crop_manifest: parallel_bars/swing_dismount_handstand"
+          ],
+          "title": "Parallette/bungee straddle press handstand"
+        }
+      ]
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "parallel_bars"
+      ],
+      "goals": [],
+      "id": "parallel-bars-routine-sequence-circuit",
+      "instructions": [
+        "Set one routine skill at each station in routine order.",
+        "Have athletes cycle through every station, then recall the full routine."
+      ],
+      "skills": [
+        "routine construction",
+        "routine recall"
+      ],
+      "sourceRefs": [
+        "lesson_todos:21"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "circuit",
+      "tags": [
+        "parallel-bars",
+        "routine",
+        "stations"
+      ],
+      "title": "Parallel Bars Routine-Sequence Circuit",
+      "variants": []
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "parallel_bars"
+      ],
+      "goals": [],
+      "id": "parallel-bars-support-and-uprise-stations",
+      "instructions": [],
+      "skills": [
+        "support swing",
+        "upper-arm support",
+        "front uprise",
+        "elbow uprise"
+      ],
+      "sourceRefs": [
+        "crop_manifest: parallel_bars/back_uprise_front_uprise",
+        "crop_manifest: parallel_bars/back_uprise_straddle_hold"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "station_drill",
+      "tags": [
+        "parallel-bars",
+        "support-swing",
+        "uprise",
+        "station"
+      ],
+      "title": "Parallel Bars Support and Uprise Stations",
+      "variants": [
+        {
+          "id": "parallel-bars-support-and-uprise-stations:variant:0",
+          "instructions": [
+            "Swing with a flat body, push through the shoulders, and finish tall in support."
+          ],
+          "sourceRefs": [
+            "current_l3:26-29"
+          ],
+          "title": "Support-swing form drill"
+        },
+        {
+          "id": "parallel-bars-support-and-uprise-stations:variant:1",
+          "instructions": [
+            "Jump to upper-arm straddle-up, then work straight-body support swings and front uprisings."
+          ],
+          "sourceRefs": [
+            "past: NGA_lesson_02-25-2026.md",
+            "past: NGA_lesson_03-04-2026.md"
+          ],
+          "title": "Upper-arm straddle-up and front-uprise station"
+        },
+        {
+          "id": "parallel-bars-support-and-uprise-stations:variant:2",
+          "instructions": [
+            "Use a PB-block station for elbow uprisings."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \ud835\udc0b\ud835\udc1e\ud835\udc2f\ud835\udc1e\ud835\udc25 \ud835\udfd2 \ud835\udc01\ud835\udc28\ud835\udc32\ud835\udc2c \ud835\udc0b\ud835\udc1e\ud835\udc2c\ud835\udc2c\ud835\udc28\ud835\udc27 \ud80c\ude87 \u2727-1.md"
+          ],
+          "title": "Elbow uprise"
+        },
+        {
+          "id": "parallel-bars-support-and-uprise-stations:variant:3",
+          "instructions": [
+            "Jump to three upper-arm swings, then progress toward higher PB skills."
+          ],
+          "sourceRefs": [
+            "past: NGA_lesson_04-03-2026.md"
+          ],
+          "title": "Upper-arm swing entry"
+        },
+        {
+          "id": "parallel-bars-support-and-uprise-stations:variant:4",
+          "instructions": [
+            "Accumulate 120 seconds of L hold and track each attempt on a whiteboard."
+          ],
+          "sourceRefs": [
+            "past: NGA_lesson_03-04-2026.md"
+          ],
+          "title": "L-hold tracker"
+        }
+      ]
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "pommel_horse"
+      ],
+      "goals": [],
+      "id": "pommel-arch-rhythm-on-straps",
+      "instructions": [
+        "Use a panel plus rubber band or straps to hold an arch while maintaining speed and rhythm."
+      ],
+      "skills": [
+        "arch hold",
+        "circle rhythm"
+      ],
+      "sourceRefs": [
+        "past: \u2727 \ud80c\ude86 \ud835\udc0f\ud835\udc2b\ud835\udc22\ud835\udc2f\ud835\udc1a\ud835\udc2d\ud835\udc1e \ud835\udc0b\ud835\udc1e\ud835\udc2c\ud835\udc2c\ud835\udc28\ud835\udc27\ud835\udc2c \ud80c\ude87 \u2727.md"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "form_drill",
+      "tags": [
+        "pommel",
+        "arch",
+        "rhythm",
+        "straps"
+      ],
+      "title": "Pommel Arch Rhythm on Straps",
+      "variants": []
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "pommel_horse"
+      ],
+      "goals": [],
+      "id": "pommel-bucket-circle-foundations",
+      "instructions": [],
+      "skills": [
+        "circle",
+        "bucket circle",
+        "support walk",
+        "leg cut"
+      ],
+      "sourceRefs": [
+        "crop_manifest: pommel_horse/mushroom_circles_bucket"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "progression",
+      "tags": [
+        "pommel",
+        "mushroom",
+        "circle",
+        "bucket"
+      ],
+      "title": "Pommel Bucket-Circle Foundations",
+      "variants": [
+        {
+          "id": "pommel-bucket-circle-foundations:variant:0",
+          "instructions": [
+            "Practice bucket circles with bungee assistance and record circle attempts."
+          ],
+          "sourceRefs": [
+            "past: ADV_lesson_02-24-2026.md",
+            "past: ADV_lesson_03-03-2026.md"
+          ],
+          "title": "Bucket circles with bungee"
+        },
+        {
+          "id": "pommel-bucket-circle-foundations:variant:1",
+          "instructions": [
+            "Travel or support-walk along the mushroom or low apparatus before circles."
+          ],
+          "sourceRefs": [
+            "past: ADV_lesson_03-03-2026.md"
+          ],
+          "title": "Mushroom support walks"
+        },
+        {
+          "id": "pommel-bucket-circle-foundations:variant:2",
+          "instructions": [
+            "Use a hoop or ring target for the circle path, then work loops, up-downs, leg cuts, and bucket-circle tries."
+          ],
+          "sourceRefs": [
+            "past: NGA_lesson_02-25-2026.md",
+            "past: NGA_lesson_03-04-2026.md"
+          ],
+          "title": "Hula-hoop circle path"
+        },
+        {
+          "id": "pommel-bucket-circle-foundations:variant:3",
+          "instructions": [
+            "Use the hanging/bucket-circle setup after mushroom shoulder taps."
+          ],
+          "sourceRefs": [
+            "crop_manifest: pommel_horse/hanging_circles_bucket"
+          ],
+          "title": "Hanging bucket circles"
+        },
+        {
+          "id": "pommel-bucket-circle-foundations:variant:4",
+          "instructions": [
+            "Perform the prescribed circle sequence or tries and write down a personal record."
+          ],
+          "sourceRefs": [
+            "past: ADV_lesson_02-24-2026.md",
+            "past: ADV_lesson_03-03-2026.md"
+          ],
+          "title": "Circle-record challenge"
+        }
+      ]
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "pommel_horse"
+      ],
+      "goals": [],
+      "id": "pommel-circle-and-spindle-progressions",
+      "instructions": [],
+      "skills": [
+        "circle",
+        "spindle",
+        "flair"
+      ],
+      "sourceRefs": [
+        "crop_manifest: pommel_horse/mushroom_circles",
+        "crop_manifest: pommel_horse/mushroom_circles_bucket"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "progression",
+      "tags": [
+        "pommel",
+        "mushroom",
+        "circle",
+        "spindle"
+      ],
+      "title": "Pommel Circle and Spindle Progressions",
+      "variants": [
+        {
+          "id": "pommel-circle-and-spindle-progressions:variant:0",
+          "instructions": [
+            "Perform five circles on rings or handles, using a wheel or adjusted height so the athlete can reach safely."
+          ],
+          "sourceRefs": [
+            "past: ADV_lesson_03-24-2026.md"
+          ],
+          "title": "Circle-on-rings reach drill"
+        },
+        {
+          "id": "pommel-circle-and-spindle-progressions:variant:1",
+          "instructions": [
+            "Repeat two circles, half spindle, and two circles; use bungee-assisted straddle swings as a variation."
+          ],
+          "sourceRefs": [
+            "past: L3_lesson_05-06-2026.md",
+            "past: L3_lesson_05-11-2026.md",
+            "past: L4_lesson_04-23-2026.md"
+          ],
+          "title": "Two circles, half spindle, two circles"
+        },
+        {
+          "id": "pommel-circle-and-spindle-progressions:variant:2",
+          "instructions": [
+            "Circle with one foot in the bucket, then work spindle or flair attempts."
+          ],
+          "sourceRefs": [
+            "past: L3_lesson_05-06-2026.md",
+            "past: L3_lesson_05-11-2026.md",
+            "past: L4_lesson_04-23-2026.md"
+          ],
+          "title": "One-foot bucket circle and spindle/flair attempts"
+        },
+        {
+          "id": "pommel-circle-and-spindle-progressions:variant:3",
+          "instructions": [
+            "Build quarter, half, three-quarter, one, and one-and-a-quarter circles on the floor mushroom or mushroom."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \ud835\udc00\ud835\udc1d\ud835\udc2f\ud835\udc1a\ud835\udc27\ud835\udc1c\ud835\udc1e\ud835\udc1d \ud835\udc01\ud835\udc28\ud835\udc32\ud835\udc2c \ud835\udc0b\ud835\udc1e\ud835\udc2c\ud835\udc2c\ud835\udc28\ud835\udc27 \ud80c\ude87 \u2727-6.md"
+          ],
+          "title": "Circle fraction ladder"
+        },
+        {
+          "id": "pommel-circle-and-spindle-progressions:variant:4",
+          "instructions": [
+            "Do five half circles, work toward two full circles, or use two circles for three sets."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \u0299\u1d0f\u028f\ua731 \u026a\u0274\u1d1b\u1d07\u0280\u1d0d\u1d07\u1d05\u026a\u1d00\u1d1b\u1d07 & \u1d00\u1d05\u1d20\u1d00\u0274\u1d04\u1d07\u1d05 \ud80c\ude87 \u2727.md"
+          ],
+          "title": "Half-circle to full-circle volume"
+        }
+      ]
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "rings"
+      ],
+      "goals": [],
+      "id": "rings-arch-and-swing-shapes",
+      "instructions": [],
+      "skills": [
+        "arch rock",
+        "ring swing",
+        "support"
+      ],
+      "sourceRefs": [
+        "crop_manifest: rings/arch_swings_support"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "form_drill",
+      "tags": [
+        "arch",
+        "swing",
+        "rings",
+        "body-shape"
+      ],
+      "title": "Rings Arch and Swing Shapes",
+      "variants": [
+        {
+          "id": "rings-arch-and-swing-shapes:variant:0",
+          "instructions": [
+            "Use arch rocks with arm swings; cue high, straight legs and straight swing arms."
+          ],
+          "sourceRefs": [
+            "past: NGA_lesson_02-25-2026.md",
+            "past: NGA_lesson_03-04-2026.md",
+            "crop_manifest: rings/arch_swings_support"
+          ],
+          "title": "Arch-rock arm-swing drill"
+        },
+        {
+          "id": "rings-arch-and-swing-shapes:variant:1",
+          "instructions": [
+            "Do 10 arch rocks on a panel mat or chin foam, optionally tracking volume."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \ud835\udc00\ud835\udc1d\ud835\udc2f\ud835\udc1a\ud835\udc27\ud835\udc1c\ud835\udc1e\ud835\udc1d \ud835\udc01\ud835\udc28\ud835\udc32\ud835\udc2c \ud835\udc0b\ud835\udc1e\ud835\udc2c\ud835\udc2c\ud835\udc28\ud835\udc27 \ud80c\ude87 \u2727-6.md",
+            "past: \u2727 \ud80c\ude86 \ud835\udc0b\ud835\udc1e\ud835\udc2f\ud835\udc1e\ud835\udc25 \ud835\udfd1 \ud835\udc01\ud835\udc28\ud835\udc32\ud835\udc2c \ud835\udc05\ud835\udc2b\ud835\udc22\ud835\udc1d\ud835\udc1a\ud835\udc32\ud80c\ude87 \u2727.md"
+          ],
+          "title": "Panel-mat arch rocks"
+        },
+        {
+          "id": "rings-arch-and-swing-shapes:variant:2",
+          "instructions": [
+            "Use low strap rings with two bungees for hollow rocks."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \ud835\udc00\ud835\udc1d\ud835\udc2f\ud835\udc1a\ud835\udc27\ud835\udc1c\ud835\udc1e\ud835\udc1d \ud835\udc01\ud835\udc28\ud835\udc32\ud835\udc2c \ud835\udc0b\ud835\udc1e\ud835\udc2c\ud835\udc2c\ud835\udc28\ud835\udc27 \ud80c\ude87 \u2727-6.md"
+          ],
+          "title": "Strap-ring hollow rocks"
+        }
+      ]
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "rings"
+      ],
+      "goals": [],
+      "id": "rings-block-tower-swing-straddle",
+      "instructions": [
+        "Place blocks in front of and behind the athlete.",
+        "Swing, then straddle the rear and front blocks."
+      ],
+      "skills": [
+        "ring swing",
+        "straddle"
+      ],
+      "sourceRefs": [
+        "implementation_ideas:9-14"
+      ],
+      "sourceStatus": "idea",
+      "sourceType": "station_drill",
+      "tags": [
+        "rings",
+        "swing",
+        "straddle",
+        "station"
+      ],
+      "title": "Rings Block-Tower Swing and Straddle",
+      "variants": []
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "rings"
+      ],
+      "goals": [],
+      "id": "rings-forward-rotation-and-uprise",
+      "instructions": [],
+      "skills": [
+        "forward roll",
+        "back uprise",
+        "support",
+        "L hold"
+      ],
+      "sourceRefs": [
+        "crop_manifest: rings/back_uprise_layout_flyaway"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "progression",
+      "tags": [
+        "back-uprise",
+        "support",
+        "rings",
+        "progression"
+      ],
+      "title": "Rings Forward Rotation and Back-Uprise Progressions",
+      "variants": [
+        {
+          "id": "rings-forward-rotation-and-uprise:variant:0",
+          "instructions": [
+            "Work a supported forward roll into swings, with a shoulder-stand variant."
+          ],
+          "sourceRefs": [
+            "past: NGA_lesson_02-25-2026.md",
+            "past: NGA_lesson_03-04-2026.md"
+          ],
+          "title": "Support-forward-roll-swing progression"
+        },
+        {
+          "id": "rings-forward-rotation-and-uprise:variant:1",
+          "instructions": [
+            "Use a bungee to assist a back uprise."
+          ],
+          "sourceRefs": [
+            "past: NGA_lesson_03-04-2026.md"
+          ],
+          "title": "Bungee back uprise"
+        },
+        {
+          "id": "rings-forward-rotation-and-uprise:variant:2",
+          "instructions": [
+            "Use a seal shape into back uprise and L hold, paired with large arch rocks or back uprisings."
+          ],
+          "sourceRefs": [
+            "past: L4_lesson_04-23-2026.md"
+          ],
+          "title": "Seal to back uprise and L hold"
+        }
+      ]
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "rings"
+      ],
+      "goals": [],
+      "id": "rings-invert-and-flyaway-progressions",
+      "instructions": [],
+      "skills": [
+        "L hold",
+        "invert",
+        "back lever",
+        "flyaway",
+        "layout"
+      ],
+      "sourceRefs": [
+        "crop_manifest: rings/progressions_l_hold_invert_flyaway",
+        "crop_manifest: rings/dislocate_layout_flyaway"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "progression",
+      "tags": [
+        "invert",
+        "flyaway",
+        "layout",
+        "rings"
+      ],
+      "title": "Rings Invert and Flyaway Progressions",
+      "variants": [
+        {
+          "id": "rings-invert-and-flyaway-progressions:variant:0",
+          "instructions": [
+            "Connect a brief V hold, three swings, invert, back lever, flat German, and stick."
+          ],
+          "sourceRefs": [
+            "past: ADV_lesson_02-24-2026.md",
+            "past: ADV_lesson_03-03-2026.md"
+          ],
+          "title": "V-hold, swings, invert, and back lever sequence"
+        },
+        {
+          "id": "rings-invert-and-flyaway-progressions:variant:1",
+          "instructions": [
+            "Progress from L hold to three swings and invert, then inverted pike to swings and flyaway, layout, or dislocate-to-flyaway."
+          ],
+          "sourceRefs": [
+            "past: ADV_lesson_05-12-2026.md",
+            "past: ADV_lesson_05-26-2026.md",
+            "crop_manifest: rings/progressions_l_hold_invert_flyaway"
+          ],
+          "title": "L-hold/invert/flyaway ladder"
+        },
+        {
+          "id": "rings-invert-and-flyaway-progressions:variant:2",
+          "instructions": [
+            "Pike, kick out, then use three swings into a flyaway."
+          ],
+          "sourceRefs": [
+            "past: L3_lesson_05-06-2026.md",
+            "past: L3_lesson_05-11-2026.md"
+          ],
+          "title": "Pike kickout to three-swing flyaway"
+        },
+        {
+          "id": "rings-invert-and-flyaway-progressions:variant:3",
+          "instructions": [
+            "Use a dislocate, one kip to L swing, then layout flyaway; use seal/cheese/barrel rolling shapes as preparation."
+          ],
+          "sourceRefs": [
+            "crop_manifest: rings/dislocate_layout_flyaway"
+          ],
+          "title": "Dislocate to layout flyaway"
+        }
+      ]
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "rings"
+      ],
+      "goals": [],
+      "id": "rings-routine-sequence-circuit",
+      "instructions": [
+        "Set one routine skill at each station in routine order.",
+        "Focus on large swings.",
+        "Use a spot for small swings and a felt held in the athlete's feet when coaching swing amplitude."
+      ],
+      "skills": [
+        "routine construction",
+        "routine recall",
+        "ring swing"
+      ],
+      "sourceRefs": [
+        "lesson_todos:23"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "circuit",
+      "tags": [
+        "routine",
+        "stations",
+        "swing",
+        "rings"
+      ],
+      "title": "Rings Routine-Sequence Circuit",
+      "variants": []
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "rings"
+      ],
+      "goals": [],
+      "id": "rings-strength-and-back-lever-series",
+      "instructions": [],
+      "skills": [
+        "support hold",
+        "L hold",
+        "back lever",
+        "pull-up",
+        "dip"
+      ],
+      "sourceRefs": [
+        "crop_notes: rings/routine_swings_back_lever"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "strength_drill",
+      "tags": [
+        "strength",
+        "back-lever",
+        "support",
+        "rings"
+      ],
+      "title": "Rings Strength and Back-Lever Series",
+      "variants": [
+        {
+          "id": "rings-strength-and-back-lever-series:variant:0",
+          "instructions": [
+            "Pull-up to chest trace, front dip, and 10-second support hold; use tucked pull-ups/dips as variants."
+          ],
+          "sourceRefs": [
+            "past: L3_lesson_05-06-2026.md",
+            "past: L3_lesson_05-11-2026.md"
+          ],
+          "title": "Ring support strength circuit"
+        },
+        {
+          "id": "rings-strength-and-back-lever-series:variant:1",
+          "instructions": [
+            "Use low rings with a bungee or block for back-lever arch-ups."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \ud835\udc00\ud835\udc1d\ud835\udc2f\ud835\udc1a\ud835\udc27\ud835\udc1c\ud835\udc1e\ud835\udc1d \ud835\udc01\ud835\udc28\ud835\udc32\ud835\udc2c \ud835\udc0b\ud835\udc1e\ud835\udc2c\ud835\udc2c\ud835\udc28\ud835\udc27 \ud80c\ude87 \u2727-6.md"
+          ],
+          "title": "Back-lever arch-ups"
+        },
+        {
+          "id": "rings-strength-and-back-lever-series:variant:2",
+          "instructions": [
+            "Use 10-second support holds and L-hold attempts, with rows or straight-body holds as regressions."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \u0299\u1d0f\u028f\ua731 \u026a\u0274\u1d1b\u1d07\u0280\u1d0d\u1d07\u1d05\u026a\u1d00\u1d1b\u1d07 & \u1d00\u1d05\u1d20\u1d00\u0274\u1d04\u1d07\u1d05 \ud80c\ude87 \u2727.md"
+          ],
+          "title": "Support-hold to L-hold progression"
+        },
+        {
+          "id": "rings-strength-and-back-lever-series:variant:3",
+          "instructions": [
+            "Use a low ring or bar setup for a supported back lever."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \ud835\udc0b\ud835\udc1e\ud835\udc2f\ud835\udc1e\ud835\udc25 \ud835\udfd1 \ud835\udc01\ud835\udc28\ud835\udc32\ud835\udc2c \ud835\udc05\ud835\udc2b\ud835\udc22\ud835\udc1d\ud835\udc1a\ud835\udc32\ud80c\ude87 \u2727.md"
+          ],
+          "title": "Low-ring back lever"
+        },
+        {
+          "id": "rings-strength-and-back-lever-series:variant:4",
+          "instructions": [
+            "Use leg lifts, large arch rocks, straight-body pull-up, rings-out hold, L hold, and back-lever holds or pulses."
+          ],
+          "sourceRefs": [
+            "crop_notes: rings/routine_swings_back_lever"
+          ],
+          "title": "Back-lever routine strength set"
+        }
+      ]
+    },
+    {
+      "coachingCues": [
+        "Hold a tight arch and body line.",
+        "Keep the arms by the sides when required by the setup."
+      ],
+      "events": [
+        "floor"
+      ],
+      "goals": [],
+      "id": "roundoff-back-handspring-progressions",
+      "instructions": [],
+      "skills": [
+        "roundoff",
+        "back handspring",
+        "back tuck",
+        "front handspring"
+      ],
+      "sourceRefs": [
+        "crop_manifest: floor/roundoff_back_handspring"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "progression",
+      "tags": [
+        "roundoff",
+        "back-handspring",
+        "tumbling",
+        "floor"
+      ],
+      "title": "Roundoff and Back Handspring Progressions",
+      "variants": [
+        {
+          "id": "roundoff-back-handspring-progressions:variant:0",
+          "instructions": [
+            "Use a boulder, trainer, or block as needed for roundoff to back handspring."
+          ],
+          "sourceRefs": [
+            "past: ADV_lesson_04-21-2026.md",
+            "past: ADV_lesson_05-12-2026.md",
+            "past: L3_lesson_05-06-2026.md",
+            "crop_manifest: floor/roundoff_back_handspring"
+          ],
+          "title": "Roundoff-back handspring with boulder"
+        },
+        {
+          "id": "roundoff-back-handspring-progressions:variant:1",
+          "instructions": [
+            "Run and hurdle into roundoff, back handspring, and front handspring through a rebound station."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \ud835\udc01\ud835\udc28\ud835\udc32\ud835\udc2c \ud835\udc00\ud835\udc1d\ud835\udc2f\ud835\udc1a\ud835\udc27\ud835\udc1c\ud835\udc1e\ud835\udc1d \ud835\udc0b\ud835\udc1e\ud835\udc2c\ud835\udc2c\ud835\udc28\ud835\udc27\ud80c\ude87 \u2727.md"
+          ],
+          "title": "Roundoff-back handspring-front handspring connection"
+        },
+        {
+          "id": "roundoff-back-handspring-progressions:variant:2",
+          "instructions": [
+            "Use tumble track for roundoff plus two back handsprings; add a back tuck when ready."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \ud835\udc0b\ud835\udc1e\ud835\udc2f\ud835\udc1e\ud835\udc25 \ud835\udfd2 \ud835\udc01\ud835\udc28\ud835\udc32\ud835\udc2c \ud835\udc0b\ud835\udc1e\ud835\udc2c\ud835\udc2c\ud835\udc28\ud835\udc27 \ud80c\ude87 \u2727-1.md"
+          ],
+          "title": "Roundoff-two back handsprings-back tuck"
+        },
+        {
+          "id": "roundoff-back-handspring-progressions:variant:3",
+          "instructions": [
+            "Squat to a straight jump while squeezing the legs before progressing to roundoff/back handspring."
+          ],
+          "sourceRefs": [
+            "past: \ud835\udc41\ud835\udc5c\ud835\udc61\ud835\udc52\ud835\udc60.md"
+          ],
+          "title": "Straight-leg back handspring preparation"
+        }
+      ]
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "vault"
+      ],
+      "goals": [],
+      "id": "vault-forward-roll-progressions",
+      "instructions": [],
+      "skills": [
+        "run",
+        "jump",
+        "forward roll",
+        "stick"
+      ],
+      "sourceRefs": [
+        "crop_manifest: vault/front_handspring_vault"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "progression",
+      "tags": [
+        "vault",
+        "forward-roll",
+        "jump",
+        "landing"
+      ],
+      "title": "Vault Forward-Roll Progressions",
+      "variants": [
+        {
+          "id": "vault-forward-roll-progressions:variant:0",
+          "instructions": [
+            "Use a short run, jump, and forward roll while grabbing the knees; vary with a block/cheese or front-tuck option."
+          ],
+          "sourceRefs": [
+            "past: L3_lesson_05-06-2026.md",
+            "past: L3_lesson_05-11-2026.md",
+            "crop_manifest: vault/front_handspring_vault"
+          ],
+          "title": "Short-run jump to forward roll"
+        },
+        {
+          "id": "vault-forward-roll-progressions:variant:1",
+          "instructions": [
+            "Arms up, jump, tuck forward roll while grabbing the knees, slide open to rebound, then stick."
+          ],
+          "sourceRefs": [
+            "past: L3_lesson_05-06-2026.md",
+            "past: L3_lesson_05-11-2026.md"
+          ],
+          "title": "Tuck-forward-roll rebound-stick"
+        },
+        {
+          "id": "vault-forward-roll-progressions:variant:2",
+          "instructions": [
+            "Jump to springboard and land in a push-up on a half resi or reverse-board setup."
+          ],
+          "sourceRefs": [
+            "past: NGA_lesson_04-01-2026.md"
+          ],
+          "title": "Springboard to push-up"
+        }
+      ]
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "vault"
+      ],
+      "goals": [],
+      "id": "vault-handstand-flatback-progressions",
+      "instructions": [],
+      "skills": [
+        "roundoff",
+        "handstand flatback",
+        "front handspring"
+      ],
+      "sourceRefs": [
+        "crop_manifest: vault/handstand_flatback_roundoff",
+        "crop_manifest: vault/handstand_flatback_vault"
+      ],
+      "sourceStatus": "tested",
+      "sourceType": "progression",
+      "tags": [
+        "vault",
+        "handstand",
+        "flatback",
+        "roundoff"
+      ],
+      "title": "Vault Handstand and Flatback Progressions",
+      "variants": [
+        {
+          "id": "vault-handstand-flatback-progressions:variant:0",
+          "instructions": [
+            "Use an 8-inch mat, cloud, T-trainer, and dummy board for roundoff to knees."
+          ],
+          "sourceRefs": [
+            "past: NGA_lesson_04-01-2026.md"
+          ],
+          "title": "Roundoff to knees"
+        },
+        {
+          "id": "vault-handstand-flatback-progressions:variant:1",
+          "instructions": [
+            "Straight jump to handstand flatback on cloud, progressing toward front handspring."
+          ],
+          "sourceRefs": [
+            "past: \u2727 \ud80c\ude86 \u0299\u1d0f\u028f\ua731 \u026a\u0274\u1d1b\u1d07\u0280\u1d0d\u1d07\u1d05\u026a\u1d00\u1d1b\u1d07 & \u1d00\u1d05\u1d20\u1d00\u0274\u1d04\u1d07\u1d05 \ud80c\ude87 \u2727.md"
+          ],
+          "title": "Handstand flatback vault"
+        },
+        {
+          "id": "vault-handstand-flatback-progressions:variant:2",
+          "instructions": [
+            "Use handstand flatback, then progress roundoff landings from knees to feet."
+          ],
+          "sourceRefs": [
+            "crop_manifest: vault/handstand_flatback_roundoff"
+          ],
+          "title": "Handstand flatback to roundoff landing"
+        }
+      ]
+    },
+    {
+      "coachingCues": [],
+      "events": [
+        "vault"
+      ],
+      "goals": [],
+      "id": "vault-rebound-and-landing-series",
+      "instructions": [],
+      "skills": [
+        "rebound",
+        "heel drive",
+        "stick",
+        "presentation"
+      ],
+      "sourceRefs": [
+        "crop_notes: vault/straight_jumps_rebound",
+        "implementation_ideas:19-22"
+      ],
+      "sourceStatus": "mixed",
+      "sourceType": "landing_drill",
+      "tags": [
+        "vault",
+        "rebound",
+        "stick",
+        "landing"
+      ],
+      "title": "Vault Rebound and Landing Series",
+      "variants": [
+        {
+          "id": "vault-rebound-and-landing-series:variant:0",
+          "instructions": [
+            "Arm circle into rebound up for five repetitions; raise the stack as appropriate."
+          ],
+          "sourceRefs": [
+            "crop_notes: vault/straight_jumps_rebound"
+          ],
+          "title": "Arm-circle rebound"
+        },
+        {
+          "id": "vault-rebound-and-landing-series:variant:1",
+          "instructions": [
+            "Do 10 heel-drive repetitions on the vault table."
+          ],
+          "sourceRefs": [
+            "past: NGA_lesson_04-01-2026.md"
+          ],
+          "title": "Heel-drive table reps"
+        },
+        {
+          "id": "vault-rebound-and-landing-series:variant:2",
+          "instructions": [
+            "On the final straight jump, hold the stick for 10 seconds, then finish and present."
+          ],
+          "sourceRefs": [
+            "implementation_ideas:19-22"
+          ],
+          "title": "Stick, finish, and present"
+        }
+      ]
+    }
+  ],
+  "privacy": {
+    "absoluteSourcePathsIncluded": false,
+    "mediaBytesIncluded": false,
+    "publicUrlsIncluded": false,
+    "rawVaultLocationIncluded": false,
+    "studentRecordsIncluded": false,
+    "traversalPathsIncluded": false,
+    "urlsIncluded": false
+  },
+  "schemaVersion": 1,
+  "source": {
+    "kind": "drill_ideas",
+    "revision": "91ad26b45e3b099bcf5e9937799e070c4150ffec1d050194744f119b8976dd04",
+    "sourceSchemaVersion": "1.1"
+  }
+}

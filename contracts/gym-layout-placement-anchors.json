@@ -1,0 +1,3707 @@
+{
+  "contractFormat": "lesson-planner-gym-placement-anchor-registry/v1",
+  "title": "Lesson Planner Gym Placement Anchor Registry",
+  "schemaVersion": 1,
+  "status": "owner-layout-2-derived-review-pending",
+  "description": "Reusable one-item placement anchors traced from the yellow short-label squares in the owner-provided GYM LAYOUT 2.pdf. The PDF establishes label-anchor positions only; it is not physical gym geometry.",
+  "coordinateSystem": {
+    "kind": "normalized-1000",
+    "origin": "top-left",
+    "xDirection": "right",
+    "yDirection": "down",
+    "referenceRender": {
+      "width": 1800,
+      "height": 1560,
+      "renderMethod": "Quick Look thumbnail at 1800px wide"
+    },
+    "normalizationFormula": "normalizedValue = round(sourcePixelValue / sourceDimension * 1000)"
+  },
+  "sourceOfTruthPolicy": {
+    "anchorPositionAuthority": {
+      "sourceLabel": "GYM LAYOUT 2.pdf",
+      "allowedUse": [
+        "yellow label-anchor positions",
+        "one-item anchor capacity",
+        "anchor extent"
+      ]
+    },
+    "physicalGeometryAuthority": {
+      "sourceLabel": "owner-provided Skeleton Freeform board",
+      "requiredContract": "gym-layout-geometry-draft.json",
+      "mustNotInferFromAnchorPdf": true
+    },
+    "semanticAuthority": {
+      "requiredContract": "gym-map-semantics.json",
+      "allowedUse": [
+        "durable zone IDs",
+        "aliases",
+        "composite groups",
+        "floor-slice semantics"
+      ]
+    }
+  },
+  "visibilityAndInteractionRules": {
+    "normalState": "hidden",
+    "showOnlyWhen": "an editor has selected one unplaced idea or visual-text item and placement mode is active",
+    "eligibleAnchorRule": "show only anchors whose zoneIds intersect the phase-selected zones; show the union for a selected composite group",
+    "afterPlacement": "persist one placement to the chosen anchor, then immediately hide all anchors",
+    "afterCancel": "discard the transient selection and immediately hide all anchors",
+    "capacityRule": "each anchor accepts exactly one placed lesson item; occupied anchors are not eligible until the placement is moved or removed",
+    "displayRule": "render a concise descriptive label inside an occupied anchor; tapping that label opens the full drill/activity/reference detail such as rules, image, video, or other media"
+  },
+  "zoneViewports": [
+    {
+      "zoneId": "zone-floor-fx",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 144,
+          "y": 281,
+          "width": 355,
+          "height": 403
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-floor-f4",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 144,
+          "y": 281,
+          "width": 355,
+          "height": 103
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-floor-f3",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 144,
+          "y": 384,
+          "width": 355,
+          "height": 102
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-floor-f2",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 144,
+          "y": 486,
+          "width": 355,
+          "height": 102
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-floor-f1",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 144,
+          "y": 588,
+          "width": 355,
+          "height": 96
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-floor-f5",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 499,
+          "y": 590,
+          "width": 362,
+          "height": 109
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-tumble-strip",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 84,
+          "y": 281,
+          "width": 60,
+          "height": 403
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-tumble-track",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 89,
+          "y": 888,
+          "width": 435,
+          "height": 112
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-vault",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 0,
+          "y": 77,
+          "width": 84,
+          "height": 607
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-parallel-bars",
+      "anchorLayerViewport": {
+        "kind": "multi_rect",
+        "rects": [
+          {
+            "x": 293,
+            "y": 0,
+            "width": 206,
+            "height": 169
+          },
+          {
+            "x": 499,
+            "y": 0,
+            "width": 147,
+            "height": 75
+          }
+        ]
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-high-bar-boys-bar",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 166,
+          "y": 0,
+          "width": 127,
+          "height": 169
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-beam-1",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 343,
+          "y": 169,
+          "width": 157,
+          "height": 112
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-beam-2-a",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 84,
+          "y": 0,
+          "width": 82,
+          "height": 169
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-beam-2-b",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 84,
+          "y": 169,
+          "width": 259,
+          "height": 112
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-still-rings",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 499,
+          "y": 75,
+          "width": 61,
+          "height": 182
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-pommel-horse",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 560,
+          "y": 75,
+          "width": 149,
+          "height": 182
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-wr",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 709,
+          "y": 0,
+          "width": 116,
+          "height": 257
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-ninja-room",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 826,
+          "y": 0,
+          "width": 169,
+          "height": 257
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-pit-pb",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 0,
+          "y": 684,
+          "width": 169,
+          "height": 249
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-pit-rings-high-bar",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 89,
+          "y": 786,
+          "width": 261,
+          "height": 147
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-ub-1",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 166,
+          "y": 684,
+          "width": 195,
+          "height": 90
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-strap-bar",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 361,
+          "y": 684,
+          "width": 127,
+          "height": 90
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-trampoline",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 507,
+          "y": 708,
+          "width": 160,
+          "height": 167
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-ub-2",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 349,
+          "y": 786,
+          "width": 137,
+          "height": 98
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-ub-3",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 523,
+          "y": 888,
+          "width": 144,
+          "height": 112
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    },
+    {
+      "zoneId": "zone-preschool",
+      "anchorLayerViewport": {
+        "kind": "rect",
+        "rect": {
+          "x": 667,
+          "y": 704,
+          "width": 193,
+          "height": 296
+        }
+      },
+      "confidence": "derived_from_zone_overlay",
+      "consumerRestriction": "Use to crop or clip the anchor overlay only. Do not treat this as confirmed Skeleton/physical equipment geometry."
+    }
+  ],
+  "anchors": [
+    {
+      "id": "anchor-parallel-bars-01",
+      "sourceCandidateId": "layout2-001",
+      "zoneIds": [
+        "zone-parallel-bars"
+      ],
+      "rect": {
+        "x": 544,
+        "y": 7,
+        "width": 27,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-parallel-bars-02",
+      "sourceCandidateId": "layout2-002",
+      "zoneIds": [
+        "zone-parallel-bars"
+      ],
+      "rect": {
+        "x": 592,
+        "y": 8,
+        "width": 26,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-parallel-bars-03",
+      "sourceCandidateId": "layout2-003",
+      "zoneIds": [
+        "zone-parallel-bars"
+      ],
+      "rect": {
+        "x": 459,
+        "y": 14,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-parallel-bars-04",
+      "sourceCandidateId": "layout2-004",
+      "zoneIds": [
+        "zone-parallel-bars"
+      ],
+      "rect": {
+        "x": 334,
+        "y": 15,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-beam-2-a-01",
+      "sourceCandidateId": "layout2-005",
+      "zoneIds": [
+        "zone-beam-2-a"
+      ],
+      "rect": {
+        "x": 110,
+        "y": 26,
+        "width": 28,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-high-bar-boys-bar-01",
+      "sourceCandidateId": "layout2-006",
+      "zoneIds": [
+        "zone-high-bar-boys-bar"
+      ],
+      "rect": {
+        "x": 278,
+        "y": 33,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-parallel-bars-05",
+      "sourceCandidateId": "layout2-007",
+      "zoneIds": [
+        "zone-parallel-bars"
+      ],
+      "rect": {
+        "x": 502,
+        "y": 43,
+        "width": 25,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-parallel-bars-06",
+      "sourceCandidateId": "layout2-008",
+      "zoneIds": [
+        "zone-parallel-bars"
+      ],
+      "rect": {
+        "x": 544,
+        "y": 44,
+        "width": 26,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-parallel-bars-07",
+      "sourceCandidateId": "layout2-009",
+      "zoneIds": [
+        "zone-parallel-bars"
+      ],
+      "rect": {
+        "x": 587,
+        "y": 46,
+        "width": 25,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-ninja-room-01",
+      "sourceCandidateId": "layout2-010",
+      "zoneIds": [
+        "zone-ninja-room"
+      ],
+      "rect": {
+        "x": 907,
+        "y": 49,
+        "width": 27,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-ninja-room-02",
+      "sourceCandidateId": "layout2-011",
+      "zoneIds": [
+        "zone-ninja-room"
+      ],
+      "rect": {
+        "x": 946,
+        "y": 49,
+        "width": 27,
+        "height": 36
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-high-bar-boys-bar-02",
+      "sourceCandidateId": "layout2-012",
+      "zoneIds": [
+        "zone-high-bar-boys-bar"
+      ],
+      "rect": {
+        "x": 204,
+        "y": 54,
+        "width": 27,
+        "height": 34
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-beam-2-a-02",
+      "sourceCandidateId": "layout2-013",
+      "zoneIds": [
+        "zone-beam-2-a"
+      ],
+      "rect": {
+        "x": 110,
+        "y": 64,
+        "width": 28,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-parallel-bars-08",
+      "sourceCandidateId": "layout2-014",
+      "zoneIds": [
+        "zone-parallel-bars"
+      ],
+      "rect": {
+        "x": 337,
+        "y": 66,
+        "width": 28,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-parallel-bars-09",
+      "sourceCandidateId": "layout2-015",
+      "zoneIds": [
+        "zone-parallel-bars"
+      ],
+      "rect": {
+        "x": 378,
+        "y": 66,
+        "width": 27,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-parallel-bars-10",
+      "sourceCandidateId": "layout2-016",
+      "zoneIds": [
+        "zone-parallel-bars"
+      ],
+      "rect": {
+        "x": 427,
+        "y": 67,
+        "width": 27,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-parallel-bars-11",
+      "sourceCandidateId": "layout2-017",
+      "zoneIds": [
+        "zone-parallel-bars"
+      ],
+      "rect": {
+        "x": 458,
+        "y": 67,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-wr-01",
+      "sourceCandidateId": "layout2-018",
+      "zoneIds": [
+        "zone-wr"
+      ],
+      "rect": {
+        "x": 748,
+        "y": 67,
+        "width": 27,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-pommel-horse-01",
+      "sourceCandidateId": "layout2-019",
+      "zoneIds": [
+        "zone-pommel-horse"
+      ],
+      "rect": {
+        "x": 606,
+        "y": 83,
+        "width": 26,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-still-rings-01",
+      "sourceCandidateId": "layout2-020",
+      "zoneIds": [
+        "zone-still-rings"
+      ],
+      "rect": {
+        "x": 508,
+        "y": 84,
+        "width": 27,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-pommel-horse-02",
+      "sourceCandidateId": "layout2-021",
+      "zoneIds": [
+        "zone-pommel-horse"
+      ],
+      "rect": {
+        "x": 558,
+        "y": 84,
+        "width": 33,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-pommel-horse-03",
+      "sourceCandidateId": "layout2-022",
+      "zoneIds": [
+        "zone-pommel-horse"
+      ],
+      "rect": {
+        "x": 661,
+        "y": 87,
+        "width": 26,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-ninja-room-03",
+      "sourceCandidateId": "layout2-023",
+      "zoneIds": [
+        "zone-ninja-room"
+      ],
+      "rect": {
+        "x": 856,
+        "y": 95,
+        "width": 27,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-ninja-room-04",
+      "sourceCandidateId": "layout2-024",
+      "zoneIds": [
+        "zone-ninja-room"
+      ],
+      "rect": {
+        "x": 906,
+        "y": 95,
+        "width": 27,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-ninja-room-05",
+      "sourceCandidateId": "layout2-025",
+      "zoneIds": [
+        "zone-ninja-room"
+      ],
+      "rect": {
+        "x": 946,
+        "y": 95,
+        "width": 27,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-01",
+      "sourceCandidateId": "layout2-026",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 52,
+        "y": 100,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-beam-2-a-03",
+      "sourceCandidateId": "layout2-027",
+      "zoneIds": [
+        "zone-beam-2-a"
+      ],
+      "rect": {
+        "x": 109,
+        "y": 104,
+        "width": 29,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-wr-02",
+      "sourceCandidateId": "layout2-028",
+      "zoneIds": [
+        "zone-wr"
+      ],
+      "rect": {
+        "x": 749,
+        "y": 110,
+        "width": 26,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-parallel-bars-12",
+      "sourceCandidateId": "layout2-029",
+      "zoneIds": [
+        "zone-parallel-bars"
+      ],
+      "rect": {
+        "x": 321,
+        "y": 118,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-parallel-bars-13",
+      "sourceCandidateId": "layout2-030",
+      "zoneIds": [
+        "zone-parallel-bars"
+      ],
+      "rect": {
+        "x": 460,
+        "y": 118,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-parallel-bars-14",
+      "sourceCandidateId": "layout2-031",
+      "zoneIds": [
+        "zone-parallel-bars"
+      ],
+      "rect": {
+        "x": 388,
+        "y": 120,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-high-bar-boys-bar-03",
+      "sourceCandidateId": "layout2-032",
+      "zoneIds": [
+        "zone-high-bar-boys-bar"
+      ],
+      "rect": {
+        "x": 181,
+        "y": 128,
+        "width": 29,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-high-bar-boys-bar-04",
+      "sourceCandidateId": "layout2-033",
+      "zoneIds": [
+        "zone-high-bar-boys-bar"
+      ],
+      "rect": {
+        "x": 242,
+        "y": 128,
+        "width": 28,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-02",
+      "sourceCandidateId": "layout2-034",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 56,
+        "y": 140,
+        "width": 28,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-still-rings-02",
+      "sourceCandidateId": "layout2-035",
+      "zoneIds": [
+        "zone-still-rings"
+      ],
+      "rect": {
+        "x": 516,
+        "y": 140,
+        "width": 26,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-ninja-room-06",
+      "sourceCandidateId": "layout2-036",
+      "zoneIds": [
+        "zone-ninja-room"
+      ],
+      "rect": {
+        "x": 857,
+        "y": 140,
+        "width": 26,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-ninja-room-07",
+      "sourceCandidateId": "layout2-037",
+      "zoneIds": [
+        "zone-ninja-room"
+      ],
+      "rect": {
+        "x": 907,
+        "y": 140,
+        "width": 26,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-ninja-room-08",
+      "sourceCandidateId": "layout2-038",
+      "zoneIds": [
+        "zone-ninja-room"
+      ],
+      "rect": {
+        "x": 947,
+        "y": 140,
+        "width": 26,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-wr-03",
+      "sourceCandidateId": "layout2-039",
+      "zoneIds": [
+        "zone-wr"
+      ],
+      "rect": {
+        "x": 749,
+        "y": 156,
+        "width": 26,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-pommel-horse-04",
+      "sourceCandidateId": "layout2-040",
+      "zoneIds": [
+        "zone-pommel-horse"
+      ],
+      "rect": {
+        "x": 648,
+        "y": 158,
+        "width": 25,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-pommel-horse-05",
+      "sourceCandidateId": "layout2-041",
+      "zoneIds": [
+        "zone-pommel-horse"
+      ],
+      "rect": {
+        "x": 592,
+        "y": 164,
+        "width": 27,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-beam-1-01",
+      "sourceCandidateId": "layout2-042",
+      "zoneIds": [
+        "zone-beam-1"
+      ],
+      "rect": {
+        "x": 397,
+        "y": 173,
+        "width": 28,
+        "height": 35
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-beam-1-02",
+      "sourceCandidateId": "layout2-043",
+      "zoneIds": [
+        "zone-beam-1"
+      ],
+      "rect": {
+        "x": 442,
+        "y": 173,
+        "width": 28,
+        "height": 35
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-03",
+      "sourceCandidateId": "layout2-044",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 14,
+        "y": 174,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-beam-1-03",
+      "sourceCandidateId": "layout2-045",
+      "zoneIds": [
+        "zone-beam-1"
+      ],
+      "rect": {
+        "x": 354,
+        "y": 174,
+        "width": 29,
+        "height": 35
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-04",
+      "sourceCandidateId": "layout2-046",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 54,
+        "y": 178,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-beam-2-b-01",
+      "sourceCandidateId": "layout2-047",
+      "zoneIds": [
+        "zone-beam-2-b"
+      ],
+      "rect": {
+        "x": 94,
+        "y": 181,
+        "width": 27,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-beam-2-b-02",
+      "sourceCandidateId": "layout2-048",
+      "zoneIds": [
+        "zone-beam-2-b"
+      ],
+      "rect": {
+        "x": 149,
+        "y": 181,
+        "width": 27,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-ninja-room-09",
+      "sourceCandidateId": "layout2-049",
+      "zoneIds": [
+        "zone-ninja-room"
+      ],
+      "rect": {
+        "x": 856,
+        "y": 185,
+        "width": 27,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-ninja-room-10",
+      "sourceCandidateId": "layout2-050",
+      "zoneIds": [
+        "zone-ninja-room"
+      ],
+      "rect": {
+        "x": 906,
+        "y": 185,
+        "width": 27,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-beam-2-b-03",
+      "sourceCandidateId": "layout2-051",
+      "zoneIds": [
+        "zone-beam-2-b"
+      ],
+      "rect": {
+        "x": 248,
+        "y": 188,
+        "width": 29,
+        "height": 35
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-beam-2-b-04",
+      "sourceCandidateId": "layout2-052",
+      "zoneIds": [
+        "zone-beam-2-b"
+      ],
+      "rect": {
+        "x": 301,
+        "y": 188,
+        "width": 28,
+        "height": 35
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-beam-2-b-05",
+      "sourceCandidateId": "layout2-053",
+      "zoneIds": [
+        "zone-beam-2-b"
+      ],
+      "rect": {
+        "x": 202,
+        "y": 188,
+        "width": 27,
+        "height": 40
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-ninja-room-11",
+      "sourceCandidateId": "layout2-054",
+      "zoneIds": [
+        "zone-ninja-room"
+      ],
+      "rect": {
+        "x": 950,
+        "y": 190,
+        "width": 27,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-wr-04",
+      "sourceCandidateId": "layout2-055",
+      "zoneIds": [
+        "zone-wr"
+      ],
+      "rect": {
+        "x": 749,
+        "y": 197,
+        "width": 26,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-beam-1-04",
+      "sourceCandidateId": "layout2-056",
+      "zoneIds": [
+        "zone-beam-1"
+      ],
+      "rect": {
+        "x": 352,
+        "y": 206,
+        "width": 28,
+        "height": 39
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-beam-1-05",
+      "sourceCandidateId": "layout2-057",
+      "zoneIds": [
+        "zone-beam-1"
+      ],
+      "rect": {
+        "x": 439,
+        "y": 206,
+        "width": 29,
+        "height": 35
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-beam-2-b-06",
+      "sourceCandidateId": "layout2-058",
+      "zoneIds": [
+        "zone-beam-2-b"
+      ],
+      "rect": {
+        "x": 122,
+        "y": 207,
+        "width": 27,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-beam-1-06",
+      "sourceCandidateId": "layout2-059",
+      "zoneIds": [
+        "zone-beam-1"
+      ],
+      "rect": {
+        "x": 396,
+        "y": 209,
+        "width": 28,
+        "height": 35
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-still-rings-03",
+      "sourceCandidateId": "layout2-060",
+      "zoneIds": [
+        "zone-still-rings"
+      ],
+      "rect": {
+        "x": 509,
+        "y": 209,
+        "width": 25,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-05",
+      "sourceCandidateId": "layout2-061",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 57,
+        "y": 219,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-beam-2-b-07",
+      "sourceCandidateId": "layout2-062",
+      "zoneIds": [
+        "zone-beam-2-b"
+      ],
+      "rect": {
+        "x": 301,
+        "y": 222,
+        "width": 29,
+        "height": 35
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-beam-2-b-08",
+      "sourceCandidateId": "layout2-063",
+      "zoneIds": [
+        "zone-beam-2-b"
+      ],
+      "rect": {
+        "x": 201,
+        "y": 223,
+        "width": 28,
+        "height": 35
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-beam-2-b-09",
+      "sourceCandidateId": "layout2-064",
+      "zoneIds": [
+        "zone-beam-2-b"
+      ],
+      "rect": {
+        "x": 249,
+        "y": 224,
+        "width": 28,
+        "height": 35
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-beam-2-b-10",
+      "sourceCandidateId": "layout2-065",
+      "zoneIds": [
+        "zone-beam-2-b"
+      ],
+      "rect": {
+        "x": 98,
+        "y": 235,
+        "width": 27,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-beam-2-b-11",
+      "sourceCandidateId": "layout2-066",
+      "zoneIds": [
+        "zone-beam-2-b"
+      ],
+      "rect": {
+        "x": 144,
+        "y": 235,
+        "width": 27,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-beam-1-07",
+      "sourceCandidateId": "layout2-067",
+      "zoneIds": [
+        "zone-beam-1"
+      ],
+      "rect": {
+        "x": 439,
+        "y": 239,
+        "width": 28,
+        "height": 35
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-beam-1-08",
+      "sourceCandidateId": "layout2-068",
+      "zoneIds": [
+        "zone-beam-1"
+      ],
+      "rect": {
+        "x": 352,
+        "y": 240,
+        "width": 28,
+        "height": 35
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-beam-1-09",
+      "sourceCandidateId": "layout2-069",
+      "zoneIds": [
+        "zone-beam-1"
+      ],
+      "rect": {
+        "x": 394,
+        "y": 241,
+        "width": 29,
+        "height": 35
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-06",
+      "sourceCandidateId": "layout2-070",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 14,
+        "y": 250,
+        "width": 28,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-07",
+      "sourceCandidateId": "layout2-071",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 51,
+        "y": 254,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-08",
+      "sourceCandidateId": "layout2-072",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 10,
+        "y": 274,
+        "width": 31,
+        "height": 46
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f4-01",
+      "sourceCandidateId": "layout2-073",
+      "zoneIds": [
+        "zone-floor-f4"
+      ],
+      "rect": {
+        "x": 294,
+        "y": 278,
+        "width": 42,
+        "height": 52
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-tumble-strip-01",
+      "sourceCandidateId": "layout2-074",
+      "zoneIds": [
+        "zone-tumble-strip"
+      ],
+      "rect": {
+        "x": 94,
+        "y": 279,
+        "width": 43,
+        "height": 52
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f4-02",
+      "sourceCandidateId": "layout2-075",
+      "zoneIds": [
+        "zone-floor-f4"
+      ],
+      "rect": {
+        "x": 246,
+        "y": 279,
+        "width": 42,
+        "height": 52
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f4-03",
+      "sourceCandidateId": "layout2-076",
+      "zoneIds": [
+        "zone-floor-f4"
+      ],
+      "rect": {
+        "x": 342,
+        "y": 279,
+        "width": 42,
+        "height": 52
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f4-04",
+      "sourceCandidateId": "layout2-077",
+      "zoneIds": [
+        "zone-floor-f4"
+      ],
+      "rect": {
+        "x": 200,
+        "y": 280,
+        "width": 42,
+        "height": 52
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f4-05",
+      "sourceCandidateId": "layout2-078",
+      "zoneIds": [
+        "zone-floor-f4"
+      ],
+      "rect": {
+        "x": 394,
+        "y": 280,
+        "width": 41,
+        "height": 52
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-09",
+      "sourceCandidateId": "layout2-079",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 51,
+        "y": 281,
+        "width": 31,
+        "height": 43
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f4-06",
+      "sourceCandidateId": "layout2-080",
+      "zoneIds": [
+        "zone-floor-f4"
+      ],
+      "rect": {
+        "x": 153,
+        "y": 281,
+        "width": 42,
+        "height": 52
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f4-07",
+      "sourceCandidateId": "layout2-081",
+      "zoneIds": [
+        "zone-floor-f4"
+      ],
+      "rect": {
+        "x": 444,
+        "y": 281,
+        "width": 42,
+        "height": 52
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-10",
+      "sourceCandidateId": "layout2-082",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 13,
+        "y": 314,
+        "width": 28,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-11",
+      "sourceCandidateId": "layout2-083",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 54,
+        "y": 333,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f3-01",
+      "sourceCandidateId": "layout2-084",
+      "zoneIds": [
+        "zone-floor-f3"
+      ],
+      "rect": {
+        "x": 154,
+        "y": 333,
+        "width": 40,
+        "height": 52
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f3-02",
+      "sourceCandidateId": "layout2-085",
+      "zoneIds": [
+        "zone-floor-f3"
+      ],
+      "rect": {
+        "x": 246,
+        "y": 333,
+        "width": 42,
+        "height": 52
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f3-03",
+      "sourceCandidateId": "layout2-086",
+      "zoneIds": [
+        "zone-floor-f3"
+      ],
+      "rect": {
+        "x": 342,
+        "y": 333,
+        "width": 42,
+        "height": 52
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f3-04",
+      "sourceCandidateId": "layout2-087",
+      "zoneIds": [
+        "zone-floor-f3"
+      ],
+      "rect": {
+        "x": 199,
+        "y": 334,
+        "width": 42,
+        "height": 50
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f3-05",
+      "sourceCandidateId": "layout2-088",
+      "zoneIds": [
+        "zone-floor-f3"
+      ],
+      "rect": {
+        "x": 393,
+        "y": 334,
+        "width": 43,
+        "height": 50
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f3-06",
+      "sourceCandidateId": "layout2-089",
+      "zoneIds": [
+        "zone-floor-f3"
+      ],
+      "rect": {
+        "x": 444,
+        "y": 335,
+        "width": 42,
+        "height": 50
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-tumble-strip-02",
+      "sourceCandidateId": "layout2-090",
+      "zoneIds": [
+        "zone-tumble-strip"
+      ],
+      "rect": {
+        "x": 94,
+        "y": 336,
+        "width": 43,
+        "height": 52
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-12",
+      "sourceCandidateId": "layout2-091",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 57,
+        "y": 374,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f3-07",
+      "sourceCandidateId": "layout2-092",
+      "zoneIds": [
+        "zone-floor-f3"
+      ],
+      "rect": {
+        "x": 247,
+        "y": 378,
+        "width": 42,
+        "height": 52
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f3-08",
+      "sourceCandidateId": "layout2-093",
+      "zoneIds": [
+        "zone-floor-f3"
+      ],
+      "rect": {
+        "x": 199,
+        "y": 379,
+        "width": 42,
+        "height": 52
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f3-09",
+      "sourceCandidateId": "layout2-094",
+      "zoneIds": [
+        "zone-floor-f3"
+      ],
+      "rect": {
+        "x": 294,
+        "y": 379,
+        "width": 41,
+        "height": 50
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f3-10",
+      "sourceCandidateId": "layout2-095",
+      "zoneIds": [
+        "zone-floor-f3"
+      ],
+      "rect": {
+        "x": 342,
+        "y": 380,
+        "width": 41,
+        "height": 50
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f3-11",
+      "sourceCandidateId": "layout2-096",
+      "zoneIds": [
+        "zone-floor-f3"
+      ],
+      "rect": {
+        "x": 444,
+        "y": 380,
+        "width": 42,
+        "height": 52
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f3-12",
+      "sourceCandidateId": "layout2-097",
+      "zoneIds": [
+        "zone-floor-f3"
+      ],
+      "rect": {
+        "x": 158,
+        "y": 381,
+        "width": 37,
+        "height": 51
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f3-13",
+      "sourceCandidateId": "layout2-098",
+      "zoneIds": [
+        "zone-floor-f3"
+      ],
+      "rect": {
+        "x": 394,
+        "y": 381,
+        "width": 41,
+        "height": 50
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-tumble-strip-03",
+      "sourceCandidateId": "layout2-099",
+      "zoneIds": [
+        "zone-tumble-strip"
+      ],
+      "rect": {
+        "x": 94,
+        "y": 392,
+        "width": 43,
+        "height": 52
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-13",
+      "sourceCandidateId": "layout2-100",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 9,
+        "y": 394,
+        "width": 29,
+        "height": 43
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-14",
+      "sourceCandidateId": "layout2-101",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 54,
+        "y": 401,
+        "width": 31,
+        "height": 43
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-15",
+      "sourceCandidateId": "layout2-102",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 9,
+        "y": 431,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f3-14",
+      "sourceCandidateId": "layout2-103",
+      "zoneIds": [
+        "zone-floor-f3"
+      ],
+      "rect": {
+        "x": 393,
+        "y": 433,
+        "width": 42,
+        "height": 52
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f3-15",
+      "sourceCandidateId": "layout2-104",
+      "zoneIds": [
+        "zone-floor-f3"
+      ],
+      "rect": {
+        "x": 446,
+        "y": 433,
+        "width": 40,
+        "height": 52
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-tumble-strip-04",
+      "sourceCandidateId": "layout2-105",
+      "zoneIds": [
+        "zone-tumble-strip"
+      ],
+      "rect": {
+        "x": 94,
+        "y": 451,
+        "width": 41,
+        "height": 51
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-16",
+      "sourceCandidateId": "layout2-106",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 57,
+        "y": 451,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-17",
+      "sourceCandidateId": "layout2-107",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 12,
+        "y": 472,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f2-01",
+      "sourceCandidateId": "layout2-108",
+      "zoneIds": [
+        "zone-floor-f2"
+      ],
+      "rect": {
+        "x": 392,
+        "y": 483,
+        "width": 42,
+        "height": 52
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f2-02",
+      "sourceCandidateId": "layout2-109",
+      "zoneIds": [
+        "zone-floor-f2"
+      ],
+      "rect": {
+        "x": 444,
+        "y": 485,
+        "width": 41,
+        "height": 52
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-18",
+      "sourceCandidateId": "layout2-110",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 56,
+        "y": 487,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-tumble-strip-05",
+      "sourceCandidateId": "layout2-111",
+      "zoneIds": [
+        "zone-tumble-strip"
+      ],
+      "rect": {
+        "x": 94,
+        "y": 509,
+        "width": 42,
+        "height": 52
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-19",
+      "sourceCandidateId": "layout2-112",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 11,
+        "y": 515,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-20",
+      "sourceCandidateId": "layout2-113",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 59,
+        "y": 528,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f2-03",
+      "sourceCandidateId": "layout2-114",
+      "zoneIds": [
+        "zone-floor-f2"
+      ],
+      "rect": {
+        "x": 392,
+        "y": 537,
+        "width": 43,
+        "height": 47
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f2-04",
+      "sourceCandidateId": "layout2-115",
+      "zoneIds": [
+        "zone-floor-f2"
+      ],
+      "rect": {
+        "x": 444,
+        "y": 538,
+        "width": 42,
+        "height": 48
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-21",
+      "sourceCandidateId": "layout2-116",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 51,
+        "y": 554,
+        "width": 36,
+        "height": 45
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-22",
+      "sourceCandidateId": "layout2-117",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 14,
+        "y": 555,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-tumble-strip-06",
+      "sourceCandidateId": "layout2-118",
+      "zoneIds": [
+        "zone-tumble-strip"
+      ],
+      "rect": {
+        "x": 94,
+        "y": 569,
+        "width": 42,
+        "height": 52
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f1-01",
+      "sourceCandidateId": "layout2-119",
+      "zoneIds": [
+        "zone-floor-f1"
+      ],
+      "rect": {
+        "x": 394,
+        "y": 579,
+        "width": 42,
+        "height": 52
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f1-02",
+      "sourceCandidateId": "layout2-120",
+      "zoneIds": [
+        "zone-floor-f1"
+      ],
+      "rect": {
+        "x": 446,
+        "y": 585,
+        "width": 42,
+        "height": 48
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-23",
+      "sourceCandidateId": "layout2-121",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 12,
+        "y": 599,
+        "width": 29,
+        "height": 49
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-24",
+      "sourceCandidateId": "layout2-122",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 54,
+        "y": 607,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f5-01",
+      "sourceCandidateId": "layout2-123",
+      "zoneIds": [
+        "zone-floor-f5"
+      ],
+      "rect": {
+        "x": 554,
+        "y": 624,
+        "width": 28,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f5-02",
+      "sourceCandidateId": "layout2-124",
+      "zoneIds": [
+        "zone-floor-f5"
+      ],
+      "rect": {
+        "x": 596,
+        "y": 624,
+        "width": 27,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f5-03",
+      "sourceCandidateId": "layout2-125",
+      "zoneIds": [
+        "zone-floor-f5"
+      ],
+      "rect": {
+        "x": 679,
+        "y": 624,
+        "width": 28,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f5-04",
+      "sourceCandidateId": "layout2-126",
+      "zoneIds": [
+        "zone-floor-f5"
+      ],
+      "rect": {
+        "x": 719,
+        "y": 624,
+        "width": 27,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f5-05",
+      "sourceCandidateId": "layout2-127",
+      "zoneIds": [
+        "zone-floor-f5"
+      ],
+      "rect": {
+        "x": 768,
+        "y": 624,
+        "width": 27,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f5-06",
+      "sourceCandidateId": "layout2-128",
+      "zoneIds": [
+        "zone-floor-f5"
+      ],
+      "rect": {
+        "x": 809,
+        "y": 624,
+        "width": 27,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f5-07",
+      "sourceCandidateId": "layout2-129",
+      "zoneIds": [
+        "zone-floor-f5"
+      ],
+      "rect": {
+        "x": 508,
+        "y": 625,
+        "width": 27,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f5-08",
+      "sourceCandidateId": "layout2-130",
+      "zoneIds": [
+        "zone-floor-f5"
+      ],
+      "rect": {
+        "x": 637,
+        "y": 626,
+        "width": 27,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-tumble-strip-07",
+      "sourceCandidateId": "layout2-131",
+      "zoneIds": [
+        "zone-tumble-strip"
+      ],
+      "rect": {
+        "x": 92,
+        "y": 633,
+        "width": 46,
+        "height": 42
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f1-03",
+      "sourceCandidateId": "layout2-132",
+      "zoneIds": [
+        "zone-floor-f1"
+      ],
+      "rect": {
+        "x": 446,
+        "y": 635,
+        "width": 42,
+        "height": 52
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-vault-25",
+      "sourceCandidateId": "layout2-133",
+      "zoneIds": [
+        "zone-vault"
+      ],
+      "rect": {
+        "x": 12,
+        "y": 643,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f5-09",
+      "sourceCandidateId": "layout2-134",
+      "zoneIds": [
+        "zone-floor-f5"
+      ],
+      "rect": {
+        "x": 633,
+        "y": 661,
+        "width": 28,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f5-10",
+      "sourceCandidateId": "layout2-135",
+      "zoneIds": [
+        "zone-floor-f5"
+      ],
+      "rect": {
+        "x": 551,
+        "y": 662,
+        "width": 28,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f5-11",
+      "sourceCandidateId": "layout2-136",
+      "zoneIds": [
+        "zone-floor-f5"
+      ],
+      "rect": {
+        "x": 592,
+        "y": 662,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f5-12",
+      "sourceCandidateId": "layout2-137",
+      "zoneIds": [
+        "zone-floor-f5"
+      ],
+      "rect": {
+        "x": 674,
+        "y": 662,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f5-13",
+      "sourceCandidateId": "layout2-138",
+      "zoneIds": [
+        "zone-floor-f5"
+      ],
+      "rect": {
+        "x": 715,
+        "y": 662,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f5-14",
+      "sourceCandidateId": "layout2-139",
+      "zoneIds": [
+        "zone-floor-f5"
+      ],
+      "rect": {
+        "x": 764,
+        "y": 662,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f5-15",
+      "sourceCandidateId": "layout2-140",
+      "zoneIds": [
+        "zone-floor-f5"
+      ],
+      "rect": {
+        "x": 804,
+        "y": 662,
+        "width": 28,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-floor-f5-16",
+      "sourceCandidateId": "layout2-141",
+      "zoneIds": [
+        "zone-floor-f5"
+      ],
+      "rect": {
+        "x": 507,
+        "y": 663,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-pit-pb-01",
+      "sourceCandidateId": "layout2-142",
+      "zoneIds": [
+        "zone-pit-pb"
+      ],
+      "rect": {
+        "x": 8,
+        "y": 692,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-ub-1-01",
+      "sourceCandidateId": "layout2-143",
+      "zoneIds": [
+        "zone-ub-1"
+      ],
+      "rect": {
+        "x": 186,
+        "y": 709,
+        "width": 27,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-strap-bar-01",
+      "sourceCandidateId": "layout2-144",
+      "zoneIds": [
+        "zone-strap-bar"
+      ],
+      "rect": {
+        "x": 435,
+        "y": 709,
+        "width": 27,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-ub-1-02",
+      "sourceCandidateId": "layout2-145",
+      "zoneIds": [
+        "zone-ub-1"
+      ],
+      "rect": {
+        "x": 226,
+        "y": 712,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-ub-1-03",
+      "sourceCandidateId": "layout2-146",
+      "zoneIds": [
+        "zone-ub-1"
+      ],
+      "rect": {
+        "x": 274,
+        "y": 712,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-ub-1-04",
+      "sourceCandidateId": "layout2-147",
+      "zoneIds": [
+        "zone-ub-1"
+      ],
+      "rect": {
+        "x": 317,
+        "y": 712,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-strap-bar-02",
+      "sourceCandidateId": "layout2-148",
+      "zoneIds": [
+        "zone-strap-bar"
+      ],
+      "rect": {
+        "x": 359,
+        "y": 712,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-strap-bar-03",
+      "sourceCandidateId": "layout2-149",
+      "zoneIds": [
+        "zone-strap-bar"
+      ],
+      "rect": {
+        "x": 473,
+        "y": 728,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-01",
+      "sourceCandidateId": "layout2-150",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 734,
+        "y": 728,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-02",
+      "sourceCandidateId": "layout2-151",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 779,
+        "y": 728,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-03",
+      "sourceCandidateId": "layout2-152",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 688,
+        "y": 729,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-pit-pb-02",
+      "sourceCandidateId": "layout2-153",
+      "zoneIds": [
+        "zone-pit-pb"
+      ],
+      "rect": {
+        "x": 10,
+        "y": 731,
+        "width": 27,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-trampoline-01",
+      "sourceCandidateId": "layout2-154",
+      "zoneIds": [
+        "zone-trampoline"
+      ],
+      "rect": {
+        "x": 633,
+        "y": 736,
+        "width": 28,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-04",
+      "sourceCandidateId": "layout2-155",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 821,
+        "y": 736,
+        "width": 28,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-05",
+      "sourceCandidateId": "layout2-156",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 776,
+        "y": 765,
+        "width": 28,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-06",
+      "sourceCandidateId": "layout2-157",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 734,
+        "y": 765,
+        "width": 27,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-pit-pb-03",
+      "sourceCandidateId": "layout2-158",
+      "zoneIds": [
+        "zone-pit-pb"
+      ],
+      "rect": {
+        "x": 8,
+        "y": 766,
+        "width": 27,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-07",
+      "sourceCandidateId": "layout2-159",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 691,
+        "y": 767,
+        "width": 28,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-pit-pb-04",
+      "sourceCandidateId": "layout2-160",
+      "zoneIds": [
+        "zone-pit-pb"
+      ],
+      "rect": {
+        "x": 8,
+        "y": 802,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-08",
+      "sourceCandidateId": "layout2-161",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 734,
+        "y": 804,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-09",
+      "sourceCandidateId": "layout2-162",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 779,
+        "y": 804,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-10",
+      "sourceCandidateId": "layout2-163",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 688,
+        "y": 806,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-11",
+      "sourceCandidateId": "layout2-164",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 816,
+        "y": 812,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-ub-2-01",
+      "sourceCandidateId": "layout2-165",
+      "zoneIds": [
+        "zone-ub-2"
+      ],
+      "rect": {
+        "x": 348,
+        "y": 818,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-ub-2-02",
+      "sourceCandidateId": "layout2-166",
+      "zoneIds": [
+        "zone-ub-2"
+      ],
+      "rect": {
+        "x": 378,
+        "y": 818,
+        "width": 28,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-ub-2-03",
+      "sourceCandidateId": "layout2-167",
+      "zoneIds": [
+        "zone-ub-2"
+      ],
+      "rect": {
+        "x": 423,
+        "y": 818,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-ub-2-04",
+      "sourceCandidateId": "layout2-168",
+      "zoneIds": [
+        "zone-ub-2"
+      ],
+      "rect": {
+        "x": 473,
+        "y": 818,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-trampoline-02",
+      "sourceCandidateId": "layout2-169",
+      "zoneIds": [
+        "zone-trampoline"
+      ],
+      "rect": {
+        "x": 637,
+        "y": 824,
+        "width": 27,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-12",
+      "sourceCandidateId": "layout2-170",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 775,
+        "y": 842,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-13",
+      "sourceCandidateId": "layout2-171",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 733,
+        "y": 842,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-pit-pb-05",
+      "sourceCandidateId": "layout2-172",
+      "zoneIds": [
+        "zone-pit-pb"
+      ],
+      "rect": {
+        "x": 8,
+        "y": 843,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-14",
+      "sourceCandidateId": "layout2-173",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 691,
+        "y": 844,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-pit-rings-high-bar-01",
+      "sourceCandidateId": "layout2-174",
+      "zoneIds": [
+        "zone-pit-rings-high-bar",
+        "zone-tumble-track"
+      ],
+      "rect": {
+        "x": 232,
+        "y": 878,
+        "width": 27,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_overlap"
+    },
+    {
+      "id": "anchor-pit-pb-06",
+      "sourceCandidateId": "layout2-175",
+      "zoneIds": [
+        "zone-pit-pb"
+      ],
+      "rect": {
+        "x": 7,
+        "y": 880,
+        "width": 28,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-15",
+      "sourceCandidateId": "layout2-176",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 816,
+        "y": 880,
+        "width": 28,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-pit-rings-high-bar-02",
+      "sourceCandidateId": "layout2-177",
+      "zoneIds": [
+        "zone-pit-rings-high-bar",
+        "zone-tumble-track"
+      ],
+      "rect": {
+        "x": 277,
+        "y": 881,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_overlap"
+    },
+    {
+      "id": "anchor-pit-rings-high-bar-03",
+      "sourceCandidateId": "layout2-178",
+      "zoneIds": [
+        "zone-pit-rings-high-bar",
+        "zone-tumble-track"
+      ],
+      "rect": {
+        "x": 319,
+        "y": 881,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_overlap"
+    },
+    {
+      "id": "anchor-tumble-track-01",
+      "sourceCandidateId": "layout2-179",
+      "zoneIds": [
+        "zone-tumble-track"
+      ],
+      "rect": {
+        "x": 374,
+        "y": 881,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-tumble-track-02",
+      "sourceCandidateId": "layout2-180",
+      "zoneIds": [
+        "zone-tumble-track"
+      ],
+      "rect": {
+        "x": 411,
+        "y": 881,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-tumble-track-03",
+      "sourceCandidateId": "layout2-181",
+      "zoneIds": [
+        "zone-tumble-track"
+      ],
+      "rect": {
+        "x": 458,
+        "y": 881,
+        "width": 28,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-16",
+      "sourceCandidateId": "layout2-182",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 738,
+        "y": 881,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-17",
+      "sourceCandidateId": "layout2-183",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 782,
+        "y": 881,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-18",
+      "sourceCandidateId": "layout2-184",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 692,
+        "y": 883,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-pit-pb-07",
+      "sourceCandidateId": "layout2-185",
+      "zoneIds": [
+        "zone-pit-pb"
+      ],
+      "rect": {
+        "x": 53,
+        "y": 883,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-pit-pb-08",
+      "sourceCandidateId": "layout2-186",
+      "zoneIds": [
+        "zone-pit-pb",
+        "zone-pit-rings-high-bar",
+        "zone-tumble-track"
+      ],
+      "rect": {
+        "x": 95,
+        "y": 883,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_overlap"
+    },
+    {
+      "id": "anchor-pit-pb-09",
+      "sourceCandidateId": "layout2-187",
+      "zoneIds": [
+        "zone-pit-pb",
+        "zone-pit-rings-high-bar",
+        "zone-tumble-track"
+      ],
+      "rect": {
+        "x": 149,
+        "y": 883,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_overlap"
+    },
+    {
+      "id": "anchor-pit-rings-high-bar-04",
+      "sourceCandidateId": "layout2-188",
+      "zoneIds": [
+        "zone-pit-rings-high-bar",
+        "zone-tumble-track"
+      ],
+      "rect": {
+        "x": 187,
+        "y": 883,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_overlap"
+    },
+    {
+      "id": "anchor-tumble-track-04",
+      "sourceCandidateId": "layout2-189",
+      "zoneIds": [
+        "zone-tumble-track"
+      ],
+      "rect": {
+        "x": 500,
+        "y": 890,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-ub-3-01",
+      "sourceCandidateId": "layout2-190",
+      "zoneIds": [
+        "zone-ub-3"
+      ],
+      "rect": {
+        "x": 564,
+        "y": 890,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-ub-3-02",
+      "sourceCandidateId": "layout2-191",
+      "zoneIds": [
+        "zone-ub-3"
+      ],
+      "rect": {
+        "x": 637,
+        "y": 908,
+        "width": 27,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-19",
+      "sourceCandidateId": "layout2-192",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 693,
+        "y": 921,
+        "width": 27,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-20",
+      "sourceCandidateId": "layout2-193",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 737,
+        "y": 921,
+        "width": 27,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-21",
+      "sourceCandidateId": "layout2-194",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 778,
+        "y": 921,
+        "width": 28,
+        "height": 33
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-ub-3-03",
+      "sourceCandidateId": "layout2-195",
+      "zoneIds": [
+        "zone-ub-3"
+      ],
+      "rect": {
+        "x": 533,
+        "y": 942,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-ub-3-04",
+      "sourceCandidateId": "layout2-196",
+      "zoneIds": [
+        "zone-ub-3"
+      ],
+      "rect": {
+        "x": 576,
+        "y": 946,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-ub-3-05",
+      "sourceCandidateId": "layout2-197",
+      "zoneIds": [
+        "zone-ub-3"
+      ],
+      "rect": {
+        "x": 646,
+        "y": 952,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-22",
+      "sourceCandidateId": "layout2-198",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 829,
+        "y": 955,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-23",
+      "sourceCandidateId": "layout2-199",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 692,
+        "y": 961,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-24",
+      "sourceCandidateId": "layout2-200",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 734,
+        "y": 961,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    },
+    {
+      "id": "anchor-preschool-25",
+      "sourceCandidateId": "layout2-201",
+      "zoneIds": [
+        "zone-preschool"
+      ],
+      "rect": {
+        "x": 776,
+        "y": 961,
+        "width": 29,
+        "height": 32
+      },
+      "slotCapacity": 1,
+      "contentPresentation": "short_descriptive_label",
+      "associationConfidence": "derived_from_zone_overlay"
+    }
+  ],
+  "derivedCompositeBehavior": [
+    {
+      "groupId": "group-pbhb",
+      "behavior": "union_member_anchors",
+      "memberZoneIds": [
+        "zone-parallel-bars",
+        "zone-high-bar-boys-bar"
+      ]
+    },
+    {
+      "groupId": "group-srph",
+      "behavior": "union_member_anchors",
+      "memberZoneIds": [
+        "zone-still-rings",
+        "zone-pommel-horse"
+      ]
+    },
+    {
+      "groupId": "group-fx-all",
+      "behavior": "union_member_anchors",
+      "memberZoneIds": [
+        "zone-floor-f4",
+        "zone-floor-f3",
+        "zone-floor-f2",
+        "zone-floor-f1"
+      ]
+    }
+  ],
+  "uncertainties": [
+    {
+      "id": "geometry-registration",
+      "impact": "Anchor coordinates must be registered to the Skeleton Freeform background before being overlaid on a rendered gym image. The anchor PDF may not be used to redraw physical equipment."
+    },
+    {
+      "id": "beam-2-naming",
+      "impact": "The source distinguishes a top/narrow Beam 2 area and a lower/wide Beam 2 area. They are mapped consistently to existing registry IDs zone-beam-2-a and zone-beam-2-b, but the A/B names remain owner-disambiguation placeholders."
+    },
+    {
+      "id": "overlap-membership",
+      "impact": "Pit PB, Pit Rings/High Bar, and Tumble Track overlap in the zone reference. Anchors at those intersections intentionally list more than one zoneId; the UI must present a shared anchor once in a combined view, not duplicate it."
+    },
+    {
+      "id": "source-marker-ambiguity",
+      "impact": "Two yellow plus-sign shapes inside the Trampoline artwork were not added as placement anchors because they lack the yellow Station-style label-anchor treatment. Confirm later if they should become separate anchors."
+    },
+    {
+      "id": "candidate-review",
+      "impact": "The 201 records are a conservative visual trace of completed yellow label boxes. Future edits should preserve existing IDs and add, move, or reject anchors only through an owner-reviewed revision."
+    }
+  ],
+  "counts": {
+    "anchors": 201,
+    "overlapAnchors": 6,
+    "zoneViewports": 26
+  }
+}

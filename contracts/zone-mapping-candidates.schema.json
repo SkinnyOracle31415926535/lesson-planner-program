@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lesson-planner.local/contracts/zone-mapping-candidates.schema.json",
+  "title": "Lesson Planner Owner-Review Zone Mapping Candidates",
+  "description": "A non-authoritative, media-free proposal generated only from a sanitized schedule summary. It can never represent approved configuration by itself.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "status",
+    "ownerConfirmation",
+    "privacy",
+    "source",
+    "summary",
+    "candidates",
+    "unresolvedEvidence"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "status": { "const": "owner_confirmation_required" },
+    "ownerConfirmation": {
+      "type": "object",
+      "required": ["required", "confirmed", "configurationEligible", "message"],
+      "properties": {
+        "required": { "const": true },
+        "confirmed": { "const": false },
+        "configurationEligible": { "const": false },
+        "message": { "type": "string", "minLength": 1 }
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "required": [
+        "studentRecordsIncluded",
+        "mediaBytesIncluded",
+        "rawScheduleLabelsIncluded",
+        "rawVaultPathsIncluded"
+      ],
+      "properties": {
+        "studentRecordsIncluded": { "const": false },
+        "mediaBytesIncluded": { "const": false },
+        "rawScheduleLabelsIncluded": { "const": false },
+        "rawVaultPathsIncluded": { "const": false }
+      }
+    },
+    "source": {
+      "type": "object",
+      "required": ["sourceId", "scheduleId", "revision"],
+      "properties": {
+        "sourceId": { "type": "string", "minLength": 1 },
+        "scheduleId": { "type": "string", "minLength": 1 },
+        "revision": { "type": "string", "minLength": 1 }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["sourceTimeBlockCount", "recognizedInventoryBlockCount", "candidateCount"],
+      "properties": {
+        "sourceTimeBlockCount": { "type": "integer", "minimum": 0 },
+        "recognizedInventoryBlockCount": { "type": "integer", "minimum": 0 },
+        "candidateCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "candidateId",
+          "logicalZoneId",
+          "displayName",
+          "suggestedBoardKind",
+          "mayRepresentDisconnectedAreas",
+          "equipment",
+          "confidence",
+          "reasonCodes",
+          "ownerReview",
+          "sourceEvidence"
+        ],
+        "properties": {
+          "candidateId": { "type": "string", "pattern": "^zone-" },
+          "logicalZoneId": { "type": "string", "minLength": 1 },
+          "displayName": { "type": "string", "minLength": 1 },
+          "suggestedBoardKind": {
+            "enum": ["single_area", "combined_area", "parallel_area_bundle"]
+          },
+          "mayRepresentDisconnectedAreas": { "type": "boolean" },
+          "equipment": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "confidence": { "enum": ["high", "medium", "low"] },
+          "reasonCodes": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "ownerReview": {
+            "type": "object",
+            "required": ["status", "confirmed", "configurationEligible"],
+            "properties": {
+              "status": { "const": "owner_confirmation_required" },
+              "confirmed": { "const": false },
+              "configurationEligible": { "const": false }
+            }
+          },
+          "sourceEvidence": {
+            "type": "object",
+            "required": [
+              "bookingCount",
+              "canonicalLabels",
+              "labelMentionsAllEquipmentCount",
+              "activityTypeCounts",
+              "sourceConfidenceCounts",
+              "sourceReviewStatusCounts"
+            ],
+            "properties": {
+              "bookingCount": { "type": "integer", "minimum": 1 },
+              "canonicalLabels": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "labelMentionsAllEquipmentCount": { "type": "integer", "minimum": 0 },
+              "activityTypeCounts": { "type": "object" },
+              "sourceConfidenceCounts": { "type": "object" },
+              "sourceReviewStatusCounts": { "type": "object" }
+            }
+          }
+        }
+      }
+    },
+    "unresolvedEvidence": {
+      "type": "object",
+      "required": [
+        "emptyEquipmentBlockCount",
+        "unrecognizedEquipmentBlockCount",
+        "unrecognizedEquipmentTokenCounts"
+      ],
+      "properties": {
+        "emptyEquipmentBlockCount": { "type": "integer", "minimum": 0 },
+        "unrecognizedEquipmentBlockCount": { "type": "integer", "minimum": 0 },
+        "unrecognizedEquipmentTokenCounts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["token", "blockCount"],
+            "properties": {
+              "token": { "type": "string", "minLength": 1 },
+              "blockCount": { "type": "integer", "minimum": 1 }
+            }
+          }
+        }
+      }
+    }
+  }
+}

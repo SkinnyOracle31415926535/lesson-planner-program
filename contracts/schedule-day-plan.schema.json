@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lesson-planner.local/contracts/schedule-day-plan.schema.json",
+  "title": "Lesson Planner Resolved Schedule Day",
+  "description": "A class-specific, media-free planning handoff derived from the sanitized schedule summary. Fifth-or-later calendar weeks require an explicit rotation choice before blocks appear.",
+  "type": "object",
+  "required": ["schemaVersion", "privacy", "source", "date", "rotation", "selection", "plan", "advisories"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "privacy": {
+      "type": "object",
+      "required": ["studentRecordsIncluded", "mediaBytesIncluded", "rawSourceLabelsIncluded"],
+      "properties": {
+        "studentRecordsIncluded": { "const": false },
+        "mediaBytesIncluded": { "const": false },
+        "rawSourceLabelsIncluded": { "const": false }
+      },
+      "additionalProperties": false
+    },
+    "source": {
+      "type": "object",
+      "required": ["sourceId", "scheduleId", "revision"],
+      "properties": {
+        "sourceId": { "type": "string", "pattern": "^schedule:" },
+        "scheduleId": { "type": "string" },
+        "revision": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "date": {
+      "type": "object",
+      "required": ["iso", "day"],
+      "properties": {
+        "iso": { "type": "string", "format": "date" },
+        "day": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "rotation": {
+      "type": "object",
+      "required": ["monthWeekOrdinal", "status", "resolvedWeek", "availableWeekChoices", "manualConfirmationRequired"],
+      "properties": {
+        "monthWeekOrdinal": { "type": "integer", "minimum": 1 },
+        "status": { "enum": ["auto", "manual_confirmation_required", "manual_confirmed", "unmapped"] },
+        "resolvedWeek": { "type": ["string", "null"] },
+        "availableWeekChoices": { "type": "array", "items": { "type": "string" } },
+        "manualConfirmationRequired": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "selection": {
+      "type": "object",
+      "required": ["status", "selectedGroup", "availableGroups"],
+      "properties": {
+        "status": { "enum": ["ready", "group_required", "manual_week_confirmation_required", "outside_schedule_range", "no_blocks_for_group"] },
+        "selectedGroup": { "type": ["string", "null"] },
+        "availableGroups": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "plan": {
+      "type": "object",
+      "required": ["rotationBlocks", "openings", "supportBlocks"],
+      "properties": {
+        "rotationBlocks": { "type": "array", "items": { "$ref": "#/$defs/block" } },
+        "openings": { "type": "array", "items": { "$ref": "#/$defs/block" } },
+        "supportBlocks": { "type": "array", "items": { "$ref": "#/$defs/block" } }
+      },
+      "additionalProperties": false
+    },
+    "advisories": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "block": {
+      "type": "object",
+      "required": ["bookingId", "startMinute", "endMinute", "eventLabel", "equipment", "activityType"],
+      "properties": {
+        "bookingId": { "type": "string" },
+        "startMinute": { "type": "integer", "minimum": 0, "maximum": 1439 },
+        "endMinute": { "type": "integer", "minimum": 1, "maximum": 1440 },
+        "eventLabel": { "type": "string" },
+        "equipment": { "type": "array", "items": { "type": "string" } },
+        "activityType": { "type": "string" },
+        "confidence": { "type": "string" },
+        "reviewStatus": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
