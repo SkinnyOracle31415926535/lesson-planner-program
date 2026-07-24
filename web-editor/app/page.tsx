@@ -112,18 +112,14 @@ import {
 } from "./station-board-overrides";
 import {
   LOCAL_CLASS_SCHEDULE_JSON_EXAMPLE,
-  addLocalClass,
   appendLocalClassScheduleImport,
-  createLocalClass,
   emptyLocalClassStorage,
-  isLocalClass,
   isLocalClassStorage,
   localClassById,
   localClassStorage,
   localScheduleBlocksForLessonDate,
   parseLocalClassScheduleImport,
   removeLocalClass,
-  updateLocalClass,
   type LocalClass,
   type LocalClassImportParseResult,
   type LocalClassStorage,
@@ -244,26 +240,6 @@ const LIBRARY_ROW_HEIGHT_STEP = 18;
 const LEGACY_RECURRING_TASK_ID = "set-bar-station-mats";
 const TODAY_LESSON_PLAN_ID = "legacy-current";
 const FUTURE_SAMPLE_CLASS_VALUE = "__sample_level_3__";
-const CLASS_AND_SCHEDULE_SETUP_GUIDE = [
-  "CREATE A CLASS",
-  "1. Open a current or future lesson, switch to EDIT, then tap + CREATE CLASS.",
-  "2. Enter the class name. Group/level and coach are optional.",
-  "3. Put one student name on each line, then tap CREATE + USE FOR THIS LESSON.",
-  "",
-  "IMPORT A CLASS SCHEDULE",
-  "1. In LOCAL CLASSES, use LOAD EXAMPLE under IMPORT CLASS + SCHEDULE.",
-  "2. Replace the example values with your class, students, and schedule rows.",
-  "3. Tap PREVIEW JSON. When it says READY, tap APPLY AS NEW LOCAL CLASS.",
-  "4. Imports always add a new class; they never overwrite an existing class, roster, schedule, or lesson phase.",
-  "",
-  "FULL GYM SCHEDULE / OPEN STATIONS",
-  "1. Tap LOAD SUMMER 2026 LOCAL COPY, or choose a validated lesson-planner-safe-schedule.json file.",
-  "2. In SAVED CLASSES, select the exact FULL SCHEDULE GROUP for the class.",
-  "3. The imported full schedule is advisory only. It never reserves equipment or changes the source vault.",
-  "",
-  "THIS IPAD",
-  "Classes, schedules, attendance, and photos stay in this browser on this device. Create or import them again on another browser/device.",
-].join("\n");
 
 const shelfCopy: Record<LibraryShelf, string> = {
   all: "Your locally created skills, drills, routines, activities, and references",
@@ -2118,7 +2094,6 @@ export default function Home() {
   const activeLessonPlanIdRef = useRef(activeLessonPlan.id);
   const lessonModeRef = useRef(mode);
   const bootScheduleReconciledPlanKeyRef = useRef<string | null>(null);
-  const classSetupGuideRef = useRef<HTMLTextAreaElement | null>(null);
   const newIdeaCameraInputRef = useRef<HTMLInputElement | null>(null);
   const newIdeaMediaInputRef = useRef<HTMLInputElement | null>(null);
   const editIdeaCameraInputRef = useRef<HTMLInputElement | null>(null);
@@ -2153,12 +2128,6 @@ export default function Home() {
   const [classStorage, setClassStorage] = useState<LocalClassStorage>(emptyLocalClassStorage);
   const [hasLoadedLocalClasses, setHasLoadedLocalClasses] = useState(false);
   const [isClassManagerOpen, setIsClassManagerOpen] = useState(false);
-  const [editingClassId, setEditingClassId] = useState<string | null>(null);
-  const [classDraftName, setClassDraftName] = useState("");
-  const [classDraftGroup, setClassDraftGroup] = useState("");
-  const [classDraftCoach, setClassDraftCoach] = useState("");
-  const [classDraftNotes, setClassDraftNotes] = useState("");
-  const [classDraftRoster, setClassDraftRoster] = useState("");
   const [classImportRaw, setClassImportRaw] = useState("");
   const [classImportPreview, setClassImportPreview] = useState<LocalClassImportParseResult | null>(null);
   const [removeClassCandidate, setRemoveClassCandidate] = useState<LocalClass | null>(null);
@@ -5846,35 +5815,10 @@ export default function Home() {
     setNotice(`${athlete?.name.toUpperCase() ?? "ATHLETE"} · ${status.toUpperCase()} · SAVED FOR THIS LOCAL LESSON`);
   }
 
-  function resetClassDraft() {
-    setEditingClassId(null);
-    setClassDraftName("");
-    setClassDraftGroup("");
-    setClassDraftCoach("");
-    setClassDraftNotes("");
-    setClassDraftRoster("");
-  }
-
-  function openNewClassManager() {
-    resetClassDraft();
+  function openClassImportManager() {
     setClassImportPreview(null);
+    setPlanShelf(null);
     setIsClassManagerOpen(true);
-  }
-
-  function editLocalClass(localClass: LocalClass) {
-    setEditingClassId(localClass.id);
-    setClassDraftName(localClass.name);
-    setClassDraftGroup(localClass.group ?? "");
-    setClassDraftCoach(localClass.coach ?? "");
-    setClassDraftNotes(localClass.notes ?? "");
-    setClassDraftRoster(localClass.students.map((student) => student.name).join("\n"));
-    setIsClassManagerOpen(true);
-  }
-
-  function classDraftStudentNames(): string[] | null {
-    const names = classDraftRoster.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
-    if (new Set(names.map((name) => name.toLocaleLowerCase())).size !== names.length) return null;
-    return names;
   }
 
   function initializeAttendanceForClass(localClass: LocalClass | null) {
@@ -5919,64 +5863,6 @@ export default function Home() {
       : "CLASS CLEARED FROM THIS LESSON · SAMPLE ROSTER STAYS AS A LOCAL FALLBACK");
   }
 
-  function saveLocalClass() {
-    const name = classDraftName.trim();
-    const studentNames = classDraftStudentNames();
-    if (!name) {
-      setNotice("NAME THE CLASS BEFORE SAVING IT LOCALLY");
-      return;
-    }
-    if (!studentNames) {
-      setNotice("EACH STUDENT NEEDS ONE UNIQUE NAME PER LINE");
-      return;
-    }
-
-    if (editingClassId) {
-      const updatedStorage = updateLocalClass(classStorage, editingClassId, {
-        name,
-        group: classDraftGroup.trim() || null,
-        coach: classDraftCoach.trim() || null,
-        notes: classDraftNotes.trim() || null,
-        rosterText: studentNames.join("\n"),
-      });
-      const updated = localClassById(updatedStorage, editingClassId);
-      if (!updated || updatedStorage === classStorage) {
-        setNotice("CLASS COULD NOT SAVE · CHECK THE CLASS DETAILS AND ROSTER");
-        return;
-      }
-      setClassStorage(updatedStorage);
-      initializeAttendanceForClass(updated);
-      editLocalClass(updated);
-      setNotice(`${updated.name.toUpperCase()} UPDATED · ROSTER IDS STAY LOCAL AND STABLE`);
-      return;
-    }
-
-    const created = createLocalClass({
-      name,
-      ...(classDraftGroup.trim() ? { group: classDraftGroup.trim() } : {}),
-      ...(classDraftCoach.trim() ? { coach: classDraftCoach.trim() } : {}),
-      ...(classDraftNotes.trim() ? { notes: classDraftNotes.trim() } : {}),
-      students: studentNames.map((studentName) => ({ name: studentName })),
-      schedule: [],
-    });
-    if (!created || !isLocalClass(created)) {
-      setNotice("CLASS COULD NOT SAVE · CHECK THE CLASS NAME AND ROSTER");
-      return;
-    }
-    setClassStorage((current) => addLocalClass(current, created, { makeActive: true }));
-    setActiveClassId(created.id);
-    setActiveLessonPlan((current) => ({ ...current, classId: created.id, title: classLessonTitle(created) }));
-    setFuturePlanClassId(created.id);
-    initializeAttendanceForClass(created);
-    applyScheduleTemplateToCurrentLesson(createLessonScheduleTemplate({
-      lessonDate: activeLessonPlan.date,
-      selectedClass: created,
-      safeScheduleDay: null,
-    }), created.id, created.name);
-    editLocalClass(created);
-    setNotice(`${created.name.toUpperCase()} CREATED · THIS LESSON NOW USES ITS LOCAL ROSTER`);
-  }
-
   function previewClassScheduleImport() {
     const preview = parseLocalClassScheduleImport(classImportRaw);
     setClassImportPreview(preview);
@@ -6010,7 +5896,6 @@ export default function Home() {
     const scheduleWasReconciled = applyScheduleTemplateToCurrentLesson(template, appended.localClass.id, appended.localClass.name);
     setClassImportRaw("");
     setClassImportPreview(null);
-    editLocalClass(appended.localClass);
     setNotice(`${appended.localClass.name.toUpperCase()} IMPORTED · ${template.phases.length ? `${template.phases.length} SCHEDULE PHASE${template.phases.length === 1 ? "" : "S"} LOADED FOR THIS DAY` : scheduleWasReconciled ? "OLD SCHEDULE PHASES CLEARED · A BLANK PHASE IS READY" : "ITS SCHEDULE IS NOW LOCAL AND AUTOMATIC"}`);
   }
 
@@ -6114,17 +5999,8 @@ export default function Home() {
       setActiveClassId(null);
       setFuturePlanClassId(null);
     }
-    if (editingClassId === removed.id) resetClassDraft();
     setRemoveClassCandidate(null);
     setNotice(`${removed.name.toUpperCase()} REMOVED FROM THIS BROWSER · NO LESSON PHASES WERE CHANGED`);
-  }
-
-  function selectClassSetupGuide() {
-    const guide = classSetupGuideRef.current;
-    if (!guide) return;
-    guide.focus();
-    guide.select();
-    setNotice("CLASS + SCHEDULE GUIDE SELECTED · COPY IT WITH YOUR DEVICE'S COPY COMMAND");
   }
 
   function resetNewIdeaDraft() {
@@ -6513,9 +6389,11 @@ export default function Home() {
           setFuturePlanClassId(null);
           setFuturePlanClassChosen(false);
           setFuturePlanManualWeek("");
+          setIsClassManagerOpen(false);
+          setRemoveClassCandidate(null);
           setPlanShelf((current) => current === "FUTURE" ? null : "FUTURE");
         }}>+ LESSON PLAN</button>
-        {mode === "EDIT" && !isPastActivePlan ? <button className={isClassManagerOpen ? "active class-manager-trigger" : "class-manager-trigger"} onClick={openNewClassManager}>+ CREATE CLASS</button> : null}
+        {mode === "EDIT" && !isPastActivePlan ? <button className={isClassManagerOpen ? "active class-manager-trigger" : "class-manager-trigger"} onClick={openClassImportManager}>+ IMPORT CLASS</button> : null}
         <button onClick={openLibraryWindow} aria-label="Open the Idea Library in a new window">LIBRARY <b>{allLibraryItems.length} IDEAS</b></button>
         {mode === "VIEW" ? <button className="view-new-idea-nav" onClick={() => setIsAddingIdea((open) => !open)}>{isAddingIdea ? "CLOSE NEW IDEA" : "+ NEW IDEA"}</button> : null}
         <button className={unresolvedUpdateCount ? "pending-shake" : ""} onClick={() => scrollToPlannerSection("daily-updates")}>UPDATES <b className="hot">{unresolvedUpdateCount}</b></button>
@@ -6527,46 +6405,9 @@ export default function Home() {
       </nav>
 
       {mode === "EDIT" && isClassManagerOpen ? (
-        <section className="class-manager retro-window" aria-label="Create and manage local classes">
+        <section className="class-manager retro-window" aria-label="Import and manage local classes">
           <div className="window-title">LOCAL CLASSES <span>PRIVATE · THIS BROWSER</span><button type="button" onClick={() => { setIsClassManagerOpen(false); setRemoveClassCandidate(null); }} aria-label="Close local classes">×</button></div>
-          <section className="class-setup-help" aria-label="Class and schedule setup instructions">
-            <div className="class-setup-help-heading">
-              <div><b>CLASS + SCHEDULE HELP</b><span>Follow these steps to create a roster, import a class schedule, and connect the full gym schedule.</span></div>
-              <button type="button" onClick={selectClassSetupGuide}>SELECT + COPY GUIDE</button>
-            </div>
-            <ol>
-              <li>Create a class above: name it, add one student per line, then tap <b>CREATE + USE FOR THIS LESSON</b>.</li>
-              <li>For a class schedule, load the JSON example below, edit it, preview it, then apply it as a new class.</li>
-              <li>For open-station availability, load the full gym schedule and choose the class&apos;s exact schedule group.</li>
-            </ol>
-            <label>COPY/PASTE DETAILED SETUP INSTRUCTIONS
-              <textarea ref={classSetupGuideRef} readOnly value={CLASS_AND_SCHEDULE_SETUP_GUIDE} aria-label="Copyable class and schedule setup instructions" />
-            </label>
-            <details>
-              <summary>OPEN PASTE-READY CLASS + SCHEDULE JSON TEMPLATE</summary>
-              <textarea readOnly value={LOCAL_CLASS_SCHEDULE_JSON_EXAMPLE} aria-label="Paste-ready local class and schedule JSON template" />
-            </details>
-          </section>
           <div className="class-manager-body">
-            <form className="class-editor-form" onSubmit={(event) => { event.preventDefault(); saveLocalClass(); }}>
-              <div className="class-editor-heading">
-                <div><b>{editingClassId ? "EDIT CLASS" : "CREATE CLASS"}</b><span>{editingClassId ? "Roster changes keep matching students’ local attendance IDs." : "The saved class is attached to this lesson only when you create or select it."}</span></div>
-                {editingClassId ? <button type="button" onClick={resetClassDraft}>NEW CLASS</button> : null}
-              </div>
-              <div className="class-editor-fields">
-                <label>CLASS NAME<input value={classDraftName} onChange={(event) => setClassDraftName(event.target.value)} placeholder="e.g. Level 3 Boys" maxLength={120} autoFocus /></label>
-                <label>GROUP / LEVEL<input value={classDraftGroup} onChange={(event) => setClassDraftGroup(event.target.value)} placeholder="e.g. Level 3" maxLength={120} /></label>
-                <label>COACH <small>optional</small><input value={classDraftCoach} onChange={(event) => setClassDraftCoach(event.target.value)} placeholder="Coach name" maxLength={120} /></label>
-              </div>
-              <label className="class-roster-field">STUDENTS <small>one name per line · attendance is never pulled from automation</small><textarea value={classDraftRoster} onChange={(event) => setClassDraftRoster(event.target.value)} placeholder={"Avery Kim\nJordan Lee"} maxLength={8000} /></label>
-              <label className="class-notes-field">CLASS NOTES <small>optional · private to this browser</small><textarea value={classDraftNotes} onChange={(event) => setClassDraftNotes(event.target.value)} placeholder="Level notes, coach reminders, or anything useful." maxLength={2000} /></label>
-              {editingClassId ? (() => {
-                const editing = localClassById(classStorage, editingClassId);
-                return editing?.schedule.length ? <div className="class-editor-schedule-summary"><b>LOCAL SCHEDULE</b><span>{editing.schedule.length} imported block{editing.schedule.length === 1 ? "" : "s"} stay with this class. Import a revised schedule as a new class so nothing is overwritten.</span></div> : <div className="class-editor-schedule-summary empty"><b>NO SCHEDULE YET</b><span>Paste a JSON schedule below whenever you are ready.</span></div>;
-              })() : null}
-              <div className="class-editor-actions"><button type="submit">{editingClassId ? "SAVE CLASS" : "CREATE + USE FOR THIS LESSON"}</button><button type="button" onClick={() => { resetClassDraft(); setIsClassManagerOpen(false); }}>CANCEL</button></div>
-            </form>
-
             <section className="local-class-list" aria-label="Saved local classes">
               <div className="local-class-list-heading"><b>SAVED CLASSES</b><span>{classStorage.classes.length} LOCAL</span></div>
               {classStorage.classes.length ? classStorage.classes.map((localClass) => (
@@ -6583,15 +6424,14 @@ export default function Home() {
                         <option value="">NOT LINKED</option>
                         {safeScheduleGroupOptions.map((group) => <option key={group} value={group}>{group}</option>)}
                       </select>
-                    </label>
+                  </label>
                   ) : null}
                   <div className="local-class-actions">
                     <button type="button" className={activeClassId === localClass.id ? "selected" : ""} onClick={() => selectClassForLesson(localClass)}>{activeClassId === localClass.id ? "USED THIS LESSON" : "USE FOR THIS LESSON"}</button>
-                    <button type="button" onClick={() => editLocalClass(localClass)}>EDIT</button>
                     <button type="button" className="remove-local-class" onClick={() => setRemoveClassCandidate(localClass)}>REMOVE</button>
                   </div>
                 </article>
-              )) : <p className="local-class-empty">No local classes yet. Create one above or import a JSON class schedule below.</p>}
+              )) : <p className="local-class-empty">No local classes yet. Import a JSON class schedule below.</p>}
               {activeLocalClass ? <button type="button" className="clear-local-class" onClick={() => selectClassForLesson(null)}>USE SAMPLE ROSTER FOR THIS LESSON</button> : null}
             </section>
           </div>
@@ -6664,54 +6504,56 @@ export default function Home() {
       ) : null}
 
       {planShelf === "FUTURE" ? (
-        <section className="lesson-plan-shelf retro-window" aria-label="Start a new local lesson plan">
-          <div className="window-title">NEW LESSON PLAN <button type="button" onClick={() => setPlanShelf(null)} aria-label="Close new lesson plan">×</button></div>
-          <form className="future-lesson-form" onSubmit={(event) => {
-            event.preventDefault();
-            createFutureLessonPlan(futurePlanDate, futurePlanClassId);
-          }}>
-            <label>
-              LESSON DATE
-              <input name="future-lesson-date" type="date" min={lessonToday} value={futurePlanDate} onInput={(event) => setFuturePlanDate(event.currentTarget.value)} onChange={(event) => { setFuturePlanDate(event.currentTarget.value); setFuturePlanManualWeek(""); }} />
-            </label>
-            <label>
-              CLASS / TYPE
-              <select
-                name="future-lesson-class"
-                required
-                value={futurePlanClassChosen ? (futurePlanClassId ?? FUTURE_SAMPLE_CLASS_VALUE) : ""}
-                onChange={(event) => {
-                  const selected = event.currentTarget.value;
-                  setFuturePlanClassId(selected === FUTURE_SAMPLE_CLASS_VALUE ? null : selected || null);
-                  setFuturePlanClassChosen(Boolean(selected));
-                  setFuturePlanManualWeek("");
-                }}
-              >
-                <option value="" disabled>CHOOSE A CLASS / TYPE</option>
-                <option value={FUTURE_SAMPLE_CLASS_VALUE}>SAMPLE LEVEL 3 · NO LOCAL SCHEDULE</option>
-                {classStorage.classes.map((localClass) => <option key={localClass.id} value={localClass.id}>{localClass.name}{localClass.group ? ` · ${localClass.group}` : ""}</option>)}
-              </select>
-            </label>
-            {futurePlanSafeScheduleDay?.status === "manual_week_confirmation_required" ? <label>
-              ROTATION WEEK
-              <select required value={futurePlanManualWeek || safeScheduleStorageState.manualWeekByDate[futurePlanDate] || ""} onChange={(event) => setFuturePlanManualWeek(event.currentTarget.value === "Odd" || event.currentTarget.value === "Even" ? event.currentTarget.value : "")}>
-                <option value="">CHOOSE ODD OR EVEN</option>
-                <option value="Odd">ODD</option>
-                <option value="Even">EVEN</option>
-              </select>
-            </label> : null}
-            <p>{!futurePlanClassChosen
-              ? "Choose a class or the sample type. The planner will not assume your active class."
-              : futurePlanTemplate.source === "safe-schedule"
-              ? `${futurePlanTemplate.phases.length} exact full-schedule phase${futurePlanTemplate.phases.length === 1 ? "" : "s"} will start empty.`
-              : futurePlanTemplate.source === "local-class"
-                ? `${futurePlanTemplate.phases.length} matching class-schedule phase${futurePlanTemplate.phases.length === 1 ? "" : "s"} will start empty.`
-                : futurePlanClassId === null
-                  ? "This sample plan will start with one editable unscheduled phase."
-                  : "No schedule blocks match this class and date; the plan will start with one editable unscheduled phase."}</p>
-            <button type="submit">START LESSON PLAN →</button>
-          </form>
-        </section>
+        <div className="lesson-plan-dialog-scrim" onClick={(event) => { if (event.target === event.currentTarget) setPlanShelf(null); }}>
+          <section className="lesson-plan-shelf retro-window" role="dialog" aria-modal="true" aria-label="Start a new local lesson plan">
+            <div className="window-title">NEW LESSON PLAN <button type="button" onClick={() => setPlanShelf(null)} aria-label="Close new lesson plan">×</button></div>
+            <form className="future-lesson-form" onSubmit={(event) => {
+              event.preventDefault();
+              createFutureLessonPlan(futurePlanDate, futurePlanClassId);
+            }}>
+              <label>
+                LESSON DATE
+                <input name="future-lesson-date" type="date" min={lessonToday} value={futurePlanDate} onInput={(event) => setFuturePlanDate(event.currentTarget.value)} onChange={(event) => { setFuturePlanDate(event.currentTarget.value); setFuturePlanManualWeek(""); }} />
+              </label>
+              <label>
+                CLASS / TYPE
+                <select
+                  name="future-lesson-class"
+                  required
+                  value={futurePlanClassChosen ? (futurePlanClassId ?? FUTURE_SAMPLE_CLASS_VALUE) : ""}
+                  onChange={(event) => {
+                    const selected = event.currentTarget.value;
+                    setFuturePlanClassId(selected === FUTURE_SAMPLE_CLASS_VALUE ? null : selected || null);
+                    setFuturePlanClassChosen(Boolean(selected));
+                    setFuturePlanManualWeek("");
+                  }}
+                >
+                  <option value="" disabled>CHOOSE A CLASS / TYPE</option>
+                  <option value={FUTURE_SAMPLE_CLASS_VALUE}>SAMPLE LEVEL 3 · NO LOCAL SCHEDULE</option>
+                  {classStorage.classes.map((localClass) => <option key={localClass.id} value={localClass.id}>{localClass.name}{localClass.group ? ` · ${localClass.group}` : ""}</option>)}
+                </select>
+              </label>
+              {futurePlanSafeScheduleDay?.status === "manual_week_confirmation_required" ? <label>
+                ROTATION WEEK
+                <select required value={futurePlanManualWeek || safeScheduleStorageState.manualWeekByDate[futurePlanDate] || ""} onChange={(event) => setFuturePlanManualWeek(event.currentTarget.value === "Odd" || event.currentTarget.value === "Even" ? event.currentTarget.value : "")}>
+                  <option value="">CHOOSE ODD OR EVEN</option>
+                  <option value="Odd">ODD</option>
+                  <option value="Even">EVEN</option>
+                </select>
+              </label> : null}
+              <p>{!futurePlanClassChosen
+                ? "Choose a class or the sample type. The planner will not assume your active class."
+                : futurePlanTemplate.source === "safe-schedule"
+                ? `${futurePlanTemplate.phases.length} exact full-schedule phase${futurePlanTemplate.phases.length === 1 ? "" : "s"} will start empty.`
+                : futurePlanTemplate.source === "local-class"
+                  ? `${futurePlanTemplate.phases.length} matching class-schedule phase${futurePlanTemplate.phases.length === 1 ? "" : "s"} will start empty.`
+                  : futurePlanClassId === null
+                    ? "This sample plan will start with one editable unscheduled phase."
+                    : "No schedule blocks match this class and date; the plan will start with one editable unscheduled phase."}</p>
+              <button type="submit">START LESSON PLAN →</button>
+            </form>
+          </section>
+        </div>
       ) : null}
 
       <section className="identity-strip">
@@ -6755,7 +6597,7 @@ export default function Home() {
                     ? "Open Local Classes and choose this class’s exact imported schedule group. Class names are never fuzzy-matched."
                     : activeLocalClass
                       ? "Local class blocks remain visible, but they cannot confirm which gym areas are free without a ready full-schedule link."
-                      : "Create or select a local class to replace this sample schedule and roster."}</span>
+                      : "Import a local class to replace this sample schedule and roster."}</span>
               </div>
 
               {safeScheduleDay?.status === "manual_week_confirmation_required" ? (
@@ -7826,7 +7668,7 @@ export default function Home() {
           </section>
 
           <section className="retro-window attendance-window">
-            <div className="window-title">ATTENDANCE <span>{isPastActivePlan ? "PAST SNAPSHOT · COMPLETION STAYS LIVE" : activeLocalClass ? `${activeLocalClass.name.toUpperCase()} · LIVE IN VIEW + EDIT` : hasMissingActiveClass ? "REMOVED LOCAL CLASS · ROSTER UNAVAILABLE" : "SAMPLE ROSTER · CREATE A CLASS"}</span></div>
+            <div className="window-title">ATTENDANCE <span>{isPastActivePlan ? "PAST SNAPSHOT · COMPLETION STAYS LIVE" : activeLocalClass ? `${activeLocalClass.name.toUpperCase()} · LIVE IN VIEW + EDIT` : hasMissingActiveClass ? "REMOVED LOCAL CLASS · ROSTER UNAVAILABLE" : "SAMPLE ROSTER · IMPORT A CLASS"}</span></div>
             {attendanceRoster.length ? attendanceRoster.map((athlete) => {
               const status = attendanceById[athlete.id] ?? "unmarked";
               return (
