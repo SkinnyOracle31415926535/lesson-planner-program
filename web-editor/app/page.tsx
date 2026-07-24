@@ -80,6 +80,14 @@ import {
   withoutLibraryMedia,
   type LibraryMediaMetadata,
 } from "./library-preferences";
+import { StationMakerDialog, StationPreview } from "./station-maker";
+import {
+  createStationSetup,
+  loadStationSetup,
+  removeStationSetup,
+  saveStationSetup,
+  type StationSetup,
+} from "./station-setups";
 import {
   libraryTransferFilename,
   mergeLibraryTransfer,
@@ -121,6 +129,30 @@ import {
   type LocalClassStorage,
 } from "./local-classes";
 import { isPastLessonPlanDate, localLessonPlanDate } from "./lesson-plan-dates";
+import {
+  addLessonPlan,
+  createLessonPlanMeta,
+  indexWithLessonPlan,
+  lessonPlanForIdentity,
+  normalizeLessonPlanIndex,
+  type LessonPlanIndex,
+  type LessonPlanMeta,
+} from "./lesson-plan-index";
+import { createLessonScheduleTemplate } from "./lesson-schedule-template";
+import { reconcileLessonSchedulePhases } from "./lesson-schedule-reconciliation";
+import {
+  addLocalReminderTemplate,
+  createLocalReminderTemplate,
+  emptyLocalReminderStorage,
+  localReminderStorage,
+  parseLocalReminderStorage,
+  resolveLocalReminders,
+  serializeLocalReminderStorage,
+  setLocalReminderComplete,
+  type LocalReminderCadence,
+  type LocalReminderScope,
+  type LocalReminderStorage,
+} from "./local-reminders";
 import { migrateEditableLessonToUserPhotoAreas } from "./user-photo-areas";
 import {
   areaCatalogPreferences,
@@ -156,7 +188,7 @@ import {
 } from "./event-phase-timing";
 import {
   eventScheduleIssues,
-  eventStartOptionsBetween,
+  eventSplitStartOptions,
   eventWindow,
   repairEventTimes,
   swapAdjacentEventSlots,
@@ -196,6 +228,7 @@ const LOCAL_LESSON_PLAN_INDEX_STORAGE_KEY = "gym-lesson-planner-local-plan-index
 const LOCAL_LIBRARY_STORAGE_KEY = "gym-lesson-planner-local-library-v1";
 const LOCAL_LIBRARY_VIEW_STORAGE_KEY = "gym-lesson-planner-local-library-view-v1";
 const LOCAL_OPERATIONS_STORAGE_KEY = "gym-lesson-planner-local-operations-demo-v1";
+const LOCAL_REMINDER_STORAGE_KEY = "gym-lesson-planner-local-reminders-v1";
 const LOCAL_CUSTOM_BOARD_STORAGE_KEY = "gym-lesson-planner-local-custom-boards-v1";
 const LOCAL_STATION_BOARD_OVERRIDE_STORAGE_KEY = "gym-lesson-planner-local-station-board-overrides-v1";
 const LOCAL_AREA_CATALOG_STORAGE_KEY = "gym-lesson-planner-local-area-catalog-v1";
@@ -210,7 +243,7 @@ const LIBRARY_ROW_HEIGHT_MAX = 118;
 const LIBRARY_ROW_HEIGHT_STEP = 18;
 const LEGACY_RECURRING_TASK_ID = "set-bar-station-mats";
 const TODAY_LESSON_PLAN_ID = "legacy-current";
-const TODAY_LESSON_PLAN_DATE = scheduleDayAdvisoryDemo.date.iso;
+const FUTURE_SAMPLE_CLASS_VALUE = "__sample_level_3__";
 const CLASS_AND_SCHEDULE_SETUP_GUIDE = [
   "CREATE A CLASS",
   "1. Open a current or future lesson, switch to EDIT, then tap + CREATE CLASS.",
@@ -325,23 +358,6 @@ type SafeScheduleImportPreview = {
   fileName: string;
   fileSize: number;
   result: SafeScheduleParseResult;
-};
-
-type LessonPlanStorage = "legacy" | "scoped";
-
-type LessonPlanMeta = {
-  id: string;
-  date: string;
-  title: string;
-  createdAt: string;
-  updatedAt: string;
-  storage: LessonPlanStorage;
-};
-
-type StoredLessonPlanIndex = {
-  version: 1;
-  activePlanId: string;
-  plans: LessonPlanMeta[];
 };
 
 type PlanShelf = "PAST" | "FUTURE" | null;
@@ -491,6 +507,8 @@ type EventEditorGroup = {
 };
 
 type UpdateDecision = "IMPORTANT" | "LATER" | "REJECTED";
+
+type PlannerTaskDisplay = Pick<DemoOperationTask, "id" | "title" | "kind" | "detail" | "rollForwardCopy">;
 
 type StoredOperations = {
   version: 2;
@@ -899,6 +917,37 @@ function normalizeLessonPhase(phase: LessonPhase): LessonPhase {
   };
 }
 
+function hasScheduleGeneratedPhase(phases: readonly LessonPhase[]): boolean {
+  return phases.some((phase) => phase.id.startsWith("schedule-safe-") || phase.id.startsWith("schedule-local-"));
+}
+
+/**
+ * The original sample lesson is useful only until a coach selects a real
+ * class schedule. Treat its completely untouched visual blocks as starter
+ * shells, while preserving every changed phase or entered coaching detail.
+ */
+function isUntouchedStarterSamplePhase(phase: LessonPhase): boolean {
+  const starter = phaseData.find((candidate) => candidate.id === phase.id);
+  if (!starter) return false;
+  const starterRange = parseLessonTimeRange(starter.time);
+  const phaseRange = parseLessonTimeRange(phase.time);
+  return phase.eventId === (starter.eventId ?? starter.id)
+    && phase.eventLabel === (starter.eventLabel ?? starter.title)
+    && phase.title === starter.title
+    && phase.mode === starter.mode
+    && Boolean(phase.isRequired) === Boolean(starter.isRequired)
+    && Boolean(starterRange && phaseRange
+      && starterRange.start === phaseRange.start
+      && starterRange.end === phaseRange.end)
+    && phase.zones.length === 0
+    && !(phase.parkedZones?.length)
+    && phase.text.length === 0
+    && !(phase.textCards?.length)
+    && !phase.note?.trim()
+    && !phase.pendingEventEnd
+    && !phase.scheduleProvenance;
+}
+
 function makeInitialLesson(): LessonPhase[] {
   return phaseData.map(normalizeLessonPhase);
 }
@@ -1162,27 +1211,6 @@ function isLessonPhase(value: unknown): value is LessonPhase {
 
 function hasUniquePhaseIds(phases: LessonPhase[]): boolean {
   return new Set(phases.map((phase) => phase.id)).size === phases.length;
-}
-
-function isLessonPlanMeta(value: unknown): value is LessonPlanMeta {
-  if (!value || typeof value !== "object") return false;
-  const plan = value as Partial<LessonPlanMeta>;
-  return typeof plan.id === "string"
-    && isLessonPlanDate(plan.date ?? "")
-    && typeof plan.title === "string"
-    && typeof plan.createdAt === "string"
-    && typeof plan.updatedAt === "string"
-    && (plan.storage === "legacy" || plan.storage === "scoped");
-}
-
-function isStoredLessonPlanIndex(value: unknown): value is StoredLessonPlanIndex {
-  if (!value || typeof value !== "object") return false;
-  const index = value as Partial<StoredLessonPlanIndex>;
-  return index.version === 1
-    && typeof index.activePlanId === "string"
-    && Array.isArray(index.plans)
-    && index.plans.every(isLessonPlanMeta)
-    && new Set(index.plans.map((plan) => plan.id)).size === index.plans.length;
 }
 
 function isStoredLesson(value: unknown): value is StoredLesson {
@@ -1599,24 +1627,19 @@ function formatLessonPlanDate(value: string): string {
   }).format(new Date(`${value}T12:00:00`)).toUpperCase();
 }
 
-function nextLessonPlanDate(value: string): string {
-  const date = new Date(`${isLessonPlanDate(value) ? value : TODAY_LESSON_PLAN_DATE}T12:00:00`);
-  date.setDate(date.getDate() + 1);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
 function lessonPlanStorageKey(planId: string): string {
   return `gym-lesson-planner-local-plan-${planId}-v1`;
 }
 
-function makeLessonPlanMeta(date: string, storage: LessonPlanStorage, now = new Date().toISOString()): LessonPlanMeta {
+function makeLegacyLessonPlanMeta(date: string, now = new Date().toISOString()): LessonPlanMeta {
   return {
-    id: storage === "legacy" ? TODAY_LESSON_PLAN_ID : `lesson-${date}`,
+    id: TODAY_LESSON_PLAN_ID,
     date,
+    classId: null,
     title: "LEVEL 3 LESSON",
     createdAt: now,
     updatedAt: now,
-    storage,
+    storage: "legacy",
   };
 }
 
@@ -1823,6 +1846,7 @@ function EventEditor({
   onClose,
   onUpdateEvent,
   onUpdatePhaseTitle,
+  onUpdatePhaseTime,
   onUpdatePhaseStart,
   onSetPendingEventStart,
   onOpenPhase,
@@ -1831,6 +1855,7 @@ function EventEditor({
   onMoveEvent,
   onRepairTimes,
   onAddEventBetween,
+  onAddEventAfter,
   onSearchOpenStations,
   onAddOpenStation,
 }: {
@@ -1844,6 +1869,7 @@ function EventEditor({
   onClose: () => void;
   onUpdateEvent: (eventId: string, value: string) => void;
   onUpdatePhaseTitle: (phaseId: string, value: string) => void;
+  onUpdatePhaseTime: (phaseId: string, value: string) => void;
   onUpdatePhaseStart: (phaseId: string, value: string) => void;
   onSetPendingEventStart: (eventId: string, value: string) => void;
   onOpenPhase: (phaseId: string) => void;
@@ -1852,6 +1878,7 @@ function EventEditor({
   onMoveEvent: (eventId: string, direction: "up" | "down") => void;
   onRepairTimes: () => void;
   onAddEventBetween: (previousEventId: string, nextEventId: string) => void;
+  onAddEventAfter: (eventId: string) => void;
   onSearchOpenStations: (eventId: string) => void;
   onAddOpenStation: (eventId: string, panelId: string) => void;
 }) {
@@ -1870,7 +1897,7 @@ function EventEditor({
             const pendingEnd = firstPhase.pendingEventEnd;
             const eventIsPending = Boolean(pendingEnd && !eventWindow(event.phases));
             const startOptions = eventIsPending
-              ? eventStartOptionsBetween(eventWindow(previousEvent?.phases ?? [])?.start ?? null, eventWindow(previousEvent?.phases ?? [])?.end ?? null)
+              ? eventSplitStartOptions(previousEvent?.phases ?? [], pendingEnd ?? null)
               : [];
             const eventIssues = issues.filter((issue) => issue.eventId === event.id || issue.relatedEventId === event.id);
             return (
@@ -1912,6 +1939,12 @@ function EventEditor({
                           options={startOptions}
                           onStartChange={(value) => onSetPendingEventStart(event.id, value)}
                         />
+                      ) : event.phases.length === 1 && !phase.pendingEventEnd ? (
+                        <LessonTimeRangePicker
+                          value={phase.time}
+                          label={phase.title}
+                          onChange={(value) => onUpdatePhaseTime(phase.id, value)}
+                        />
                       ) : <EventPhaseTimePicker
                         phases={event.phases}
                         phaseId={phase.id}
@@ -1940,7 +1973,7 @@ function EventEditor({
                   </div> : null}
                 </div>
               </article>
-              {nextEvent ? <button type="button" className="event-editor-add-between" onClick={() => onAddEventBetween(event.id, nextEvent.id)}>+ NEW EVENT HERE</button> : null}
+              {nextEvent ? <button type="button" className="event-editor-add-between" onClick={() => onAddEventBetween(event.id, nextEvent.id)}>+ NEW EVENT HERE</button> : <button type="button" className="event-editor-add-between" onClick={() => onAddEventAfter(event.id)} disabled={!eventWindow(event.phases)} title={eventWindow(event.phases) ? undefined : "Set this event's start and end before adding another event after it."}>+ NEW EVENT AFTER THIS EVENT</button>}
               </Fragment>
             );
           })}
@@ -1956,6 +1989,7 @@ function LegacyLessonDocument({
   attendanceRoster,
   tasks,
   taskIsDone,
+  taskIsDisabled,
   className,
   dateLabel,
   dateIso,
@@ -1966,8 +2000,9 @@ function LegacyLessonDocument({
   phases: LessonPhase[];
   attendanceById: Record<string, AttendanceStatus>;
   attendanceRoster: Array<{ id: string; name: string }>;
-  tasks: DemoOperationTask[];
+  tasks: PlannerTaskDisplay[];
   taskIsDone: (taskId: string) => boolean;
+  taskIsDisabled: (taskId: string) => boolean;
   className: string;
   dateLabel: string;
   dateIso: string;
@@ -2036,9 +2071,10 @@ function LegacyLessonDocument({
           <div className="legacy-todo-list">
             {tasks.map((task) => {
               const isDone = taskIsDone(task.id);
+              const isDisabled = taskIsDisabled(task.id);
               return (
                 <label key={task.id} className={`legacy-todo-check ${isDone ? "completed" : ""}`}>
-                  <input type="checkbox" checked={isDone} onChange={(event) => onSetTaskDone(task.id, event.currentTarget.checked)} />
+                  <input type="checkbox" checked={isDone} disabled={isDisabled} onChange={(event) => onSetTaskDone(task.id, event.currentTarget.checked)} />
                   <span>{task.title}</span>
                 </label>
               );
@@ -2078,9 +2114,10 @@ export default function Home() {
   const [lessonToday, setLessonToday] = useState(localLessonPlanDate);
   const [activePhaseId, setActivePhaseId] = useState("l3-f2");
   const [mode, setMode] = useState<"EDIT" | "VIEW">("EDIT");
-  const [activeLessonPlan, setActiveLessonPlan] = useState<LessonPlanMeta>(() => makeLessonPlanMeta(TODAY_LESSON_PLAN_DATE, "legacy"));
+  const [activeLessonPlan, setActiveLessonPlan] = useState<LessonPlanMeta>(() => makeLegacyLessonPlanMeta(localLessonPlanDate()));
   const activeLessonPlanIdRef = useRef(activeLessonPlan.id);
   const lessonModeRef = useRef(mode);
+  const bootScheduleReconciledPlanKeyRef = useRef<string | null>(null);
   const classSetupGuideRef = useRef<HTMLTextAreaElement | null>(null);
   const newIdeaCameraInputRef = useRef<HTMLInputElement | null>(null);
   const newIdeaMediaInputRef = useRef<HTMLInputElement | null>(null);
@@ -2095,9 +2132,12 @@ export default function Home() {
   const [isLibraryWindow, setIsLibraryWindow] = useState(false);
   activeLessonPlanIdRef.current = activeLessonPlan.id;
   lessonModeRef.current = mode;
-  const [lessonPlanIndex, setLessonPlanIndex] = useState<StoredLessonPlanIndex | null>(null);
+  const [lessonPlanIndex, setLessonPlanIndex] = useState<LessonPlanIndex | null>(null);
   const [planShelf, setPlanShelf] = useState<PlanShelf>(null);
-  const [futurePlanDate, setFuturePlanDate] = useState(() => nextLessonPlanDate(TODAY_LESSON_PLAN_DATE));
+  const [futurePlanDate, setFuturePlanDate] = useState(() => localLessonPlanDate());
+  const [futurePlanClassId, setFuturePlanClassId] = useState<string | null>(null);
+  const [futurePlanClassChosen, setFuturePlanClassChosen] = useState(false);
+  const [futurePlanManualWeek, setFuturePlanManualWeek] = useState<ScheduleWeek | "">("");
   const [hydratedPlanId, setHydratedPlanId] = useState<string | null>(null);
   const [isEventEditorOpen, setIsEventEditorOpen] = useState(false);
   const [openStationSearchEventId, setOpenStationSearchEventId] = useState<string | null>(null);
@@ -2161,6 +2201,7 @@ export default function Home() {
   const [libraryEditDraft, setLibraryEditDraft] = useState<LibraryEditDraft | null>(null);
   const [editingIdeaMediaFile, setEditingIdeaMediaFile] = useState<File | null>(null);
   const [removeEditingIdeaMedia, setRemoveEditingIdeaMedia] = useState(false);
+  const [removeEditingStation, setRemoveEditingStation] = useState(false);
   const [isSavingLibraryEdit, setIsSavingLibraryEdit] = useState(false);
   const [removeCandidate, setRemoveCandidate] = useState<LibraryItem | null>(null);
   const [isDeletingIdea, setIsDeletingIdea] = useState(false);
@@ -2184,6 +2225,10 @@ export default function Home() {
   const [newIdeaTags, setNewIdeaTags] = useState("");
   const [newIdeaMats, setNewIdeaMats] = useState("");
   const [newIdeaMediaFile, setNewIdeaMediaFile] = useState<File | null>(null);
+  const [newIdeaStationSetup, setNewIdeaStationSetup] = useState<StationSetup | null>(null);
+  const [stationSetupsById, setStationSetupsById] = useState<Record<string, StationSetup>>({});
+  const [stationMakerSetup, setStationMakerSetup] = useState<StationSetup | null>(null);
+  const [stationMakerTarget, setStationMakerTarget] = useState<"new" | LibraryItem | null>(null);
   const [isSavingNewIdea, setIsSavingNewIdea] = useState(false);
   const newIdeaMediaPreviewUrl = useLocalFileUrl(newIdeaMediaFile);
   const editingIdeaMediaPreviewUrl = useLocalFileUrl(editingIdeaMediaFile);
@@ -2194,6 +2239,16 @@ export default function Home() {
   const [viewAttendanceByPlanId, setViewAttendanceByPlanId] = useState<Record<string, Record<string, AttendanceStatus>>>({});
   const [updateDecisionByRevision, setUpdateDecisionByRevision] = useState<Record<string, UpdateDecision>>({});
   const [hasLoadedOperations, setHasLoadedOperations] = useState(false);
+  const [reminderStorage, setReminderStorage] = useState<LocalReminderStorage>(emptyLocalReminderStorage);
+  const [hasLoadedReminders, setHasLoadedReminders] = useState(false);
+  const [isReminderFormOpen, setIsReminderFormOpen] = useState(false);
+  const [reminderTitleDraft, setReminderTitleDraft] = useState("");
+  const [reminderDetailDraft, setReminderDetailDraft] = useState("");
+  const [reminderCadenceDraft, setReminderCadenceDraft] = useState<LocalReminderCadence>("recurring");
+  const [reminderScopeDraft, setReminderScopeDraft] = useState<"all_classes" | "classes" | "lesson">("classes");
+  const [reminderStartDateDraft, setReminderStartDateDraft] = useState(() => localLessonPlanDate());
+  const [reminderEndDateDraft, setReminderEndDateDraft] = useState("");
+  const [reminderRollForwardDraft, setReminderRollForwardDraft] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(30 * 60);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   useEffect(() => {
@@ -2248,13 +2303,48 @@ export default function Home() {
   const activeLessonDateLabel = formatLessonPlanDate(activeLessonPlan.date);
   const isPastActivePlan = isPastLessonPlanDate(activeLessonPlan.date, lessonToday);
   const operationTaskDoneById = operationTaskDoneByPlanId[activeLessonPlan.id] ?? {};
-  const activeLocalClass = useMemo(
-    () => localClassById(classStorage, activeClassId),
-    [activeClassId, classStorage],
+  const reminderLesson = useMemo(() => ({
+    planId: activeLessonPlan.id,
+    lessonId: activeLessonPlan.id,
+    classId: activeLessonPlan.classId,
+    date: activeLessonPlan.date,
+    phaseIds: lessonPhases.map((phase) => phase.id),
+  }), [activeLessonPlan.classId, activeLessonPlan.date, activeLessonPlan.id, lessonPhases]);
+  const activeReminders = useMemo(
+    () => resolveLocalReminders(reminderStorage, reminderLesson),
+    [reminderLesson, reminderStorage],
   );
+  const plannerTasks = useMemo<PlannerTaskDisplay[]>(() => [
+    ...operationTasks,
+    ...activeReminders.map(({ template, isRollForward }) => ({
+      id: template.id,
+      title: template.title,
+      kind: template.cadence === "recurring" ? "RECURRING" : "TEMPORARY",
+      detail: template.detail
+        ?? (template.scope.kind === "all_classes"
+          ? "Every class · your local reminder."
+          : template.scope.kind === "classes"
+            ? "Selected class · your local reminder."
+            : "This lesson only · your local reminder."),
+      ...(template.cadence === "temporary" && template.rollForwardUntilCompleted
+        ? { rollForwardCopy: isRollForward
+          ? "Past the original date range · it stays here until you complete it."
+          : "Rolls forward until completed after its selected end date." }
+        : {}),
+    })),
+  ], [activeReminders]);
+  const activeLocalClass = useMemo(
+    () => localClassById(classStorage, activeLessonPlan.classId),
+    [activeLessonPlan.classId, classStorage],
+  );
+  const hasMissingActiveClass = Boolean(activeLessonPlan.classId && !activeLocalClass);
+  const activePlanClassName = activeLocalClass?.name
+    ?? (hasMissingActiveClass
+      ? activeLessonPlan.title.replace(/\s+LESSON$/i, "").trim() || "REMOVED LOCAL CLASS"
+      : "SAMPLE LEVEL 3");
   const attendanceRoster = useMemo(
-    () => activeLocalClass?.students ?? attendance,
-    [activeLocalClass],
+    () => activeLocalClass?.students ?? (hasMissingActiveClass ? [] : attendance),
+    [activeLocalClass, hasMissingActiveClass],
   );
   const localScheduleBlocks = useMemo(
     () => activeLocalClass
@@ -2281,19 +2371,68 @@ export default function Home() {
       : null,
     [activeLessonPlan.date, linkedSafeScheduleGroup, safeScheduleBundle, safeScheduleStorageState.manualWeekByDate],
   );
+  const futureLocalClass = useMemo(
+    () => futurePlanClassId ? localClassById(classStorage, futurePlanClassId) : null,
+    [classStorage, futurePlanClassId],
+  );
+  const futureLinkedSafeScheduleGroup = futureLocalClass
+    ? safeScheduleStorageState.scheduleGroupByClassId[futureLocalClass.id] ?? null
+    : null;
+  const futurePlanResolvedWeek = futurePlanManualWeek
+    || safeScheduleStorageState.manualWeekByDate[futurePlanDate]
+    || null;
+  const futurePlanSafeScheduleDay = useMemo(
+    () => safeScheduleBundle && isLessonPlanDate(futurePlanDate)
+      ? resolveSafeScheduleDay(
+        safeScheduleBundle,
+        futurePlanDate,
+        futureLinkedSafeScheduleGroup,
+        futurePlanResolvedWeek,
+      )
+      : null,
+    [futureLinkedSafeScheduleGroup, futurePlanDate, futurePlanResolvedWeek, safeScheduleBundle],
+  );
+  const futurePlanTemplate = useMemo(
+    () => isLessonPlanDate(futurePlanDate)
+      ? createLessonScheduleTemplate({
+        lessonDate: futurePlanDate,
+        selectedClass: futureLocalClass,
+        safeScheduleDay: futurePlanSafeScheduleDay,
+      })
+      : createLessonScheduleTemplate({
+        lessonDate: localLessonPlanDate(),
+        selectedClass: null,
+        safeScheduleDay: null,
+      }),
+    [futureLocalClass, futurePlanDate, futurePlanSafeScheduleDay],
+  );
   const usesSafeScheduleDay = safeScheduleDay?.status === "ready";
-  const activeScheduleBlockCount = usesSafeScheduleDay
+  const activeScheduleBlockCount = hasMissingActiveClass
+    ? 0
+    : usesSafeScheduleDay
     ? safeScheduleDay.nonOpenBlocks.length
     : activeLocalClass ? localScheduleBlocks.length : scheduleDayAdvisoryDemo.rotationBlocks.length;
-  const activeScheduleGroup = linkedSafeScheduleGroup
+  const activeScheduleGroup = hasMissingActiveClass
+    ? activePlanClassName
+    : linkedSafeScheduleGroup
     ?? activeLocalClass?.group
     ?? activeLocalClass?.name
     ?? scheduleDayAdvisoryDemo.selectedGroup;
-  const pastLessonPlans = useMemo(
+  const savedLessonPlans = useMemo(
     () => (lessonPlanIndex?.plans ?? [])
-      .filter((plan) => plan.id !== activeLessonPlan.id && isPastLessonPlanDate(plan.date, lessonToday))
-      .sort((first, second) => second.date.localeCompare(first.date)),
-    [activeLessonPlan.id, lessonPlanIndex, lessonToday],
+      .filter((plan) => plan.id !== activeLessonPlan.id)
+      .sort((first, second) => second.date.localeCompare(first.date) || second.updatedAt.localeCompare(first.updatedAt)),
+    [activeLessonPlan.id, lessonPlanIndex],
+  );
+  const removeClassPlanCount = useMemo(
+    () => removeClassCandidate
+      ? (lessonPlanIndex?.plans.filter((plan) => plan.classId === removeClassCandidate.id).length ?? 0)
+        + (activeLessonPlan.classId === removeClassCandidate.id
+          && !lessonPlanIndex?.plans.some((plan) => plan.id === activeLessonPlan.id)
+          ? 1
+          : 0)
+      : 0,
+    [activeLessonPlan.classId, activeLessonPlan.id, lessonPlanIndex, removeClassCandidate],
   );
   const renderingCustomBoards = useMemo(
     () => isPastActivePlan ? activeBoardSnapshot?.customBoards ?? [] : customBoards,
@@ -2471,9 +2610,7 @@ export default function Home() {
     : activePhase.zones.filter((zone) => isPastActivePlan || !isZoneHidden(zone));
   const isActivePhasePlacementMode = mode === "EDIT" && pendingZonePlacement?.phaseId === activePhase.id;
   const placementAllowsText = pendingZonePlacement?.kind !== "visual-label";
-  const shouldShowTextLane = activePhase.mode === "TEXT"
-    || (activePhase.mode === "MIXED"
-      && (Boolean(activePhase.text.length || activePhase.textCards?.length) || (isActivePhasePlacementMode && placementAllowsText)));
+  const shouldShowTextLane = activePhase.mode !== "VISUAL";
 
   useEffect(() => {
     if (!isTimerRunning || timerSeconds <= 0) return;
@@ -2507,18 +2644,18 @@ export default function Home() {
     try {
       const storedIndex = window.localStorage.getItem(LOCAL_LESSON_PLAN_INDEX_STORAGE_KEY);
       const parsedIndex: unknown = storedIndex ? JSON.parse(storedIndex) : null;
-      const legacyMeta = makeLessonPlanMeta(TODAY_LESSON_PLAN_DATE, "legacy");
-      let index = isStoredLessonPlanIndex(parsedIndex)
-        ? parsedIndex
-        : { version: 1 as const, activePlanId: legacyMeta.id, plans: [legacyMeta] };
+      const legacyMeta = makeLegacyLessonPlanMeta(localLessonPlanDate());
+      const normalizedIndex = normalizeLessonPlanIndex(parsedIndex);
+      let index: LessonPlanIndex = normalizedIndex?.index
+        ?? { version: 2, activePlanId: legacyMeta.id, plans: [legacyMeta] };
 
-      if (!isStoredLessonPlanIndex(parsedIndex)) {
+      if (!normalizedIndex || normalizedIndex.migrated) {
         window.localStorage.setItem(LOCAL_LESSON_PLAN_INDEX_STORAGE_KEY, JSON.stringify(index));
       }
 
       let activePlan = index.plans.find((plan) => plan.id === index.activePlanId) ?? index.plans[0] ?? legacyMeta;
       if (!index.plans.some((plan) => plan.id === activePlan.id)) {
-        index = { ...index, activePlanId: legacyMeta.id, plans: [legacyMeta] };
+        index = { version: 2, activePlanId: legacyMeta.id, plans: [legacyMeta] };
         activePlan = legacyMeta;
         window.localStorage.setItem(LOCAL_LESSON_PLAN_INDEX_STORAGE_KEY, JSON.stringify(index));
       }
@@ -2526,29 +2663,47 @@ export default function Home() {
       const storedLesson = window.localStorage.getItem(
         activePlan.storage === "legacy" ? LOCAL_LESSON_STORAGE_KEY : lessonPlanStorageKey(activePlan.id),
       );
-      const restoredSource = storedLesson ? restoreLesson(JSON.parse(storedLesson)) : restoreLesson(makeBlankStoredLesson());
+      const restoredSource = storedLesson
+        ? restoreLesson(JSON.parse(storedLesson))
+        : restoreLesson(activePlan.storage === "legacy"
+          ? makeBlankStoredLesson()
+          : makeScheduledStoredLesson(activePlan.date, activePlan.classId));
       const restored = restoredSource && !isPastLessonPlanDate(activePlan.date, localLessonPlanDate())
         ? migrateEditableRestoredLesson(restoredSource)
         : restoredSource;
 
       if (restored) {
-        activeLessonPlanIdRef.current = activePlan.id;
-        setActiveLessonPlan(activePlan);
-        setLessonPlanIndex(index);
+        let planWithClass = activePlan.classId === restored.classId
+          ? activePlan
+          : { ...activePlan, classId: restored.classId };
+        let indexedPlan = indexWithLessonPlan(index, planWithClass, planWithClass.id);
+        const classReconciliationBlocked = !indexedPlan;
+        if (!indexedPlan) {
+          planWithClass = activePlan;
+          indexedPlan = index;
+        }
+        if (indexedPlan !== index) window.localStorage.setItem(LOCAL_LESSON_PLAN_INDEX_STORAGE_KEY, JSON.stringify(indexedPlan));
+        activeLessonPlanIdRef.current = planWithClass.id;
+        setActiveLessonPlan(planWithClass);
+        setLessonPlanIndex(indexedPlan);
         setLessonPhases(restored.phases);
         setTodoDone(restored.todoDone);
         setIsReady(restored.isReady);
-        setActiveClassId(restored.classId);
+        setActiveClassId(planWithClass.classId);
         setAttendanceById(restored.attendanceById);
         setVisualAnchorByCardId(restored.visualAnchorByCardId);
         setVisualLabelLayoutByCardId(restored.visualLabelLayoutByCardId);
         setActiveBoardSnapshot(restored.boardSnapshot);
         setActivePhaseId(restored.phases[0]?.id ?? "l3-f2");
-        setFuturePlanDate(nextLessonPlanDate(localLessonPlanDate()));
-        setHydratedPlanId(activePlan.id);
-        setNotice(restored.migrated
-          ? "LOCAL LESSON PLAN RESTORED · PHASE DATA UPGRADED IN THIS BROWSER"
-          : "LOCAL LESSON PLAN RESTORED · THIS BROWSER ONLY");
+        setFuturePlanDate(localLessonPlanDate());
+        setFuturePlanClassId(planWithClass.classId);
+        setFuturePlanClassChosen(false);
+        setHydratedPlanId(planWithClass.id);
+        setNotice(classReconciliationBlocked
+          ? "LOCAL LESSON PLAN RESTORED · ITS SAVED CLASS COULD NOT BE REASSIGNED BECAUSE THAT DATE ALREADY HAS A PLAN"
+          : restored.migrated
+            ? "LOCAL LESSON PLAN RESTORED · PHASE DATA UPGRADED IN THIS BROWSER"
+            : "LOCAL LESSON PLAN RESTORED · THIS BROWSER ONLY");
       }
     } catch {
       setNotice("LOCAL DEMO DATA ACTIVE · COULD NOT RESTORE THE LAST EDIT");
@@ -2568,7 +2723,7 @@ export default function Home() {
       phases: lessonPhases,
       todoDone,
       isReady,
-      classId: activeClassId,
+      classId: activeLessonPlan.classId,
       attendanceById,
       visualAnchorByCardId,
       visualLabelLayoutByCardId,
@@ -2581,27 +2736,19 @@ export default function Home() {
       window.localStorage.setItem(storageKey, JSON.stringify(savedLesson));
       setActiveBoardSnapshot(savedLesson.boardSnapshot);
       setLessonPlanIndex((current) => {
-        const fallback: StoredLessonPlanIndex = {
-          version: 1,
-          activePlanId: activeLessonPlan.id,
-          plans: [activeLessonPlan],
-        };
-        const source = current ?? fallback;
         const updatedPlan = { ...activeLessonPlan, updatedAt: new Date().toISOString() };
-        const next: StoredLessonPlanIndex = {
-          ...source,
-          activePlanId: activeLessonPlan.id,
-          plans: source.plans.some((plan) => plan.id === activeLessonPlan.id)
-            ? source.plans.map((plan) => plan.id === activeLessonPlan.id ? updatedPlan : plan)
-            : [...source.plans, updatedPlan],
-        };
+        const next = indexWithLessonPlan(current, updatedPlan, activeLessonPlan.id);
+        if (!next) {
+          setNotice("THE LESSON'S CLASS AND DATE ALREADY BELONG TO ANOTHER SAVED PLAN · THE CURRENT PLAN WAS NOT REASSIGNED");
+          return current;
+        }
         window.localStorage.setItem(LOCAL_LESSON_PLAN_INDEX_STORAGE_KEY, JSON.stringify(next));
         return next;
       });
     } catch {
       setNotice("LOCAL LESSON PLAN ACTIVE · BROWSER STORAGE IS UNAVAILABLE");
     }
-  }, [activeClassId, activeLessonPlan, attendanceById, customBoards, hasLoadedCustomBoards, hasLoadedLocalLesson, hasLoadedStationBoardOverrides, hydratedPlanId, isPastActivePlan, isReady, lessonPhases, stationBoardOverrides, todoDone, visualAnchorByCardId, visualLabelLayoutByCardId]);
+  }, [activeLessonPlan, attendanceById, customBoards, hasLoadedCustomBoards, hasLoadedLocalLesson, hasLoadedStationBoardOverrides, hydratedPlanId, isPastActivePlan, isReady, lessonPhases, stationBoardOverrides, todoDone, visualAnchorByCardId, visualLabelLayoutByCardId]);
 
   function currentLessonSnapshot(): StoredLesson {
     return {
@@ -2609,7 +2756,7 @@ export default function Home() {
       phases: lessonPhases,
       todoDone,
       isReady,
-      classId: activeClassId,
+      classId: activeLessonPlan.classId,
       attendanceById,
       visualAnchorByCardId,
       visualLabelLayoutByCardId,
@@ -2625,26 +2772,92 @@ export default function Home() {
     };
   }
 
+  function makeUnscheduledLessonPhase(className: string): LessonPhase {
+    const id = `unscheduled-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    return {
+      id,
+      eventId: id,
+      eventLabel: className,
+      title: "UNSCHEDULED LESSON",
+      time: "TBD",
+      mode: "MIXED",
+      zones: [],
+      parkedZones: [],
+      text: [],
+      textCards: [],
+    };
+  }
+
+  function classLessonTitle(localClass: LocalClass | null): string {
+    return `${localClass?.name ?? "Sample Level 3"} lesson`.toUpperCase();
+  }
+
+  function scheduleTemplateForLesson(
+    date: string,
+    classId: string | null,
+    manualWeek: ScheduleWeek | null = null,
+    scheduleStorage: SafeScheduleStorage = safeScheduleStorageState,
+  ) {
+    const selectedClass = classId ? localClassById(classStorage, classId) : null;
+    const linkedGroup = selectedClass
+      ? scheduleStorage.scheduleGroupByClassId[selectedClass.id] ?? null
+      : null;
+    const safeDay = scheduleStorage.bundle
+      ? resolveSafeScheduleDay(
+        scheduleStorage.bundle,
+        date,
+        linkedGroup,
+        manualWeek ?? scheduleStorage.manualWeekByDate[date] ?? null,
+      )
+      : null;
+    return createLessonScheduleTemplate({
+      lessonDate: date,
+      selectedClass,
+      safeScheduleDay: safeDay,
+    });
+  }
+
+  function makeScheduledStoredLesson(date: string, classId: string | null, manualWeek: ScheduleWeek | null = null): StoredLesson {
+    const selectedClass = classId ? localClassById(classStorage, classId) : null;
+    const template = scheduleTemplateForLesson(date, classId, manualWeek);
+    const phases = template.phases.length
+      ? template.phases
+      : [makeUnscheduledLessonPhase(selectedClass?.name ?? "SAMPLE LEVEL 3")];
+    const blankLesson = makeBlankStoredLesson(classId);
+    return {
+      ...blankLesson,
+      phases,
+      boardSnapshot: createLessonBoardSnapshot(phases, customBoards, stationBoardOverrides),
+    };
+  }
+
+  function reconcileScheduleTemplateForLesson(
+    phases: LessonPhase[],
+    template: ReturnType<typeof scheduleTemplateForLesson>,
+  classId: string | null,
+  fallbackClassName?: string,
+) {
+    const sourcePhases = template.phases.length
+      ? phases.filter((phase) => !isUntouchedStarterSamplePhase(phase))
+      : phases;
+    const reconciled = reconcileLessonSchedulePhases(sourcePhases, template.phases);
+    return {
+      ...reconciled,
+      phases: reconciled.phases.length
+        ? reconciled.phases
+        : [makeUnscheduledLessonPhase(fallbackClassName ?? localClassById(classStorage, classId)?.name ?? "SAMPLE LEVEL 3")],
+    };
+  }
+
   function storageKeyForLessonPlan(plan: LessonPlanMeta): string {
     return plan.storage === "legacy" ? LOCAL_LESSON_STORAGE_KEY : lessonPlanStorageKey(plan.id);
   }
 
-  function indexWithPlan(index: StoredLessonPlanIndex | null, plan: LessonPlanMeta, activePlanId = plan.id): StoredLessonPlanIndex {
-    const source: StoredLessonPlanIndex = index ?? {
-      version: 1,
-      activePlanId,
-      plans: [plan],
-    };
-    return {
-      ...source,
-      activePlanId,
-      plans: source.plans.some((candidate) => candidate.id === plan.id)
-        ? source.plans.map((candidate) => candidate.id === plan.id ? plan : candidate)
-        : [...source.plans, plan],
-    };
+  function indexWithPlan(index: LessonPlanIndex | null, plan: LessonPlanMeta, activePlanId = plan.id): LessonPlanIndex | null {
+    return indexWithLessonPlan(index, plan, activePlanId);
   }
 
-  function persistLessonPlanIndex(index: StoredLessonPlanIndex): boolean {
+  function persistLessonPlanIndex(index: LessonPlanIndex): boolean {
     try {
       window.localStorage.setItem(LOCAL_LESSON_PLAN_INDEX_STORAGE_KEY, JSON.stringify(index));
       setLessonPlanIndex(index);
@@ -2655,7 +2868,7 @@ export default function Home() {
     }
   }
 
-  function persistCurrentLessonForSwitch(): StoredLessonPlanIndex | null {
+  function persistCurrentLessonForSwitch(): LessonPlanIndex | null {
     if (!hasLoadedCustomBoards || !hasLoadedStationBoardOverrides) {
       setNotice("LOCAL BOARD SNAPSHOTS ARE STILL LOADING · TRY AGAIN IN A MOMENT");
       return null;
@@ -2663,6 +2876,10 @@ export default function Home() {
     if (isPastActivePlan) return lessonPlanIndex;
     const savedCurrentPlan = { ...activeLessonPlan, updatedAt: new Date().toISOString() };
     const nextIndex = indexWithPlan(lessonPlanIndex, savedCurrentPlan, activeLessonPlan.id);
+    if (!nextIndex) {
+      setNotice("CURRENT LESSON STAYS OPEN · THAT CLASS ALREADY HAS A PLAN FOR THIS DATE");
+      return null;
+    }
     try {
       window.localStorage.setItem(storageKeyForLessonPlan(savedCurrentPlan), JSON.stringify(currentLessonSnapshot()));
       window.localStorage.setItem(LOCAL_LESSON_PLAN_INDEX_STORAGE_KEY, JSON.stringify(nextIndex));
@@ -2713,7 +2930,7 @@ export default function Home() {
   function hydrateLessonPlan(
     plan: LessonPlanMeta,
     restored: RestoredLesson,
-    index: StoredLessonPlanIndex,
+    index: LessonPlanIndex,
     message: string,
   ) {
     // This guard keeps the current plan's autosave effect from ever writing
@@ -2725,13 +2942,15 @@ export default function Home() {
     setLessonPhases(isPastLessonPlanDate(plan.date, lessonToday) ? restored.phases : refreshAreaZoneMetadata(restored.phases));
     setTodoDone(restored.todoDone);
     setIsReady(restored.isReady);
-    setActiveClassId(restored.classId);
+    setActiveClassId(plan.classId);
     setAttendanceById({ ...restored.attendanceById, ...viewAttendanceByPlanId[plan.id] });
     setVisualAnchorByCardId(restored.visualAnchorByCardId);
     setVisualLabelLayoutByCardId(restored.visualLabelLayoutByCardId);
     setActiveBoardSnapshot(restored.boardSnapshot);
     setActivePhaseId(restored.phases[0]?.id ?? "l3-f2");
-    setFuturePlanDate(nextLessonPlanDate(lessonToday));
+    setFuturePlanDate(plan.date < lessonToday ? lessonToday : plan.date);
+    setFuturePlanClassId(plan.classId);
+    setFuturePlanManualWeek("");
     clearTransientLessonPlanControls();
     const nextMode = isPastLessonPlanDate(plan.date, lessonToday) ? "VIEW" : "EDIT";
     lessonModeRef.current = nextMode;
@@ -2761,17 +2980,40 @@ export default function Home() {
       const stored = window.localStorage.getItem(storageKeyForLessonPlan(plan));
       const restoredSource = stored
         ? restoreLesson(JSON.parse(stored))
-        : restoreLesson(makeBlankStoredLessonForCurrentBoards());
-      const restored = restoredSource && !isPastLessonPlanDate(plan.date, lessonToday)
+        : restoreLesson(plan.storage === "legacy"
+          ? makeBlankStoredLessonForCurrentBoards(plan.classId)
+          : makeScheduledStoredLesson(plan.date, plan.classId));
+      let restored = restoredSource && !isPastLessonPlanDate(plan.date, lessonToday)
         ? migrateEditableRestoredLesson(restoredSource)
         : restoredSource;
       if (!restored) {
         setNotice("THAT LOCAL LESSON PLAN COULD NOT BE OPENED · THE CURRENT PLAN WAS NOT CHANGED");
         return;
       }
-      const needsBoardSnapshotUpgrade = restored.boardSnapshot === null;
-      const frozenBoardSnapshot = restored.boardSnapshot
-        ?? createLessonBoardSnapshot(restored.phases, customBoards, stationBoardOverrides);
+      let planForHydration = plan;
+      if (plan.classId !== restored.classId) {
+        const existing = lessonPlanForIdentity(savedIndex, { date: plan.date, classId: restored.classId });
+        if (existing && existing.id !== plan.id) {
+          setNotice("THAT SAVED CLASS AND DATE ALREADY HAVE A PLAN · OPENING THE EXISTING PLAN INSTEAD");
+          openLessonPlan(existing);
+          return;
+        }
+        planForHydration = { ...plan, classId: restored.classId };
+      }
+      const scheduleTemplate = !isPastLessonPlanDate(planForHydration.date, lessonToday)
+        ? scheduleTemplateForLesson(planForHydration.date, planForHydration.classId)
+        : null;
+      const scheduleReconciliation = scheduleTemplate
+        && (scheduleTemplate.phases.length || hasScheduleGeneratedPhase(restored.phases))
+        ? reconcileScheduleTemplateForLesson(restored.phases, scheduleTemplate, planForHydration.classId)
+        : null;
+      const scheduleWasSynchronized = Boolean(scheduleReconciliation
+        && JSON.stringify(scheduleReconciliation.phases) !== JSON.stringify(restored.phases));
+      if (scheduleReconciliation) restored = { ...restored, phases: scheduleReconciliation.phases };
+      const needsBoardSnapshotUpgrade = restored.boardSnapshot === null || scheduleWasSynchronized;
+      const frozenBoardSnapshot = needsBoardSnapshotUpgrade
+        ? createLessonBoardSnapshot(restored.phases, customBoards, stationBoardOverrides)
+        : restored.boardSnapshot;
       const frozenRestored: RestoredLesson = { ...restored, boardSnapshot: frozenBoardSnapshot };
       let boardSnapshotPersistenceFailed = false;
       if (!stored || needsBoardSnapshotUpgrade) {
@@ -2786,17 +3028,21 @@ export default function Home() {
           boardSnapshotPersistenceFailed = true;
         }
       }
-      const nextIndex = indexWithPlan(savedIndex, plan, plan.id);
+      const nextIndex = indexWithPlan(savedIndex, planForHydration, planForHydration.id);
+      if (!nextIndex) {
+        setNotice("THAT SAVED LESSON COULD NOT BE OPENED · ITS CLASS AND DATE ALREADY BELONG TO ANOTHER PLAN");
+        return;
+      }
       if (!persistLessonPlanIndex(nextIndex)) return;
       hydrateLessonPlan(
-        plan,
+        planForHydration,
         frozenRestored,
         nextIndex,
         `${stored
           ? `${formatLessonPlanDate(plan.date)} OPENED · ${isPastLessonPlanDate(plan.date, lessonToday) ? "PAST SNAPSHOT · READ-ONLY" : "LOCAL LESSON DRAFT"}`
           : `${formatLessonPlanDate(plan.date)} OPENED AS A CLEAN LOCAL TEMPLATE`}${
           needsBoardSnapshotUpgrade ? " · VISUAL BOARD STATE FROZEN NOW" : ""
-        }${boardSnapshotPersistenceFailed ? " · FREEZE COULD NOT BE SAVED" : ""}`,
+        }${scheduleWasSynchronized ? " · DAY SCHEDULE SYNCED" : ""}${boardSnapshotPersistenceFailed ? " · FREEZE COULD NOT BE SAVED" : ""}`,
       );
       window.requestAnimationFrame(() => scrollToPlannerSection("today"));
     } catch {
@@ -2805,69 +3051,147 @@ export default function Home() {
   }
 
   function openTodayLessonPlan() {
-    const existing = lessonPlanIndex?.plans.find((plan) => plan.date === lessonToday)
-      ?? (lessonToday === TODAY_LESSON_PLAN_DATE ? makeLessonPlanMeta(TODAY_LESSON_PLAN_DATE, "legacy") : undefined);
+    const existing = lessonPlanForIdentity(lessonPlanIndex, { date: lessonToday, classId: activeClassId });
     if (existing) {
       openLessonPlan(existing);
       return;
     }
-
-    const savedIndex = persistCurrentLessonForSwitch();
-    if (!savedIndex) return;
-    const currentPlan = makeLessonPlanMeta(lessonToday, "scoped");
-    const blankLesson = makeBlankStoredLessonForCurrentBoards();
-    const restored = restoreLesson(blankLesson);
-    if (!restored) return;
-    const nextIndex = indexWithPlan(savedIndex, currentPlan, currentPlan.id);
-    try {
-      window.localStorage.setItem(storageKeyForLessonPlan(currentPlan), JSON.stringify(blankLesson));
-      if (!persistLessonPlanIndex(nextIndex)) return;
-      hydrateLessonPlan(
-        currentPlan,
-        restored,
-        nextIndex,
-        `${formatLessonPlanDate(currentPlan.date)} STARTED · BLANK LOCAL PLAN · PAST PLANS STAY UNCHANGED`,
-      );
-      window.requestAnimationFrame(() => scrollToPlannerSection("today"));
-    } catch {
-      setNotice("TODAY'S LOCAL PLAN COULD NOT START · THE CURRENT PLAN WAS NOT CHANGED");
-    }
+    setFuturePlanDate(lessonToday);
+    setFuturePlanClassId(null);
+    setFuturePlanClassChosen(false);
+    setFuturePlanManualWeek("");
+    setPlanShelf("FUTURE");
+    setNotice("CHOOSE THE CLASS FOR TODAY'S NEW LESSON PLAN");
   }
 
-  function createFutureLessonPlan(requestedDate = futurePlanDate) {
+  function createFutureLessonPlan(requestedDate = futurePlanDate, requestedClassId = futurePlanClassId) {
     const date = requestedDate.trim();
-    if (!isLessonPlanDate(date) || date <= lessonToday) {
-      setNotice(`CHOOSE A DATE AFTER ${formatLessonPlanDate(lessonToday)} FOR A FUTURE PLAN`);
+    if (!isLessonPlanDate(date) || date < lessonToday) {
+      setNotice(`CHOOSE TODAY OR A LATER DATE FOR A NEW LESSON PLAN`);
+      return;
+    }
+    if (!futurePlanClassChosen) {
+      setNotice("CHOOSE A CLASS / TYPE BEFORE STARTING THIS LESSON PLAN");
       return;
     }
 
-    const existing = lessonPlanIndex?.plans.find((plan) => plan.date === date);
+    const selectedClass = requestedClassId ? localClassById(classStorage, requestedClassId) : null;
+    if (requestedClassId && !selectedClass) {
+      setNotice("THAT LOCAL CLASS IS NO LONGER AVAILABLE · CHOOSE ANOTHER CLASS");
+      return;
+    }
+
+    const existing = lessonPlanForIdentity(lessonPlanIndex, { date, classId: requestedClassId });
     if (existing) {
-      setNotice("A LOCAL LESSON PLAN ALREADY EXISTS FOR THAT DATE · OPENING IT NOW");
+      setNotice("A LOCAL LESSON PLAN ALREADY EXISTS FOR THAT DATE AND CLASS · OPENING IT NOW");
       openLessonPlan(existing);
       return;
     }
 
+    const manualWeek = futurePlanManualWeek || safeScheduleStorageState.manualWeekByDate[date] || null;
+    const template = scheduleTemplateForLesson(date, requestedClassId, manualWeek);
+    if (safeScheduleBundle && selectedClass && template.safeScheduleStatus === "manual_week_confirmation_required") {
+      setNotice("CHOOSE ODD OR EVEN BEFORE STARTING THIS FIFTH-WEEK LESSON");
+      return;
+    }
+    if (futurePlanManualWeek) {
+      const withWeek = setSafeScheduleManualWeek(safeScheduleStorageState, date, futurePlanManualWeek);
+      if (!withWeek || !persistSafeScheduleStorage(withWeek)) return;
+    }
+
     const savedIndex = persistCurrentLessonForSwitch();
     if (!savedIndex) return;
-    const futurePlan = makeLessonPlanMeta(date, "scoped");
-    const blankLesson = makeBlankStoredLessonForCurrentBoards();
+    const futurePlan = createLessonPlanMeta({
+      identity: { date, classId: requestedClassId },
+      title: classLessonTitle(selectedClass),
+      existingPlanIds: savedIndex.plans.map((plan) => plan.id),
+    });
+    if (!futurePlan) {
+      setNotice("NEW LESSON PLAN COULD NOT START · YOUR CURRENT PLAN WAS NOT CHANGED");
+      return;
+    }
+    const blankLesson = makeScheduledStoredLesson(date, requestedClassId, manualWeek);
     const restored = restoreLesson(blankLesson);
     if (!restored) return;
-    const nextIndex = indexWithPlan(savedIndex, futurePlan, futurePlan.id);
+    const added = addLessonPlan(savedIndex, futurePlan, futurePlan.id);
+    if (!added) {
+      setNotice("NEW LESSON PLAN COULD NOT START · YOUR CURRENT PLAN WAS NOT CHANGED");
+      return;
+    }
+    if (!added.added) {
+      openLessonPlan(added.plan);
+      return;
+    }
     try {
       window.localStorage.setItem(storageKeyForLessonPlan(futurePlan), JSON.stringify(blankLesson));
-      if (!persistLessonPlanIndex(nextIndex)) return;
+      if (!persistLessonPlanIndex(added.index)) return;
       hydrateLessonPlan(
         futurePlan,
         restored,
-        nextIndex,
-        `${formatLessonPlanDate(futurePlan.date)} STARTED · BLANK LOCAL PLAN · TODAY IS UNCHANGED`,
+        added.index,
+        `${formatLessonPlanDate(futurePlan.date)} STARTED · ${template.source === "safe-schedule"
+          ? "FULL SCHEDULE PHASES LOADED"
+          : template.source === "local-class"
+            ? "CLASS SCHEDULE PHASES LOADED"
+            : "UNSCHEDULED BLANK PHASE ADDED"}`,
       );
       window.requestAnimationFrame(() => scrollToPlannerSection("today"));
     } catch {
       setNotice("FUTURE PLAN COULD NOT START · THE CURRENT PLAN WAS NOT CHANGED");
     }
+  }
+
+  function applyScheduleTemplateToCurrentLesson(
+    template: ReturnType<typeof scheduleTemplateForLesson>,
+    targetClassId = activeLessonPlan.classId,
+    fallbackClassName?: string,
+  ): boolean {
+    if (!template.phases.length && !hasScheduleGeneratedPhase(lessonPhases)) return false;
+    const reconciled = reconcileScheduleTemplateForLesson(lessonPhases, template, targetClassId, fallbackClassName);
+    setLessonPhases(reconciled.phases);
+    setActivePhaseId((current) => reconciled.replacementPhaseIdByOldId[current]
+      ?? (reconciled.phases.some((phase) => phase.id === current)
+        ? current
+        : reconciled.phases[0]?.id ?? ""));
+    return true;
+  }
+
+  function syncActiveLessonForScheduleChange(scheduleStorage: SafeScheduleStorage) {
+    if (isPastActivePlan || !activeLessonPlan.classId) return null;
+    const template = scheduleTemplateForLesson(
+      activeLessonPlan.date,
+      activeLessonPlan.classId,
+      null,
+      scheduleStorage,
+    );
+    if (!template.phases.length && !hasScheduleGeneratedPhase(lessonPhases)) return null;
+    const reconciled = reconcileScheduleTemplateForLesson(lessonPhases, template, activeLessonPlan.classId);
+    setLessonPhases(reconciled.phases);
+    setActivePhaseId((current) => reconciled.replacementPhaseIdByOldId[current]
+      ?? (reconciled.phases.some((phase) => phase.id === current)
+        ? current
+        : reconciled.phases[0]?.id ?? ""));
+    return { template, reconciled };
+  }
+
+  function syncCurrentLessonSchedule() {
+    if (activePlanIsReadOnly()) return;
+    if (!activeLessonPlan.classId) {
+      setNotice("SELECT A LOCAL CLASS BEFORE SYNCING THIS LESSON'S SCHEDULE");
+      return;
+    }
+    const template = scheduleTemplateForLesson(activeLessonPlan.date, activeLessonPlan.classId);
+    if (!template.phases.length && !hasScheduleGeneratedPhase(lessonPhases)) {
+      setNotice("NO MATCHING SCHEDULE BLOCKS WERE FOUND · YOUR EXISTING PHASES STAY UNCHANGED");
+      return;
+    }
+    const reconciled = reconcileScheduleTemplateForLesson(lessonPhases, template, activeLessonPlan.classId);
+    setLessonPhases(reconciled.phases);
+    setActivePhaseId((current) => reconciled.replacementPhaseIdByOldId[current]
+      ?? (reconciled.phases.some((phase) => phase.id === current)
+        ? current
+        : reconciled.phases[0]?.id ?? ""));
+    setNotice(`${template.phases.length ? `${template.phases.length} SCHEDULE PHASE${template.phases.length === 1 ? "" : "S"} NOW MATCH THE DAY` : "SCHEDULE BLOCKS CLEARED · A BLANK LESSON PHASE IS READY"}${reconciled.preservedScheduledCount || reconciled.preservedCustomCount ? ` · ${reconciled.preservedScheduledCount + reconciled.preservedCustomCount} PLANNED PHASE${reconciled.preservedScheduledCount + reconciled.preservedCustomCount === 1 ? "" : "S"} KEPT` : ""}${reconciled.removedEmptyCount ? ` · ${reconciled.removedEmptyCount} EMPTY OLD PHASE${reconciled.removedEmptyCount === 1 ? "" : "S"} REPLACED` : ""}`);
   }
 
   useEffect(() => {
@@ -3051,6 +3375,39 @@ export default function Home() {
       return false;
     }
   }
+
+  useEffect(() => {
+    if (!hasLoadedLocalLesson
+      || !hasLoadedLocalClasses
+      || !hasLoadedSafeSchedule
+      || hydratedPlanId !== activeLessonPlan.id
+      || isPastActivePlan) return;
+    const planKey = `${activeLessonPlan.id}:${activeLessonPlan.date}:${activeLessonPlan.classId ?? "sample"}`;
+    if (bootScheduleReconciledPlanKeyRef.current === planKey) return;
+    bootScheduleReconciledPlanKeyRef.current = planKey;
+
+    const template = scheduleTemplateForLesson(activeLessonPlan.date, activeLessonPlan.classId);
+    if (!template.phases.length && !hasScheduleGeneratedPhase(lessonPhases)) return;
+    const reconciled = reconcileScheduleTemplateForLesson(lessonPhases, template, activeLessonPlan.classId);
+    if (JSON.stringify(reconciled.phases) === JSON.stringify(lessonPhases)) return;
+    setLessonPhases(reconciled.phases);
+    setActivePhaseId((current) => reconciled.replacementPhaseIdByOldId[current]
+      ?? (reconciled.phases.some((phase) => phase.id === current)
+        ? current
+        : reconciled.phases[0]?.id ?? ""));
+  }, [
+    activeLessonPlan.classId,
+    activeLessonPlan.date,
+    activeLessonPlan.id,
+    classStorage,
+    hasLoadedLocalClasses,
+    hasLoadedLocalLesson,
+    hasLoadedSafeSchedule,
+    hydratedPlanId,
+    isPastActivePlan,
+    lessonPhases,
+    safeScheduleStorageState,
+  ]);
 
   useEffect(() => {
     if (!hasLoadedCustomBoards || !hasLoadedAreaCatalog || isPastActivePlan) return;
@@ -3285,6 +3642,19 @@ export default function Home() {
   }, [allLibraryItems, hasLoadedLibraryPreferences]);
 
   useEffect(() => {
+    if (!hasLoadedLibraryPreferences) return;
+    let active = true;
+    const stationIds = [...new Set(allLibraryItems.flatMap((item) => item.stationSetupId ? [item.stationSetupId] : []))];
+    void Promise.all(stationIds.map(async (id) => [id, await loadStationSetup(id)] as const)).then((entries) => {
+      if (!active) return;
+      setStationSetupsById(Object.fromEntries(entries.filter((entry): entry is readonly [string, StationSetup] => Boolean(entry[1]))));
+    }).catch(() => {
+      if (active) setNotice("IDEA LIBRARY RESTORED · ONE OR MORE PIXEL STATIONS ARE UNAVAILABLE ON THIS DEVICE");
+    });
+    return () => { active = false; };
+  }, [allLibraryItems, hasLoadedLibraryPreferences]);
+
+  useEffect(() => {
     try {
       const stored = window.localStorage.getItem(LOCAL_OPERATIONS_STORAGE_KEY);
       if (stored) {
@@ -3323,6 +3693,43 @@ export default function Home() {
       setNotice("LOCAL DEMO OPERATIONS ACTIVE · BROWSER STORAGE IS UNAVAILABLE");
     }
   }, [hasLoadedOperations, operationTaskDoneByPlanId, updateDecisionByRevision, viewAttendanceByPlanId]);
+
+  useEffect(() => {
+    const restore = () => {
+      try {
+        const stored = window.localStorage.getItem(LOCAL_REMINDER_STORAGE_KEY);
+        if (stored) {
+          const parsed = parseLocalReminderStorage(stored);
+          if (parsed.ok) {
+            setReminderStorage(parsed.value);
+            setNotice("YOUR LOCAL REMINDERS WERE RESTORED");
+          } else {
+            setNotice("YOUR SAVED REMINDERS COULD NOT BE READ · STARTING WITH A CLEAN LOCAL LIST");
+          }
+        }
+      } catch {
+        setNotice("YOUR REMINDERS STAY LOCAL · THE LAST LIST COULD NOT BE RESTORED");
+      } finally {
+        setHasLoadedReminders(true);
+      }
+    };
+    const timeout = window.setTimeout(restore, 0);
+    return () => window.clearTimeout(timeout);
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedReminders) return;
+    const serialized = serializeLocalReminderStorage(reminderStorage);
+    if (!serialized) {
+      window.setTimeout(() => setNotice("YOUR REMINDERS ARE ACTIVE FOR THIS VISIT · BROWSER STORAGE REJECTED THE LIST"), 0);
+      return;
+    }
+    try {
+      window.localStorage.setItem(LOCAL_REMINDER_STORAGE_KEY, serialized);
+    } catch {
+      window.setTimeout(() => setNotice("YOUR REMINDERS ARE ACTIVE FOR THIS VISIT · BROWSER STORAGE IS UNAVAILABLE"), 0);
+    }
+  }, [hasLoadedReminders, reminderStorage]);
 
   function activePlanIsReadOnly() {
     if (!isPastActivePlan) return false;
@@ -3402,7 +3809,10 @@ export default function Home() {
     const next = eventEditorGroups.find((event) => event.id === nextEventId);
     const previousWindow = previous ? eventWindow(previous.phases) : null;
     const nextWindow = next ? eventWindow(next.phases) : null;
-    const choices = eventStartOptionsBetween(previousWindow?.start ?? null, previousWindow?.end ?? null);
+    const previousFinalStart = previous
+      ? parseLessonTimeRange(previous.phases.at(-1)?.time ?? "")?.start ?? null
+      : null;
+    const choices = eventSplitStartOptions(previous?.phases ?? [], nextWindow?.start ?? null);
     if (!previous || !next || !previousWindow || !nextWindow || !choices.length) {
       setNotice("THIS EVENT NEEDS AT LEAST 10 MINUTES OF ITS OWN TIME BEFORE A NEW EVENT CAN SPLIT IT");
       return;
@@ -3430,7 +3840,7 @@ export default function Home() {
         : [...phases.slice(0, lastPreviousIndex + 1), phase, ...phases.slice(lastPreviousIndex + 1)];
     });
     setActivePhaseId(id);
-    setNotice(`NEW EVENT INSERTED · CHOOSE A START BETWEEN ${formatLessonTimePickerValue(previousWindow.start)} AND ${formatLessonTimePickerValue(previousWindow.end)} · ITS END STAYS ${formatLessonTimePickerValue(nextWindow.start)}`);
+    setNotice(`NEW EVENT INSERTED · CHOOSE A START AFTER ${formatLessonTimePickerValue(previousFinalStart ?? previousWindow.start)} AND BEFORE ${formatLessonTimePickerValue(nextWindow.start)} · ITS END STAYS ${formatLessonTimePickerValue(nextWindow.start)}`);
   }
 
   function setPendingEventStart(eventId: string, value: string) {
@@ -3442,9 +3852,9 @@ export default function Home() {
     const previousWindow = previous ? eventWindow(previous.phases) : null;
     const end = pending?.pendingEventEnd ?? null;
     const start = normalizePickerTime(value);
-    const options = eventStartOptionsBetween(previousWindow?.start ?? null, previousWindow?.end ?? null);
+    const options = eventSplitStartOptions(previous?.phases ?? [], end);
     if (!event || !previous || !pending || !start || !end || !options.includes(start)) {
-      setNotice("CHOOSE A START INSIDE THE PRECEDING EVENT'S TIME WINDOW");
+      setNotice("CHOOSE A START AFTER THE PRECEDING EVENT'S FINAL PHASE BEGINS AND BEFORE THE NEXT EVENT");
       return;
     }
     const previousLastId = previous.phases.at(-1)?.id;
@@ -3459,6 +3869,40 @@ export default function Home() {
       return phase;
     }));
     setNotice("NEW EVENT TIME SET · THE PRECEDING EVENT NOW ENDS AT ITS START");
+  }
+
+  function addEventAfter(eventId: string) {
+    if (activePlanIsReadOnly()) return;
+    const previous = eventEditorGroups.find((event) => event.id === eventId);
+    const previousWindow = previous ? eventWindow(previous.phases) : null;
+    if (!previous || !previousWindow) {
+      setNotice("SET THIS EVENT'S START AND END BEFORE ADDING AN EVENT AFTER IT");
+      return;
+    }
+    const id = `local-event-${Date.now()}`;
+    const phase: LessonPhase = {
+      id,
+      time: "TBD",
+      eventId: id,
+      eventLabel: "New event",
+      title: "New event",
+      mode: "TEXT",
+      isRequired: false,
+      zones: [],
+      parkedZones: [],
+      text: [],
+    };
+    setLessonPhases((phases) => {
+      const lastPreviousIndex = phases.reduce((last, candidate, index) => (
+        (candidate.eventId ?? candidate.id) === eventId ? index : last
+      ), -1);
+      return lastPreviousIndex < 0
+        ? phases
+        : [...phases.slice(0, lastPreviousIndex + 1), phase, ...phases.slice(lastPreviousIndex + 1)];
+    });
+    setActivePhaseId(id);
+    setIsEventEditorOpen(false);
+    setNotice("NEW UNSCHEDULED EVENT ADDED · SET ITS START AND END, THEN RETURN TO EVENT EDITOR IF YOU WANT TO REORDER IT");
   }
 
   function searchOpenStationsForEvent(eventId: string) {
@@ -3640,15 +4084,9 @@ export default function Home() {
       text: [],
     };
     setLessonPhases((phases) => {
-      const activeIndex = eventIdFromEditor && sameEvent
-        ? phases.reduce((lastIndex, candidate, index) => (
-          (candidate.eventId ?? candidate.id) === sourceEventId ? index : lastIndex
-        ), -1)
-        : sameEvent
-          ? phases.reduce((lastIndex, candidate, index) => (
-            (candidate.eventId ?? candidate.id) === sourceEventId ? index : lastIndex
-          ), -1)
-          : phases.findIndex((candidate) => candidate.id === activePhase.id);
+      const activeIndex = phases.reduce((lastIndex, candidate, index) => (
+        (candidate.eventId ?? candidate.id) === sourceEventId ? index : lastIndex
+      ), -1);
       return activeIndex < 0
         ? [...phases, phase]
         : [...phases.slice(0, activeIndex + 1), phase, ...phases.slice(activeIndex + 1)];
@@ -3675,6 +4113,12 @@ export default function Home() {
     const restoredBoundary = target.pendingEventEnd ?? targetRange?.end;
     const eventIndex = eventEditorGroups.findIndex((event) => event.id === eventId);
     const previousEvent = eventIndex > 0 ? eventEditorGroups[eventIndex - 1] : undefined;
+    // A pending in-between event belongs to the event directly before it.
+    // If that predecessor is deleted, do not silently re-anchor the pending
+    // split to an earlier event: it needs its own explicit start/end instead.
+    const pendingEventAfterRemovedFirst = eventPhases.length === 1
+      ? eventEditorGroups[eventIndex + 1]?.phases.find((phase) => Boolean(phase.pendingEventEnd))
+      : undefined;
     const previousLastId = eventPhases.length === 1 ? previousEvent?.phases.at(-1)?.id : undefined;
     const nextPhases = lessonPhases
       .filter((phase) => phase.id !== phaseId)
@@ -3686,6 +4130,9 @@ export default function Home() {
             ? { ...phase, time: formatLessonTimeRange({ start: range.start, end: restoredBoundary }) }
             : phase;
         }
+        if (phase.id === pendingEventAfterRemovedFirst?.id) {
+          return { ...phase, pendingEventEnd: undefined };
+        }
         return phase;
       });
     if (!nextPhases.length) return;
@@ -3694,7 +4141,9 @@ export default function Home() {
     setActivePhaseId(nextActive.id);
     setPlacedCard(null);
     if (pendingZonePlacement?.phaseId === phaseId) setPendingZonePlacement(null);
-    setNotice(eventPhases.length === 1
+    setNotice(pendingEventAfterRemovedFirst
+      ? "LOCAL EVENT DELETED · THE NEXT PENDING EVENT IS NOW STANDALONE, SO SET ITS START AND END"
+      : eventPhases.length === 1
       ? "LOCAL EVENT DELETED · THE PRECEDING EVENT RESTORED ITS ORIGINAL END TIME"
       : "LOCAL PHASE DELETED · THE PREVIOUS PHASE RESTORED ITS EVENT END TIME");
   }
@@ -5028,6 +5477,7 @@ export default function Home() {
     setLibraryEditDraft(libraryEditDraftFor(card));
     setEditingIdeaMediaFile(null);
     setRemoveEditingIdeaMedia(false);
+    setRemoveEditingStation(false);
   }
 
   function closeLibraryEdit() {
@@ -5036,6 +5486,7 @@ export default function Home() {
     setLibraryEditDraft(null);
     setEditingIdeaMediaFile(null);
     setRemoveEditingIdeaMedia(false);
+    setRemoveEditingStation(false);
     if (editIdeaCameraInputRef.current) editIdeaCameraInputRef.current.value = "";
     if (editIdeaMediaInputRef.current) editIdeaMediaInputRef.current.value = "";
   }
@@ -5052,7 +5503,15 @@ export default function Home() {
       return;
     }
     if (target === "new") {
+      if (newIdeaStationSetup) {
+        setNotice("CLEAR THE PIXEL STATION BEFORE CHOOSING A PHOTO OR VIDEO · ONE ATTACHMENT PER IDEA");
+        return;
+      }
       setNewIdeaMediaFile(file);
+      return;
+    }
+    if (editingLibraryItem?.stationSetupId && !removeEditingStation) {
+      setNotice("REMOVE THE PIXEL STATION IN THIS EDIT BEFORE CHOOSING MEDIA · YOUR SAVED STATION STAYS UNTIL YOU SAVE");
       return;
     }
     setEditingIdeaMediaFile(file);
@@ -5110,6 +5569,15 @@ export default function Home() {
         instructions: parseEditableList(libraryEditDraft.instructions),
         coachingCues: parseEditableList(libraryEditDraft.coachingCues),
       };
+      if (removeEditingStation && editingLibraryItem.stationSetupId) {
+        delete edited.stationSetupId;
+        delete edited.stationPreviewKind;
+        await removeStationSetup(editingLibraryItem.stationSetupId);
+        setStationSetupsById((current) => {
+          const { [editingLibraryItem.stationSetupId!]: _removed, ...remaining } = current;
+          return remaining;
+        });
+      }
       if (customLibraryCards.some((card) => card.id === edited.id)) {
         setCustomLibraryCards((cards) => cards.map((card) => card.id === edited.id ? edited : card));
       } else {
@@ -5119,6 +5587,7 @@ export default function Home() {
       setLibraryEditDraft(null);
       setEditingIdeaMediaFile(null);
       setRemoveEditingIdeaMedia(false);
+      setRemoveEditingStation(false);
       setNotice(`${edited.title.toUpperCase()} SAVED${edited.mediaId ? ` WITH A LOCAL ${edited.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · THIS BROWSER'S LIBRARY COPY WAS UPDATED`);
     } catch {
       if (newMediaId) {
@@ -5139,9 +5608,19 @@ export default function Home() {
     setRemoveCandidate(card);
   }
 
+  function cancelPendingPlacementForLibraryIdea(ideaId: string) {
+    setPendingZonePlacement((current) => (
+      current && (current.card.id === ideaId || current.card.sourceIdeaId === ideaId)
+        ? null
+        : current
+    ));
+    setPlacedCard(null);
+  }
+
   function confirmLibraryRemoval() {
     if (!removeCandidate) return;
     const title = removeCandidate.title;
+    cancelPendingPlacementForLibraryIdea(removeCandidate.id);
     setRemovedIdeaIds((ids) => [...new Set([...ids, removeCandidate.id])]);
     setRemoveCandidate(null);
     setNotice(`${title.toUpperCase()} HIDDEN FROM ACTIVE LIBRARY · RESTORE IT FROM ARCHIVE · SOURCE UNTOUCHED`);
@@ -5149,6 +5628,7 @@ export default function Home() {
 
   async function confirmPermanentLibraryDeletion() {
     if (!removeCandidate || isDeletingIdea) return;
+    cancelPendingPlacementForLibraryIdea(removeCandidate.id);
     setIsDeletingIdea(true);
     try {
       const deletion = permanentlyDeleteLibraryIdea({
@@ -5161,6 +5641,11 @@ export default function Home() {
         removedIdeaIds,
       }, removeCandidate);
       if (deletion.mediaId) await removeIdeaMedia(deletion.mediaId);
+      if (deletion.stationSetupId) await removeStationSetup(deletion.stationSetupId);
+      if (deletion.stationSetupId) setStationSetupsById((current) => {
+        const { [deletion.stationSetupId!]: _removed, ...remaining } = current;
+        return remaining;
+      });
       setGemIds(deletion.next.gemIds);
       setCustomLibraryCards(deletion.next.customCards);
       setRecentIdeaIds(deletion.next.recentIdeaIds);
@@ -5189,6 +5674,93 @@ export default function Home() {
 
   function operationTaskIsDone(taskId: string) {
     return operationTaskDoneById[taskId] ?? (taskId === LEGACY_RECURRING_TASK_ID ? todoDone : false);
+  }
+
+  function reminderIsDone(templateId: string) {
+    return activeReminders.find((reminder) => reminder.template.id === templateId)?.occurrence.state === "completed";
+  }
+
+  function plannerTaskIsDone(taskId: string) {
+    return activeReminders.some((reminder) => reminder.template.id === taskId)
+      ? reminderIsDone(taskId)
+      : operationTaskIsDone(taskId);
+  }
+
+  function setReminderTaskDone(templateId: string, isDone: boolean) {
+    if (activePlanIsReadOnly()) return;
+    const reminder = activeReminders.find((candidate) => candidate.template.id === templateId);
+    if (!reminder) return;
+    setReminderStorage((current) => setLocalReminderComplete(current, reminderLesson, templateId, isDone));
+    setNotice(`${reminder.template.title.toUpperCase()} ${isDone ? "MARKED COMPLETE" : "REOPENED"} · YOUR LOCAL REMINDER`);
+  }
+
+  function setPlannerTaskDone(taskId: string, isDone: boolean) {
+    if (activeReminders.some((reminder) => reminder.template.id === taskId)) {
+      setReminderTaskDone(taskId, isDone);
+      return;
+    }
+    setOperationTaskDone(taskId, isDone);
+  }
+
+  function resetReminderDraft() {
+    setReminderTitleDraft("");
+    setReminderDetailDraft("");
+    setReminderCadenceDraft("recurring");
+    setReminderScopeDraft(activeLessonPlan.classId ? "classes" : "all_classes");
+    setReminderStartDateDraft(activeLessonPlan.date);
+    setReminderEndDateDraft("");
+    setReminderRollForwardDraft(false);
+  }
+
+  function openReminderForm() {
+    if (activePlanIsReadOnly()) return;
+    resetReminderDraft();
+    setIsReminderFormOpen(true);
+  }
+
+  function saveReminder() {
+    if (activePlanIsReadOnly()) return;
+    let scope: LocalReminderScope;
+    if (reminderScopeDraft === "all_classes") {
+      scope = { kind: "all_classes" };
+    } else if (reminderScopeDraft === "lesson") {
+      scope = { kind: "lesson", lessonId: activeLessonPlan.id };
+    } else if (activeLessonPlan.classId) {
+      scope = { kind: "classes", classIds: [activeLessonPlan.classId] };
+    } else {
+      setNotice("SELECT A LOCAL CLASS OR CHOOSE ALL CLASSES BEFORE SAVING THIS REMINDER");
+      return;
+    }
+
+    const isLessonOnly = reminderScopeDraft === "lesson";
+    const reminder = createLocalReminderTemplate({
+      title: reminderTitleDraft,
+      detail: reminderDetailDraft || undefined,
+      cadence: isLessonOnly ? "temporary" : reminderCadenceDraft,
+      scope,
+      startDate: isLessonOnly ? activeLessonPlan.date : reminderStartDateDraft,
+      endDate: isLessonOnly ? activeLessonPlan.date : reminderEndDateDraft || null,
+      rollForwardUntilCompleted: isLessonOnly ? false : reminderRollForwardDraft,
+      active: true,
+    });
+    if (!reminder) {
+      setNotice("CHECK THE REMINDER TITLE AND DATES, THEN TRY SAVING AGAIN");
+      return;
+    }
+    setReminderStorage((current) => addLocalReminderTemplate(current, reminder));
+    setIsReminderFormOpen(false);
+    setNotice(`${reminder.title.toUpperCase()} ADDED AS YOUR ${isLessonOnly ? "ONE-TIME LESSON" : reminder.cadence.toUpperCase()} REMINDER`);
+  }
+
+  function removeReminder(templateId: string) {
+    if (activePlanIsReadOnly()) return;
+    const reminder = reminderStorage.templates.find((candidate) => candidate.id === templateId);
+    if (!reminder) return;
+    setReminderStorage((current) => localReminderStorage(
+      current.templates.filter((template) => template.id !== templateId),
+      current.occurrences.filter((occurrence) => occurrence.templateId !== templateId),
+    ));
+    setNotice(`${reminder.title.toUpperCase()} REMOVED FROM YOUR LOCAL REMINDERS`);
   }
 
   function setOperationTaskDone(taskId: string, isDone: boolean) {
@@ -5318,11 +5890,32 @@ export default function Home() {
 
   function selectClassForLesson(localClass: LocalClass | null) {
     if (activePlanIsReadOnly()) return;
+    const nextClassId = localClass?.id ?? null;
+    const existing = lessonPlanForIdentity(lessonPlanIndex, { date: activeLessonPlan.date, classId: nextClassId });
+    if (existing && existing.id !== activeLessonPlan.id) {
+      setNotice(`${localClass?.name.toUpperCase() ?? "SAMPLE LEVEL 3"} ALREADY HAS A PLAN FOR THIS DATE · OPENING IT NOW`);
+      openLessonPlan(existing);
+      return;
+    }
+    setActiveLessonPlan((current) => ({
+      ...current,
+      classId: nextClassId,
+      title: classLessonTitle(localClass),
+    }));
     setActiveClassId(localClass?.id ?? null);
     setClassStorage((current) => localClassStorage(current.classes, localClass?.id ?? null));
+    setFuturePlanClassId(nextClassId);
     initializeAttendanceForClass(localClass);
-    setNotice(localClass
-      ? `${localClass.name.toUpperCase()} SELECTED · ROSTER AND SCHEDULE ARE LOCAL TO THIS LESSON`
+    const template = scheduleTemplateForLesson(activeLessonPlan.date, nextClassId);
+    const scheduleWasReconciled = applyScheduleTemplateToCurrentLesson(template, nextClassId, localClass?.name);
+    if (localClass) {
+      setNotice(scheduleWasReconciled
+        ? `${localClass.name.toUpperCase()} SELECTED · ${template.phases.length ? `${template.phases.length} SCHEDULE PHASE${template.phases.length === 1 ? "" : "S"} LOADED AUTOMATICALLY FOR THIS DAY` : "NO MATCHING SCHEDULE BLOCKS · A BLANK PHASE IS READY"}`
+        : `${localClass.name.toUpperCase()} SELECTED · ROSTER IS ACTIVE · NO MATCHING SCHEDULE BLOCKS WERE FOUND`);
+      return;
+    }
+    setNotice(scheduleWasReconciled
+      ? "CLASS CLEARED FROM THIS LESSON · OLD SCHEDULE PHASES WERE RECONCILED · SAMPLE ROSTER STAYS AS A LOCAL FALLBACK"
       : "CLASS CLEARED FROM THIS LESSON · SAMPLE ROSTER STAYS AS A LOCAL FALLBACK");
   }
 
@@ -5372,7 +5965,14 @@ export default function Home() {
     }
     setClassStorage((current) => addLocalClass(current, created, { makeActive: true }));
     setActiveClassId(created.id);
+    setActiveLessonPlan((current) => ({ ...current, classId: created.id, title: classLessonTitle(created) }));
+    setFuturePlanClassId(created.id);
     initializeAttendanceForClass(created);
+    applyScheduleTemplateToCurrentLesson(createLessonScheduleTemplate({
+      lessonDate: activeLessonPlan.date,
+      selectedClass: created,
+      safeScheduleDay: null,
+    }), created.id, created.name);
     editLocalClass(created);
     setNotice(`${created.name.toUpperCase()} CREATED · THIS LESSON NOW USES ITS LOCAL ROSTER`);
   }
@@ -5399,11 +5999,19 @@ export default function Home() {
     }
     setClassStorage(appended.storage);
     setActiveClassId(appended.localClass.id);
+    setActiveLessonPlan((current) => ({ ...current, classId: appended.localClass.id, title: classLessonTitle(appended.localClass) }));
+    setFuturePlanClassId(appended.localClass.id);
     initializeAttendanceForClass(appended.localClass);
+    const template = createLessonScheduleTemplate({
+      lessonDate: activeLessonPlan.date,
+      selectedClass: appended.localClass,
+      safeScheduleDay: null,
+    });
+    const scheduleWasReconciled = applyScheduleTemplateToCurrentLesson(template, appended.localClass.id, appended.localClass.name);
     setClassImportRaw("");
     setClassImportPreview(null);
     editLocalClass(appended.localClass);
-    setNotice(`${appended.localClass.name.toUpperCase()} IMPORTED · ITS SCHEDULE IS NOW LOCAL AND AUTOMATIC`);
+    setNotice(`${appended.localClass.name.toUpperCase()} IMPORTED · ${template.phases.length ? `${template.phases.length} SCHEDULE PHASE${template.phases.length === 1 ? "" : "S"} LOADED FOR THIS DAY` : scheduleWasReconciled ? "OLD SCHEDULE PHASES CLEARED · A BLANK PHASE IS READY" : "ITS SCHEDULE IS NOW LOCAL AND AUTOMATIC"}`);
   }
 
   async function previewSafeScheduleFile(file: File | null) {
@@ -5443,9 +6051,10 @@ export default function Home() {
     }
     const next = replaceSafeScheduleBundle(safeScheduleStorageState, safeScheduleImportPreview.result.value);
     if (!persistSafeScheduleStorage(next)) return;
+    const synchronized = syncActiveLessonForScheduleChange(next);
     setOpenAreaSelectionByKey({});
     setSafeScheduleImportPreview(null);
-    setNotice(`${next.bundle?.schedule.timeBlocks.length ?? 0} FULL-SCHEDULE BLOCKS SAVED · LINK EACH LOCAL CLASS TO ITS EXACT GROUP`);
+    setNotice(`${next.bundle?.schedule.timeBlocks.length ?? 0} FULL-SCHEDULE BLOCKS SAVED${synchronized ? ` · ${synchronized.template.phases.length} ACTIVE LESSON PHASE${synchronized.template.phases.length === 1 ? "" : "S"} SYNCED` : " · LINK EACH LOCAL CLASS TO ITS EXACT GROUP"}`);
   }
 
   function loadSummer2026LocalSchedule() {
@@ -5456,9 +6065,10 @@ export default function Home() {
     try {
       const next = replaceSafeScheduleBundle(safeScheduleStorageState, summer2026SafeScheduleFixture);
       if (!persistSafeScheduleStorage(next)) return;
+      const synchronized = syncActiveLessonForScheduleChange(next);
       setOpenAreaSelectionByKey({});
       setSafeScheduleImportPreview(null);
-      setNotice(`${summer2026SafeScheduleFixture.schedule.timeBlocks.length} SUMMER 2026 BLOCKS LOADED LOCALLY · LINK EACH CLASS TO ITS EXACT GROUP · ${summer2026SafeScheduleFixture.schedule.collisionWarnings.warningCount} ADVISORY WARNINGS REMAIN`);
+      setNotice(`${summer2026SafeScheduleFixture.schedule.timeBlocks.length} SUMMER 2026 BLOCKS LOADED LOCALLY${synchronized ? ` · ${synchronized.template.phases.length} ACTIVE LESSON PHASE${synchronized.template.phases.length === 1 ? "" : "S"} SYNCED` : " · LINK EACH CLASS TO ITS EXACT GROUP"} · ${summer2026SafeScheduleFixture.schedule.collisionWarnings.warningCount} ADVISORY WARNINGS REMAIN`);
     } catch {
       setNotice("THE BUILT-IN SUMMER 2026 COPY COULD NOT BE LOADED · YOUR CURRENT LOCAL SCHEDULE STAYS UNCHANGED");
     }
@@ -5471,24 +6081,39 @@ export default function Home() {
       return;
     }
     if (!persistSafeScheduleStorage(next)) return;
+    const synchronized = classId === activeLessonPlan.classId
+      ? syncActiveLessonForScheduleChange(next)
+      : null;
     setOpenAreaSelectionByKey({});
     setNotice(group
-      ? `${group.toUpperCase()} LINKED TO THIS LOCAL CLASS · NO FUZZY NAME MATCHING USED`
-      : "FULL-SCHEDULE GROUP LINK CLEARED · LOCAL CLASS SCHEDULE REMAINS THE FALLBACK");
+      ? `${group.toUpperCase()} LINKED TO THIS LOCAL CLASS${synchronized ? ` · ${synchronized.template.phases.length} ACTIVE LESSON PHASE${synchronized.template.phases.length === 1 ? "" : "S"} SYNCED` : " · NO FUZZY NAME MATCHING USED"}`
+      : `FULL-SCHEDULE GROUP LINK CLEARED · LOCAL CLASS SCHEDULE REMAINS THE FALLBACK${synchronized ? ` · ${synchronized.template.phases.length} ACTIVE LESSON PHASE${synchronized.template.phases.length === 1 ? "" : "S"} SYNCED` : ""}`);
   }
 
   function confirmSafeScheduleWeek(week: ScheduleWeek) {
     const next = setSafeScheduleManualWeek(safeScheduleStorageState, activeLessonPlan.date, week);
     if (!next || !persistSafeScheduleStorage(next)) return;
+    const synchronized = syncActiveLessonForScheduleChange(next);
     setOpenAreaSelectionByKey({});
-    setNotice(`${week.toUpperCase()} WEEK CONFIRMED FOR ${activeLessonDateLabel.toUpperCase()} · SAVED IN THIS BROWSER`);
+    setNotice(`${week.toUpperCase()} WEEK CONFIRMED FOR ${activeLessonDateLabel.toUpperCase()} · ${synchronized ? `${synchronized.template.phases.length} SCHEDULE PHASE${synchronized.template.phases.length === 1 ? "" : "S"} SYNCED` : "SAVED IN THIS BROWSER"}`);
   }
 
   function confirmRemoveLocalClass() {
     if (!removeClassCandidate) return;
     const removed = removeClassCandidate;
+    const referencingPlans = lessonPlanIndex?.plans.filter((plan) => plan.classId === removed.id).length ?? 0;
+    const activePlanIsUnindexedReference = activeLessonPlan.classId === removed.id
+      && !lessonPlanIndex?.plans.some((plan) => plan.id === activeLessonPlan.id);
+    const planCount = referencingPlans + (activePlanIsUnindexedReference ? 1 : 0);
+    if (planCount) {
+      setNotice(`REASSIGN ${planCount} SAVED LESSON PLAN${planCount === 1 ? "" : "S"} BEFORE REMOVING ${removed.name.toUpperCase()}`);
+      return;
+    }
     setClassStorage((current) => removeLocalClass(current, removed.id));
-    if (activeClassId === removed.id) setActiveClassId(null);
+    if (activeClassId === removed.id) {
+      setActiveClassId(null);
+      setFuturePlanClassId(null);
+    }
     if (editingClassId === removed.id) resetClassDraft();
     setRemoveClassCandidate(null);
     setNotice(`${removed.name.toUpperCase()} REMOVED FROM THIS BROWSER · NO LESSON PHASES WERE CHANGED`);
@@ -5508,8 +6133,61 @@ export default function Home() {
     setNewIdeaTags("");
     setNewIdeaMats("");
     setNewIdeaMediaFile(null);
+    setNewIdeaStationSetup(null);
     if (newIdeaCameraInputRef.current) newIdeaCameraInputRef.current.value = "";
     if (newIdeaMediaInputRef.current) newIdeaMediaInputRef.current.value = "";
+  }
+
+  function openNewStationMaker() {
+    if (newIdeaMediaFile) {
+      setNotice("CLEAR THE PHOTO OR VIDEO ATTACHMENT BEFORE MAKING A PIXEL STATION · ONE ATTACHMENT PER IDEA");
+      return;
+    }
+    setStationMakerTarget("new");
+    setStationMakerSetup(newIdeaStationSetup ?? createStationSetup());
+  }
+
+  async function openSavedStationMaker(card: LibraryItem) {
+    if (!card.stationSetupId) return;
+    try {
+      const setup = stationSetupsById[card.stationSetupId] ?? await loadStationSetup(card.stationSetupId);
+      if (!setup) {
+        setNotice("THIS PIXEL STATION IS NOT AVAILABLE IN THIS BROWSER");
+        return;
+      }
+      setStationMakerTarget(card);
+      setStationMakerSetup(setup);
+      setDetailCard(null);
+    } catch {
+      setNotice("THIS PIXEL STATION COULD NOT BE OPENED");
+    }
+  }
+
+  async function saveStationMaker(setup: StationSetup) {
+    const target = stationMakerTarget;
+    if (!target) return;
+    try {
+      if (target === "new") {
+        if (newIdeaMediaFile) {
+          setNotice("CLEAR THE PHOTO OR VIDEO ATTACHMENT BEFORE SAVING A PIXEL STATION · ONE ATTACHMENT PER IDEA");
+          return;
+        }
+        setNewIdeaStationSetup(setup);
+        setNotice("PIXEL STATION READY · SAVE THE IDEA TO KEEP IT IN THIS BROWSER");
+      } else {
+        await saveStationSetup(setup);
+        setStationSetupsById((current) => ({ ...current, [setup.id]: setup }));
+        const update = (idea: LibraryItem) => idea.id === target.id ? { ...withoutLibraryMedia(idea), stationSetupId: setup.id, stationPreviewKind: "pixel-station" as const } : idea;
+        if (customLibraryCards.some((idea) => idea.id === target.id)) setCustomLibraryCards((ideas) => ideas.map(update));
+        else setItemOverridesById((current) => ({ ...current, [target.id]: update(target) }));
+        if (target.mediaId) await removeIdeaMedia(target.mediaId);
+        setNotice("PIXEL STATION SAVED · REOPEN IT ANYTIME FROM THIS IDEA");
+      }
+      setStationMakerSetup(null);
+      setStationMakerTarget(null);
+    } catch {
+      setNotice("THE PIXEL STATION COULD NOT BE SAVED · YOUR EDIT IS STILL OPEN");
+    }
   }
 
   async function saveNewIdea() {
@@ -5537,7 +6215,12 @@ export default function Home() {
           mats: parseEditableList(newIdeaMats),
         }),
         ...mediaMetadata,
+        ...(newIdeaStationSetup ? { stationSetupId: newIdeaStationSetup.id, stationPreviewKind: "pixel-station" as const } : {}),
       };
+      if (newIdeaStationSetup) {
+        await saveStationSetup(newIdeaStationSetup);
+        setStationSetupsById((current) => ({ ...current, [newIdeaStationSetup.id]: newIdeaStationSetup }));
+      }
       setCustomLibraryCards((cards) => [idea, ...cards]);
       resetNewIdeaDraft();
       setIsAddingIdea(false);
@@ -5604,8 +6287,11 @@ export default function Home() {
         />
         <button type="button" onClick={() => newIdeaCameraInputRef.current?.click()}>TAKE PHOTO</button>
         <button type="button" onClick={() => newIdeaMediaInputRef.current?.click()}>CHOOSE PHOTO / VIDEO</button>
+        <button type="button" onClick={openNewStationMaker}>MAKE STATION</button>
         {newIdeaMediaFile ? <button type="button" className="media-clear" onClick={() => setNewIdeaMediaFile(null)}>CLEAR ATTACHMENT</button> : null}
-        {newIdeaMediaFile ? <span>{ideaMediaKindForFile(newIdeaMediaFile)?.toUpperCase()} READY: {newIdeaMediaFile.name || "NEW CAMERA PHOTO"}</span> : <span>NO ATTACHMENT</span>}
+        {newIdeaStationSetup ? <button type="button" className="media-clear" onClick={() => { setNewIdeaStationSetup(null); setNotice("PIXEL STATION CLEARED · YOU CAN NOW CHOOSE A PHOTO OR VIDEO"); }}>CLEAR PIXEL STATION</button> : null}
+        {newIdeaStationSetup ? <span>EDITABLE PIXEL STATION READY · {newIdeaStationSetup.objects.length} {newIdeaStationSetup.objects.length === 1 ? "PIECE" : "PIECES"}</span> : newIdeaMediaFile ? <span>{ideaMediaKindForFile(newIdeaMediaFile)?.toUpperCase()} READY: {newIdeaMediaFile.name || "NEW CAMERA PHOTO"}</span> : <span>NO ATTACHMENT</span>}
+        {newIdeaStationSetup ? <StationPreview setup={newIdeaStationSetup} label="New pixel station" /> : null}
         {newIdeaMediaFile && newIdeaMediaPreviewUrl ? (
           <figure className="idea-media-preview">
             {ideaMediaKindForFile(newIdeaMediaFile) === "video"
@@ -5744,15 +6430,20 @@ export default function Home() {
           const tags = card.tags.slice(0, 2).join(" · ");
           const extraDetail = card.safety ? `⚠ ${card.safety}` : card.skills.slice(0, 3).join(" · ");
           const isUnavailable = Boolean(card.isRemoved || card.isArchived);
+          const stationSetup = card.stationSetupId ? stationSetupsById[card.stationSetupId] : null;
+          const libraryPhotoUrl = libraryRowHeight >= 110 && card.mediaKind === "image" && card.mediaId
+            ? ideaMediaUrls[card.mediaId]
+            : undefined;
           return (
-            <article key={card.id} className="library-item">
+            <article key={card.id} className={`library-item${libraryPhotoUrl || card.stationSetupId ? " has-library-photo" : ""}`}>
               <div className="library-item-copy">
-                <div className="library-item-kicker"><span>{card.kind}</span><span>{card.variants.length} SETUP{card.variants.length === 1 ? "" : "S"}</span></div>
+                <div className="library-item-kicker"><span>{card.kind}</span><span>{card.variants.length} VARIANT{card.variants.length === 1 ? "" : "S"}</span></div>
                 <strong title={card.title}>{card.title}</strong>
                 <span className="library-item-state" title={tags ? `${state} · ${tags}` : state}>{state}{tags ? ` · ${tags}` : ""}</span>
                 <p className="library-item-description">{card.description}</p>
                 {extraDetail ? <span className="library-item-extra">{card.safety ? extraDetail : `SKILLS · ${extraDetail}`}</span> : null}
               </div>
+              {card.stationSetupId ? <StationPreview setup={stationSetup} label={card.title} /> : libraryPhotoUrl ? <figure className="library-item-photo"><img src={libraryPhotoUrl} alt={`Reference photo for ${card.title}`} /></figure> : null}
               <div className="library-actions" aria-label={`Actions for ${card.title}`}>
                 <button className={`gem-toggle ${card.starred ? "gemmed" : ""}`} aria-label={card.starred ? `Remove ${card.title} from gems` : `Save ${card.title} as a gem`} title={card.starred ? "Remove gem" : "Save as gem"} aria-pressed={Boolean(card.starred)} onClick={() => toggleGem(card.id)}>
                   {card.starred ? "★" : "☆"}
@@ -5816,11 +6507,14 @@ export default function Home() {
       <>
       <nav className="top-nav" aria-label="Primary">
         <button className={activeLessonPlan.date === lessonToday && !isEventEditorOpen ? "active" : ""} onClick={openTodayLessonPlan}>TODAY</button>
-        <button className={planShelf === "PAST" ? "active" : ""} onClick={() => setPlanShelf((current) => current === "PAST" ? null : "PAST")}>PAST PLANS</button>
+        <button className={planShelf === "PAST" ? "active" : ""} onClick={() => setPlanShelf((current) => current === "PAST" ? null : "PAST")}>SAVED PLANS</button>
         <button className={`future-plan-nav ${planShelf === "FUTURE" ? "active" : ""}`} onClick={() => {
-          setFuturePlanDate(nextLessonPlanDate(lessonToday));
+          setFuturePlanDate(lessonToday);
+          setFuturePlanClassId(null);
+          setFuturePlanClassChosen(false);
+          setFuturePlanManualWeek("");
           setPlanShelf((current) => current === "FUTURE" ? null : "FUTURE");
-        }}>+ FUTURE PLAN</button>
+        }}>+ LESSON PLAN</button>
         {mode === "EDIT" && !isPastActivePlan ? <button className={isClassManagerOpen ? "active class-manager-trigger" : "class-manager-trigger"} onClick={openNewClassManager}>+ CREATE CLASS</button> : null}
         <button onClick={openLibraryWindow} aria-label="Open the Idea Library in a new window">LIBRARY <b>{allLibraryItems.length} IDEAS</b></button>
         {mode === "VIEW" ? <button className="view-new-idea-nav" onClick={() => setIsAddingIdea((open) => !open)}>{isAddingIdea ? "CLOSE NEW IDEA" : "+ NEW IDEA"}</button> : null}
@@ -5904,8 +6598,8 @@ export default function Home() {
 
           {removeClassCandidate ? (
             <section className="remove-local-class-confirm" aria-label={`Confirm removal of ${removeClassCandidate.name}`}>
-              <div><b>REMOVE {removeClassCandidate.name.toUpperCase()}?</b><span>This is the second confirmation. Its class record and private roster will be removed from this browser; lesson phases stay untouched.</span></div>
-              <div><button type="button" onClick={() => setRemoveClassCandidate(null)}>KEEP CLASS</button><button type="button" onClick={confirmRemoveLocalClass}>REMOVE CLASS NOW</button></div>
+              <div><b>{removeClassPlanCount ? `REASSIGN ${removeClassPlanCount} SAVED LESSON PLAN${removeClassPlanCount === 1 ? "" : "S"} FIRST` : `REMOVE ${removeClassCandidate.name.toUpperCase()}?`}</b><span>{removeClassPlanCount ? "This class is still used by saved lesson plans. Open each one and choose another class or the sample type before removing the class record." : "This is the second confirmation. Its class record and private roster will be removed from this browser; lesson phases stay untouched."}</span></div>
+              <div><button type="button" onClick={() => setRemoveClassCandidate(null)}>KEEP CLASS</button><button type="button" onClick={confirmRemoveLocalClass} disabled={removeClassPlanCount > 0}>REMOVE CLASS NOW</button></div>
             </section>
           ) : null}
 
@@ -5956,33 +6650,66 @@ export default function Home() {
       ) : null}
 
       {planShelf === "PAST" ? (
-        <section className="lesson-plan-shelf retro-window" aria-label="Past local lesson plans">
-          <div className="window-title">PAST LESSON PLANS <button type="button" onClick={() => setPlanShelf(null)} aria-label="Close past lesson plans">×</button></div>
+        <section className="lesson-plan-shelf retro-window" aria-label="Saved local lesson plans">
+          <div className="window-title">SAVED LESSON PLANS <button type="button" onClick={() => setPlanShelf(null)} aria-label="Close saved lesson plans">×</button></div>
           <div className="lesson-plan-shelf-body">
-            {pastLessonPlans.length ? pastLessonPlans.map((plan) => (
+            {savedLessonPlans.length ? savedLessonPlans.map((plan) => (
               <button key={plan.id} type="button" className="saved-lesson-plan" onClick={() => openLessonPlan(plan)}>
                 <strong>{formatLessonPlanDate(plan.date)}</strong>
-                <span>{plan.title} · VIEW READ-ONLY SNAPSHOT</span>
+                <span>{localClassById(classStorage, plan.classId)?.name ?? (plan.classId ? plan.title.replace(/\s+LESSON$/i, "") || "REMOVED LOCAL CLASS" : "SAMPLE LEVEL 3")} · {isPastLessonPlanDate(plan.date, lessonToday) ? "VIEW READ-ONLY SNAPSHOT" : "OPEN LOCAL DRAFT"}</span>
               </button>
-            )) : <p>No earlier local lesson plans are saved in this browser yet.</p>}
+            )) : <p>No other local lesson plans are saved in this browser yet.</p>}
           </div>
         </section>
       ) : null}
 
       {planShelf === "FUTURE" ? (
-        <section className="lesson-plan-shelf retro-window" aria-label="Start a future local lesson plan">
-          <div className="window-title">FUTURE LESSON PLAN <button type="button" onClick={() => setPlanShelf(null)} aria-label="Close future lesson plan">×</button></div>
+        <section className="lesson-plan-shelf retro-window" aria-label="Start a new local lesson plan">
+          <div className="window-title">NEW LESSON PLAN <button type="button" onClick={() => setPlanShelf(null)} aria-label="Close new lesson plan">×</button></div>
           <form className="future-lesson-form" onSubmit={(event) => {
             event.preventDefault();
-            const requestedDate = new FormData(event.currentTarget).get("future-lesson-date");
-            createFutureLessonPlan(typeof requestedDate === "string" ? requestedDate : futurePlanDate);
+            createFutureLessonPlan(futurePlanDate, futurePlanClassId);
           }}>
             <label>
               LESSON DATE
-              <input name="future-lesson-date" type="date" min={nextLessonPlanDate(lessonToday)} value={futurePlanDate} onInput={(event) => setFuturePlanDate(event.currentTarget.value)} onChange={(event) => setFuturePlanDate(event.currentTarget.value)} />
+              <input name="future-lesson-date" type="date" min={lessonToday} value={futurePlanDate} onInput={(event) => setFuturePlanDate(event.currentTarget.value)} onChange={(event) => { setFuturePlanDate(event.currentTarget.value); setFuturePlanManualWeek(""); }} />
             </label>
-            <p>Starts with the lesson schedule template and empty drill placements. The lesson currently open stays unchanged.</p>
-            <button type="submit">START BLANK FUTURE PLAN →</button>
+            <label>
+              CLASS / TYPE
+              <select
+                name="future-lesson-class"
+                required
+                value={futurePlanClassChosen ? (futurePlanClassId ?? FUTURE_SAMPLE_CLASS_VALUE) : ""}
+                onChange={(event) => {
+                  const selected = event.currentTarget.value;
+                  setFuturePlanClassId(selected === FUTURE_SAMPLE_CLASS_VALUE ? null : selected || null);
+                  setFuturePlanClassChosen(Boolean(selected));
+                  setFuturePlanManualWeek("");
+                }}
+              >
+                <option value="" disabled>CHOOSE A CLASS / TYPE</option>
+                <option value={FUTURE_SAMPLE_CLASS_VALUE}>SAMPLE LEVEL 3 · NO LOCAL SCHEDULE</option>
+                {classStorage.classes.map((localClass) => <option key={localClass.id} value={localClass.id}>{localClass.name}{localClass.group ? ` · ${localClass.group}` : ""}</option>)}
+              </select>
+            </label>
+            {futurePlanSafeScheduleDay?.status === "manual_week_confirmation_required" ? <label>
+              ROTATION WEEK
+              <select required value={futurePlanManualWeek || safeScheduleStorageState.manualWeekByDate[futurePlanDate] || ""} onChange={(event) => setFuturePlanManualWeek(event.currentTarget.value === "Odd" || event.currentTarget.value === "Even" ? event.currentTarget.value : "")}>
+                <option value="">CHOOSE ODD OR EVEN</option>
+                <option value="Odd">ODD</option>
+                <option value="Even">EVEN</option>
+              </select>
+            </label> : null}
+            <p>{!futurePlanClassChosen
+              ? "Choose a class or the sample type. The planner will not assume your active class."
+              : futurePlanTemplate.source === "safe-schedule"
+              ? `${futurePlanTemplate.phases.length} exact full-schedule phase${futurePlanTemplate.phases.length === 1 ? "" : "s"} will start empty.`
+              : futurePlanTemplate.source === "local-class"
+                ? `${futurePlanTemplate.phases.length} matching class-schedule phase${futurePlanTemplate.phases.length === 1 ? "" : "s"} will start empty.`
+                : futurePlanClassId === null
+                  ? "This sample plan will start with one editable unscheduled phase."
+                  : "No schedule blocks match this class and date; the plan will start with one editable unscheduled phase."}</p>
+            <button type="submit">START LESSON PLAN →</button>
           </form>
         </section>
       ) : null}
@@ -5990,7 +6717,7 @@ export default function Home() {
       <section className="identity-strip">
         <div>
           <p className="eyebrow">{activeLessonDateLabel}</p>
-          <h1>LESSON PLANNER <span>•</span> {activeLocalClass?.name?.toUpperCase() ?? "LEVEL 3"} · {activeLocalClass ? "LOCAL CLASS" : "3:30–5:25 PM"}</h1>
+          <h1>LESSON PLANNER <span>•</span> {activePlanClassName.toUpperCase()} · {activeLocalClass ? "LOCAL CLASS" : hasMissingActiveClass ? "REMOVED LOCAL CLASS" : "3:30–5:25 PM"}</h1>
         </div>
         <div className="readiness">
           <span className="pixel-label">READY STATE</span>
@@ -6007,18 +6734,22 @@ export default function Home() {
               <dl className="schedule-advisory-meta">
                 <div><dt>DATE</dt><dd>{activeLessonDateLabel}</dd></div>
                 <div><dt>GROUP</dt><dd>{activeScheduleGroup}</dd></div>
-                <div><dt>ROSTER</dt><dd>{activeLocalClass ? `${activeLocalClass.students.length} LOCAL` : "SAMPLE"}</dd></div>
+                <div><dt>ROSTER</dt><dd>{activeLocalClass ? `${activeLocalClass.students.length} LOCAL` : hasMissingActiveClass ? "UNAVAILABLE" : "SAMPLE"}</dd></div>
               </dl>
 
               <div className="schedule-advisory-guard">
-                <b>{usesSafeScheduleDay
+                <b>{hasMissingActiveClass
+                  ? "REMOVED LOCAL CLASS"
+                  : usesSafeScheduleDay
                   ? "FULL SAFE SCHEDULE"
                   : safeScheduleBundle && activeLocalClass && !linkedSafeScheduleGroup
                     ? "LINK AN EXACT SCHEDULE GROUP"
                     : safeScheduleBundle
                       ? "LOCAL SCHEDULE FALLBACK"
                       : activeLocalClass ? "LOCAL CLASS SCHEDULE" : "ADVISORY ONLY"}</b>
-                <span>{usesSafeScheduleDay
+                <span>{hasMissingActiveClass
+                  ? "This saved plan keeps its phases, but its local class record, roster, and schedule link are no longer available."
+                  : usesSafeScheduleDay
                   ? "This group’s imported full schedule is active. Open availability checks every group, but nothing is added or reserved automatically."
                   : safeScheduleBundle && activeLocalClass && !linkedSafeScheduleGroup
                     ? "Open Local Classes and choose this class’s exact imported schedule group. Class names are never fuzzy-matched."
@@ -6035,7 +6766,7 @@ export default function Home() {
                 </section>
               ) : null}
 
-              {!activeLocalClass ? scheduleDayAdvisoryDemo.advisories.map((advisory) => (
+              {!activeLocalClass && !hasMissingActiveClass ? scheduleDayAdvisoryDemo.advisories.map((advisory) => (
                 <p key={advisory} className="schedule-advisory-warning">⚠ {advisory}</p>
               )) : null}
               {safeScheduleBundle?.schedule.collisionWarnings.warningCount ? (
@@ -6043,9 +6774,9 @@ export default function Home() {
               ) : null}
 
               <section className="schedule-advisory-section" aria-label="Local schedule blocks for the selected lesson date">
-                <div className="schedule-advisory-section-title"><b>{usesSafeScheduleDay ? "FULL SCHEDULE BLOCKS" : activeLocalClass ? "LOCAL SCHEDULE BLOCKS" : "ADVISORY ROTATION BLOCKS"}</b><span>{activeScheduleBlockCount} BLOCKS</span></div>
+                <div className="schedule-advisory-section-title"><b>{hasMissingActiveClass ? "SAVED PLAN PHASES" : usesSafeScheduleDay ? "FULL SCHEDULE BLOCKS" : activeLocalClass ? "LOCAL SCHEDULE BLOCKS" : "ADVISORY ROTATION BLOCKS"}</b><span>{activeScheduleBlockCount} BLOCKS</span></div>
                 <div className="schedule-advisory-block-list">
-                  {usesSafeScheduleDay ? safeScheduleDay.nonOpenBlocks.map((block) => (
+                  {hasMissingActiveClass ? <p className="schedule-advisory-empty">The saved class record is unavailable. Use the phase list below to review this plan.</p> : usesSafeScheduleDay ? safeScheduleDay.nonOpenBlocks.map((block) => (
                     <article key={block.bookingId} className="schedule-advisory-block">
                       <time>{formatScheduleRange(block.startMinute, block.endMinute)}</time>
                       <div>
@@ -6079,7 +6810,7 @@ export default function Home() {
 
               <section className="schedule-advisory-section optional-openings" aria-label="Optional schedule openings">
                 <div className="schedule-advisory-section-title"><b>SCHEDULED OPEN EVENTS</b><span>{usesSafeScheduleDay ? safeScheduleDay.openBlocks.length : 0} BLOCKS</span></div>
-                {!safeScheduleBundle ? <p className="schedule-advisory-empty">Import the privacy-safe full gym schedule to calculate which approved areas are free.</p> : !activeLocalClass ? <p className="schedule-advisory-empty">Select a local class, then link its exact imported schedule group.</p> : !linkedSafeScheduleGroup ? <p className="schedule-advisory-empty">Open Local Classes and link this class to an exact full-schedule group.</p> : safeScheduleDay?.status === "manual_week_confirmation_required" ? <p className="schedule-advisory-empty">Confirm Odd or Even above before checking scheduled Open events.</p> : !usesSafeScheduleDay ? <p className="schedule-advisory-empty">No full-schedule availability can be confirmed for this group and date.</p> : !safeScheduleDay.openBlocks.length ? <p className="schedule-advisory-empty">NO SCHEDULED OPEN BLOCK FOR THIS GROUP/DATE.</p> : (
+                {hasMissingActiveClass ? <p className="schedule-advisory-empty">The saved class record is unavailable, so no open-station availability can be checked.</p> : !safeScheduleBundle ? <p className="schedule-advisory-empty">Import the privacy-safe full gym schedule to calculate which approved areas are free.</p> : !activeLocalClass ? <p className="schedule-advisory-empty">Select a local class, then link its exact imported schedule group.</p> : !linkedSafeScheduleGroup ? <p className="schedule-advisory-empty">Open Local Classes and link this class to an exact full-schedule group.</p> : safeScheduleDay?.status === "manual_week_confirmation_required" ? <p className="schedule-advisory-empty">Confirm Odd or Even above before checking scheduled Open events.</p> : !usesSafeScheduleDay ? <p className="schedule-advisory-empty">No full-schedule availability can be confirmed for this group and date.</p> : !safeScheduleDay.openBlocks.length ? <p className="schedule-advisory-empty">NO SCHEDULED OPEN BLOCK FOR THIS GROUP/DATE.</p> : (
                   <div className="schedule-open-list">
                     {safeScheduleDay.openBlocks.map((block) => {
                       const availability = openAvailabilityByBookingId.get(block.bookingId);
@@ -6117,7 +6848,7 @@ export default function Home() {
           </section>
 
           <section className="retro-window schedule-window">
-            <div className="window-title schedule-phase-window-title"><b>YOUR LESSON PHASES</b><div><span>{isPastActivePlan ? "PAST SNAPSHOT · READ-ONLY" : "LOCAL DRAFT"}</span>{mode === "EDIT" && !isPastActivePlan ? <button type="button" onClick={() => { setIsEventEditorOpen(true); scrollToPlannerSection("lesson-plan"); }}>EDIT EVENTS →</button> : null}</div></div>
+            <div className="window-title schedule-phase-window-title"><b>YOUR LESSON PHASES</b><div><span>{isPastActivePlan ? "PAST SNAPSHOT · READ-ONLY" : "LOCAL DRAFT"}</span>{mode === "EDIT" && !isPastActivePlan ? <button type="button" onClick={syncCurrentLessonSchedule}>SYNC DAY →</button> : null}{mode === "EDIT" && !isPastActivePlan ? <button type="button" onClick={() => { setIsEventEditorOpen(true); scrollToPlannerSection("lesson-plan"); }}>EDIT EVENTS →</button> : null}</div></div>
             <div className="window-body schedule-list">
               {lessonPhases.map((phase) => {
                 const eventName = eventNameForPhase(phase);
@@ -6145,7 +6876,7 @@ export default function Home() {
         </aside>
 
         <section id="lesson-plan" className="lesson-area">
-          {mode === "VIEW" ? <LegacyLessonDocument phases={lessonPhases} attendanceById={attendanceById} attendanceRoster={attendanceRoster} tasks={operationTasks} taskIsDone={operationTaskIsDone} className={activeLocalClass?.name ?? "Level 3"} dateLabel={activeLessonDateLabel} dateIso={activeLessonPlan.date} isCurrentPlan={!isPastActivePlan && activeLessonPlan.date === lessonToday} onSetAttendanceStatus={setAttendanceStatus} onSetTaskDone={setOperationTaskDone} /> : null}
+          {mode === "VIEW" ? <LegacyLessonDocument phases={lessonPhases} attendanceById={attendanceById} attendanceRoster={attendanceRoster} tasks={plannerTasks} taskIsDone={plannerTaskIsDone} taskIsDisabled={(taskId) => isPastActivePlan && activeReminders.some((reminder) => reminder.template.id === taskId)} className={activePlanClassName} dateLabel={activeLessonDateLabel} dateIso={activeLessonPlan.date} isCurrentPlan={!isPastActivePlan && activeLessonPlan.date === lessonToday} onSetAttendanceStatus={setAttendanceStatus} onSetTaskDone={setPlannerTaskDone} /> : null}
           {mode === "VIEW" && isAddingIdea ? <section className="view-idea-capture" aria-label="Quickly save a new idea while viewing class">{newIdeaForm}</section> : null}
           <div className={`phase-editor-workspace ${mode === "EDIT" ? "editing" : ""}`}>
             <div className="phase-editor-plan">
@@ -6161,6 +6892,7 @@ export default function Home() {
               onClose={() => { setIsEventEditorOpen(false); setOpenStationSearchEventId(null); }}
               onUpdateEvent={updateEventLabelById}
               onUpdatePhaseTitle={(phaseId, value) => updatePhaseDetailsById(phaseId, "title", value)}
+              onUpdatePhaseTime={(phaseId, value) => updatePhaseDetailsById(phaseId, "time", value)}
               onUpdatePhaseStart={updateEventPhaseStartById}
               onSetPendingEventStart={setPendingEventStart}
               onOpenPhase={(phaseId) => {
@@ -6174,6 +6906,7 @@ export default function Home() {
               onMoveEvent={moveEventById}
               onRepairTimes={repairAllEventTimes}
               onAddEventBetween={addEventBetween}
+              onAddEventAfter={addEventAfter}
               onSearchOpenStations={searchOpenStationsForEvent}
               onAddOpenStation={addOpenStationToEvent}
             />
@@ -6203,12 +6936,18 @@ export default function Home() {
                       aria-label="Phase name"
                     />
                   </label>
-                  <EventPhaseTimePicker
+                  {activeEventPhases.length === 1 && !activePhase.pendingEventEnd ? (
+                    <LessonTimeRangePicker
+                      value={activePhase.time}
+                      label={activePhase.title}
+                      onChange={(value) => updatePhaseDetails("time", value)}
+                    />
+                  ) : <EventPhaseTimePicker
                     phases={activeEventPhases}
                     phaseId={activePhase.id}
                     label={activePhase.title}
                     onStartChange={(value) => updateEventPhaseStartById(activePhase.id, value)}
-                  />
+                  />}
                 </div>
 
                 <div className="phase-format-picker" role="group" aria-label="Phase display format">
@@ -6313,7 +7052,7 @@ export default function Home() {
 
                 <div className="phase-structure-actions">
                   <button onClick={() => insertPhase("CONTINUE")}>+ PHASE IN THIS EVENT</button>
-                  <button className="transition-phase" onClick={() => { setIsEventEditorOpen(true); setNotice("USE + NEW EVENT HERE TO SPLIT A PRECEDING EVENT WITHOUT MANUAL TIME MATH"); }}>+ NEW EVENT</button>
+                  <button className="transition-phase" onClick={() => insertPhase("TRANSITION")}>+ NEW EVENT</button>
                   {activePhase.isRequired ? (
                     <span>CORE DEMO PHASE · PROTECTED</span>
                   ) : (
@@ -6942,6 +7681,91 @@ export default function Home() {
               <b>LOCAL PLANNER ASSISTANT</b>
               <span>Rules check this lesson’s timing, missing plans, explicit safety/setup notes, and linked schedule advisories. No email, calendar, crawler, server, or shared-system connection.</span>
             </div>
+            <section className="reminder-manager" aria-label="Your local reminders">
+              <div className="reminder-manager-head">
+                <div><b>YOUR REMINDERS</b><span>RECURRING + TEMPORARY · LOCAL TO THIS BROWSER</span></div>
+                <button type="button" disabled={isPastActivePlan} onClick={openReminderForm}>+ ADD REMINDER</button>
+              </div>
+              {activeReminders.length ? <div className="reminder-list">
+                {activeReminders.map(({ template, occurrence, isRollForward }) => {
+                  const isDone = occurrence.state === "completed";
+                  return (
+                    <div key={template.id} className={`reminder-row ${isDone ? "completed" : ""}`}>
+                      <label>
+                        <input type="checkbox" disabled={isPastActivePlan} checked={isDone} onChange={(event) => setReminderTaskDone(template.id, event.target.checked)} />
+                        <span className="task-copy">
+                          <strong>{template.title}</strong>
+                          <small>{template.detail ?? (template.cadence === "recurring" ? "Your recurring local reminder." : "Your temporary local reminder.")}</small>
+                        </span>
+                      </label>
+                      <div className="reminder-row-actions">
+                        <em>{template.cadence.toUpperCase()}</em>
+                        <button type="button" disabled={isPastActivePlan} onClick={() => removeReminder(template.id)} aria-label={`Remove reminder: ${template.title}`}>REMOVE</button>
+                      </div>
+                      {template.cadence === "temporary" && template.rollForwardUntilCompleted ? <span className="task-roll-forward">{isDone ? "Completed locally · it will not roll forward." : isRollForward ? "Past its original end date · still here until completed." : "Rolls forward until completed after its end date."}</span> : null}
+                    </div>
+                  );
+                })}
+              </div> : <p className="reminder-empty">No personal reminders apply to this lesson yet. Add one for every class, this class, or only this lesson.</p>}
+              {isReminderFormOpen && !isPastActivePlan ? <form className="reminder-form" onSubmit={(event) => { event.preventDefault(); saveReminder(); }}>
+                <label>
+                  REMINDER
+                  <input required maxLength={240} value={reminderTitleDraft} onChange={(event) => setReminderTitleDraft(event.currentTarget.value)} placeholder="e.g. Confirm spotting coverage" />
+                </label>
+                <label>
+                  DETAILS (OPTIONAL)
+                  <textarea maxLength={2000} value={reminderDetailDraft} onChange={(event) => setReminderDetailDraft(event.currentTarget.value)} placeholder="Short note for future-you…" />
+                </label>
+                <div className="reminder-form-grid">
+                  <label>
+                    APPLIES TO
+                    <select value={reminderScopeDraft} onChange={(event) => setReminderScopeDraft(event.currentTarget.value === "all_classes" || event.currentTarget.value === "lesson" ? event.currentTarget.value : "classes")}>
+                      <option value="all_classes">EVERY CLASS</option>
+                      <option value="classes" disabled={!activeLessonPlan.classId}>THIS CLASS</option>
+                      <option value="lesson">THIS LESSON ONLY</option>
+                    </select>
+                  </label>
+                  {reminderScopeDraft !== "lesson" ? <>
+                    <label>
+                      TYPE
+                      <select value={reminderCadenceDraft} onChange={(event) => setReminderCadenceDraft(event.currentTarget.value === "temporary" ? "temporary" : "recurring")}>
+                        <option value="recurring">RECURRING</option>
+                        <option value="temporary">TEMPORARY</option>
+                      </select>
+                    </label>
+                    <label>
+                      START DATE
+                      <input required type="date" value={reminderStartDateDraft} onChange={(event) => setReminderStartDateDraft(event.currentTarget.value)} />
+                    </label>
+                    {reminderCadenceDraft === "temporary" ? <label>
+                      END DATE (BLANK = THIS DATE ONLY)
+                      <input type="date" min={reminderStartDateDraft || undefined} value={reminderEndDateDraft} onChange={(event) => setReminderEndDateDraft(event.currentTarget.value)} />
+                    </label> : <label>
+                      END DATE (OPTIONAL)
+                      <input type="date" min={reminderStartDateDraft || undefined} value={reminderEndDateDraft} onChange={(event) => setReminderEndDateDraft(event.currentTarget.value)} />
+                    </label>}
+                  </> : null}
+                </div>
+                {reminderScopeDraft === "lesson" ? <p className="reminder-form-help">One-time reminder for this saved lesson. It will not repeat or roll forward.</p> : reminderCadenceDraft === "temporary" ? <>
+                  <label className="reminder-check">
+                    <input type="checkbox" checked={reminderRollForwardDraft} onChange={(event) => setReminderRollForwardDraft(event.currentTarget.checked)} />
+                    OPTIONAL: KEEP SHOWING AFTER THE END DATE UNTIL I COMPLETE IT
+                  </label>
+                  <p className="reminder-form-help">Temporary reminders stop on the end date unless you explicitly enable roll-forward.</p>
+                </> : <p className="reminder-form-help">Recurring reminders appear on every matching lesson from the start date through the optional end date.</p>}
+                <div className="reminder-form-actions"><button type="submit">SAVE REMINDER</button><button type="button" onClick={() => setIsReminderFormOpen(false)}>CANCEL</button></div>
+              </form> : null}
+              {reminderStorage.templates.length ? <details className="saved-reminders">
+                <summary>{reminderStorage.templates.length} SAVED REMINDER{reminderStorage.templates.length === 1 ? "" : "S"} · MANAGE</summary>
+                <div>
+                  {reminderStorage.templates.map((template) => <article key={template.id}>
+                    <span><b>{template.title}</b><small>{template.cadence.toUpperCase()} · {template.scope.kind === "all_classes" ? "EVERY CLASS" : template.scope.kind === "classes" ? "SELECTED CLASS" : "THIS SAVED LESSON"} · {template.startDate}{template.endDate ? `–${template.endDate}` : " onward"}</small></span>
+                    <button type="button" disabled={isPastActivePlan} onClick={() => removeReminder(template.id)} aria-label={`Remove saved reminder: ${template.title}`}>REMOVE</button>
+                  </article>)}
+                </div>
+              </details> : null}
+            </section>
+            <div className="task-demo-heading">BUILT-IN STARTER CHECKLIST</div>
             <div className="task-list" aria-label="Local demo tasks">
               {operationTasks.map((task) => {
                 const isDone = operationTaskIsDone(task.id);
@@ -7002,7 +7826,7 @@ export default function Home() {
           </section>
 
           <section className="retro-window attendance-window">
-            <div className="window-title">ATTENDANCE <span>{isPastActivePlan ? "PAST SNAPSHOT · COMPLETION STAYS LIVE" : activeLocalClass ? `${activeLocalClass.name.toUpperCase()} · LIVE IN VIEW + EDIT` : "SAMPLE ROSTER · CREATE A CLASS"}</span></div>
+            <div className="window-title">ATTENDANCE <span>{isPastActivePlan ? "PAST SNAPSHOT · COMPLETION STAYS LIVE" : activeLocalClass ? `${activeLocalClass.name.toUpperCase()} · LIVE IN VIEW + EDIT` : hasMissingActiveClass ? "REMOVED LOCAL CLASS · ROSTER UNAVAILABLE" : "SAMPLE ROSTER · CREATE A CLASS"}</span></div>
             {attendanceRoster.length ? attendanceRoster.map((athlete) => {
               const status = attendanceById[athlete.id] ?? "unmarked";
               return (
@@ -7035,7 +7859,7 @@ export default function Home() {
                   )}
                 </div>
               );
-            }) : <p className="attendance-empty">This local class has no students yet. Edit the class to add the roster.</p>}
+            }) : <p className="attendance-empty">{hasMissingActiveClass ? "This saved plan’s local class record is unavailable, so its roster cannot be shown." : "This local class has no students yet. Edit the class to add the roster."}</p>}
           </section>
         </aside>
       </section>
@@ -7043,6 +7867,8 @@ export default function Home() {
       <footer className="statusbar"><span>☑ LOCAL FIRST</span><span>MEDIA: MOCK STATUS ONLY</span><span>LAST EDIT: JUST NOW</span><span>LEGACY AUTOMATION: UNTOUCHED</span></footer>
       </>
       )}
+
+      {stationMakerSetup && stationMakerTarget ? <StationMakerDialog setup={stationMakerSetup} onSave={(setup) => void saveStationMaker(setup)} onCancel={() => { setStationMakerSetup(null); setStationMakerTarget(null); }} /> : null}
 
       {detailCard ? (
         <div className="idea-detail-scrim" role="presentation" onMouseDown={() => setDetailCard(null)}>
@@ -7066,33 +7892,42 @@ export default function Home() {
                         : <img src={ideaMediaUrls[detailCard.mediaId]} alt={`Reference photo for ${detailCard.title}`} />}
                     </figure>
                   ) : null}
+                  {detailCard.stationSetupId ? <section className="idea-station-preview"><b>EDITABLE PIXEL STATION</b><StationPreview setup={stationSetupsById[detailCard.stationSetupId]} label={detailCard.title} /><button type="button" onClick={() => void openSavedStationMaker(detailCard)}>EDIT STATION</button></section> : null}
                   <section className="idea-detail-facts" aria-label="Saved coaching details">
                     {detailCard.instructions.length ? <div><b>INSTRUCTIONS</b><ul>{detailCard.instructions.map((instruction) => <li key={instruction}>{instruction}</li>)}</ul></div> : null}
                     {detailCard.coachingCues.length ? <div><b>COACHING CUES</b><ul>{detailCard.coachingCues.map((cue) => <li key={cue}>{cue}</li>)}</ul></div> : null}
                     {listedMats(detailCard.mats).length ? <p><b>MATS NEEDED:</b> {listedMats(detailCard.mats).join(" · ")}</p> : null}
                     {detailCard.events.length || detailCard.skills.length ? <p><b>EVENTS / SKILLS:</b> {[...detailCard.events, ...detailCard.skills].join(" · ")}</p> : null}
                   </section>
-                  {detailCard.variants.length && mode === "EDIT" && !isLibraryWindow ? (
-                    <section className="variant-picker" aria-label={`Saved setups for ${detailCard.title}`}>
-                      <b>CHOOSE A SAVED SETUP</b>
+                  {detailCard.variants.length && (isLibraryWindow || mode === "EDIT") ? (
+                    <section className="variant-picker" aria-label={`Saved variants for ${detailCard.title}`}>
+                      <b>{isLibraryWindow ? "SAVED VARIANTS" : "CHOOSE A VARIANT"}</b>
                       {detailCard.variants.map((variant) => (
-                        <button
-                          key={variant.id}
-                          type="button"
-                          onClick={() => {
-                            addToLesson(variantPlacementCard(detailCard, variant));
-                            setDetailCard(null);
-                          }}
-                        >
-                          <strong>{variant.title}</strong>
-                          <span>{variant.instructions[0] ?? "Open the source note for setup details."}</span>
-                        </button>
+                        isLibraryWindow ? (
+                          <div key={variant.id} className="variant-saved-setup">
+                            <strong>{variant.title}</strong>
+                            <span>{variant.instructions.join(" · ") || "Open the source note for setup details."}</span>
+                          </div>
+                        ) : (
+                          <button
+                            key={variant.id}
+                            type="button"
+                            onClick={() => {
+                              addToLesson(variantPlacementCard(detailCard, variant));
+                              setDetailCard(null);
+                            }}
+                          >
+                            <strong>{variant.title}</strong>
+                            <span>{variant.instructions[0] ?? "Open the source note for setup details."}</span>
+                          </button>
+                        )
                       ))}
                     </section>
                   ) : null}
                   {mode === "EDIT" || isLibraryWindow ? (
                     <div className="idea-detail-actions">
-                      <button type="button" onClick={() => startLibraryEdit(detailCard)}>EDIT THIS IDEA</button>
+                  <button type="button" onClick={() => startLibraryEdit(detailCard)}>EDIT THIS IDEA</button>
+                      {detailCard.stationSetupId ? <button type="button" onClick={() => void openSavedStationMaker(detailCard)}>EDIT STATION</button> : null}
                       <button
                         type="button"
                         className="detail-remove"
@@ -7177,8 +8012,19 @@ export default function Home() {
                   onChange={(event) => { chooseLibraryIdeaMedia(event.currentTarget.files?.[0] ?? null, "edit"); event.currentTarget.value = ""; }}
                 />
                 <div>
-                  <button type="button" disabled={isSavingLibraryEdit} onClick={() => editIdeaCameraInputRef.current?.click()}>TAKE PHOTO</button>
-                  <button type="button" disabled={isSavingLibraryEdit} onClick={() => editIdeaMediaInputRef.current?.click()}>CHOOSE PHOTO / VIDEO</button>
+                  <button type="button" disabled={isSavingLibraryEdit || Boolean(editingLibraryItem.stationSetupId && !removeEditingStation)} onClick={() => editIdeaCameraInputRef.current?.click()}>TAKE PHOTO</button>
+                  <button type="button" disabled={isSavingLibraryEdit || Boolean(editingLibraryItem.stationSetupId && !removeEditingStation)} onClick={() => editIdeaMediaInputRef.current?.click()}>CHOOSE PHOTO / VIDEO</button>
+                  {editingLibraryItem.stationSetupId ? <button
+                    type="button"
+                    className="detail-remove"
+                    disabled={isSavingLibraryEdit}
+                    onClick={() => {
+                      setRemoveEditingStation((current) => !current);
+                      setEditingIdeaMediaFile(null);
+                    }}
+                  >
+                    {removeEditingStation ? "KEEP PIXEL STATION" : "REMOVE PIXEL STATION"}
+                  </button> : null}
                   <button
                     type="button"
                     className="detail-remove"
@@ -7188,6 +8034,8 @@ export default function Home() {
                     REMOVE ATTACHMENT
                   </button>
                 </div>
+                {editingLibraryItem.stationSetupId && !removeEditingStation ? <p className="reminder-form-help">This idea has a saved pixel station. Remove it in this edit before replacing it with a photo or video; it remains saved until you tap Save.</p> : null}
+                {removeEditingStation ? <p className="reminder-form-help">The pixel station will be removed only when you save this edit.</p> : null}
                 {editingMediaUrl ? (
                   <figure className="idea-media-preview">
                     <figcaption>{editingMediaKind?.toUpperCase()} · {editingMediaFilename}</figcaption>

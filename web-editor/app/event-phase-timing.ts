@@ -99,9 +99,11 @@ export function removeEventPhaseTiming(phases: readonly EventPhaseTime[], phaseI
 }
 
 export function canAppendEventPhase(phases: readonly EventPhaseTime[]): boolean {
-  const bounds = eventPhaseTimeBounds(phases);
-  const lastRange = rangeFor(phases[phases.length - 1]);
-  const start = bounds ? pickerMinutes(bounds.start) : null;
-  const end = bounds ? pickerMinutes(bounds.end) : null;
-  return Boolean(lastRange && start !== null && end !== null && end - start >= 10);
+  const ranges = phases.map(rangeFor);
+  if (!ranges.length || ranges.some((range) => range === null)) return false;
+  const lastRange = ranges.at(-1);
+  if (!lastRange) return false;
+  const start = pickerMinutes(lastRange.start);
+  const end = pickerMinutes(lastRange.end);
+  return start !== null && end !== null && end - start >= 10;
 }

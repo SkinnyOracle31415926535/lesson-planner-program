@@ -46,6 +46,8 @@ test("library exports are versioned, detached, and omit browser-local attachment
     mediaWidth: 1920,
     mediaHeight: 1080,
     mediaDurationSeconds: 12,
+    stationSetupId: "station-one",
+    stationPreviewKind: "pixel-station" as const,
   };
   const bundle = createLibraryTransferBundle([source], "2026-07-23T12:00:00.000Z");
 
@@ -54,6 +56,7 @@ test("library exports are versioned, detached, and omit browser-local attachment
   assert.equal(bundle.photosIncluded, false);
   assert.equal("mediaId" in bundle.ideas[0], false);
   assert.equal("mediaKind" in bundle.ideas[0], false);
+  assert.equal("stationSetupId" in bundle.ideas[0], false);
 
   source.tags.push("changed-after-export");
   assert.deepEqual(bundle.ideas[0].tags, ["floor"]);
