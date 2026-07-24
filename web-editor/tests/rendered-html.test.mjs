@@ -33,7 +33,7 @@ test("server-renders the Gym Lesson Planner shell", async () => {
   assert.match(html, /Local-first lesson planning for gymnastics coaching\./);
   assert.match(html, /LESSON PLANNER/);
   assert.match(html, /\+ LESSON PLAN/);
-  assert.match(html, /\+ CREATE CLASS/);
+  assert.match(html, /\+ IMPORT CLASS/);
   assert.match(html, /LOCAL-ONLY PLAN DATA/);
   assert.doesNotMatch(html, /Your site is taking shape|Building your site|SkeletonPreview/i);
 });
