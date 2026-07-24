@@ -5768,11 +5768,7 @@ export default function Home() {
                 >
                   {isUnavailable ? "↺" : "×"}
                 </button>
-                {isLibraryWindow ? (
-                  <span className={`library-organize-status ${isUnavailable ? "archived" : card.starred ? "gem" : "active"}`}>
-                    {isUnavailable ? "ARCHIVED · RESTORE ↺" : card.starred ? "GEM SHELF" : "ACTIVE IDEA"}
-                  </span>
-                ) : isUnavailable ? <span className="library-unavailable">RESTORE FIRST</span> : <button className="add-card" onClick={() => addToLesson(card)}>PLACE →</button>}
+                {!isLibraryWindow && (isUnavailable ? <span className="library-unavailable">RESTORE FIRST</span> : <button className="add-card" onClick={() => addToLesson(card)}>PLACE →</button>)}
               </div>
             </article>
           );
