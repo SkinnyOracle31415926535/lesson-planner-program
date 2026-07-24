@@ -46,6 +46,14 @@ export function withoutLibraryMedia(card: LibraryItem): LibraryItem {
   return copy;
 }
 
+/** Removes the browser-local Station Maker link without touching idea text. */
+export function withoutStationSetup(card: LibraryItem): LibraryItem {
+  const copy = { ...card };
+  delete copy.stationSetupId;
+  delete copy.stationPreviewKind;
+  return copy;
+}
+
 export type LibraryPreferenceCollections = {
   gemIds: string[];
   customCards: LibraryItem[];
@@ -66,12 +74,13 @@ export function replacedLibraryMediaId(
 export function permanentlyDeleteLibraryIdea(
   current: LibraryPreferenceCollections,
   idea: LibraryItem,
-): { next: LibraryPreferenceCollections; mediaId: string | null } {
+): { next: LibraryPreferenceCollections; mediaId: string | null; stationSetupId: string | null } {
   const withoutIdea = (ids: string[]) => ids.filter((id) => id !== idea.id);
   const nextOverrides = { ...current.itemOverridesById };
   delete nextOverrides[idea.id];
   return {
     mediaId: idea.mediaId ?? idea.photoId ?? null,
+    stationSetupId: idea.stationSetupId ?? null,
     next: {
       gemIds: withoutIdea(current.gemIds),
       customCards: current.customCards.filter((card) => card.id !== idea.id),

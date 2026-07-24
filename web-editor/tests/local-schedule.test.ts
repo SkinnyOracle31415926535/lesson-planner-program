@@ -115,6 +115,11 @@ test("duplicate bookings and malformed five-minute ranges are rejected", () => {
 
   const reversed = bundle([block({ startMinute: 630, endMinute: 600 })]);
   assert.equal(parseSafeScheduleBundleJson(JSON.stringify(reversed)).ok, false);
+
+  const midnightEnding = bundle([block({ startMinute: 1435, endMinute: 1440 })]);
+  const midnightResult = parseSafeScheduleBundleJson(JSON.stringify(midnightEnding));
+  assert.equal(midnightResult.ok, false);
+  if (!midnightResult.ok) assert.match(midnightResult.error, /before midnight/);
 });
 
 test("Open is resolved only from activityType and never from a label or gap", () => {
@@ -179,6 +184,7 @@ test("event availability rejects unsafe intervals and unresolved schedule days",
   assert.equal(isSafeScheduleInterval({ startMinute: 600, endMinute: 630 }), true);
   assert.equal(isSafeScheduleInterval({ startMinute: 601, endMinute: 630 }), false);
   assert.equal(isSafeScheduleInterval({ startMinute: 630, endMinute: 630 }), false);
+  assert.equal(isSafeScheduleInterval({ startMinute: 1435, endMinute: 1440 }), false);
   assert.equal(isSafeScheduleInterval({ startMinute: 600, endMinute: 1445 }), false);
   assert.equal(resolveAreaAvailabilityForInterval(ready, { startMinute: 601, endMinute: 630 }, candidates), null);
   assert.equal(resolveAreaAvailabilityForInterval(ready, { startMinute: 630, endMinute: 600 }, candidates), null);

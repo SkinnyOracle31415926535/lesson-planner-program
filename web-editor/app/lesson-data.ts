@@ -190,6 +190,10 @@ export type LibraryItem = LessonCard & {
   mediaWidth?: number;
   mediaHeight?: number;
   mediaDurationSeconds?: number;
+  /** Browser-local editable pixel station setup. Its document stays in IndexedDB. */
+  stationSetupId?: string;
+  /** Lets the library distinguish a generated station preview from a normal attachment. */
+  stationPreviewKind?: "pixel-station";
   /** Legacy version-5 photo metadata, read only during local migration. */
   photoId?: string;
   photoFilename?: string;

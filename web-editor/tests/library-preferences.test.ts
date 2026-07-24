@@ -35,7 +35,7 @@ function idea(id: string, mediaId?: string): LibraryItem {
 }
 
 test("permanent deletion clears every library reference and returns attached media", () => {
-  const deleted = idea("delete-me", "media-delete-me");
+  const deleted = { ...idea("delete-me", "media-delete-me"), stationSetupId: "station-delete-me" };
   const kept = idea("keep-me");
   const result = permanentlyDeleteLibraryIdea({
     gemIds: [deleted.id, kept.id],
@@ -48,6 +48,7 @@ test("permanent deletion clears every library reference and returns attached med
   }, deleted);
 
   assert.equal(result.mediaId, "media-delete-me");
+  assert.equal(result.stationSetupId, "station-delete-me");
   assert.deepEqual(result.next.gemIds, [kept.id]);
   assert.deepEqual(result.next.customCards, [kept]);
   assert.deepEqual(result.next.recentIdeaIds, [kept.id]);

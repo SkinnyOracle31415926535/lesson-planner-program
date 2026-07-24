@@ -172,13 +172,22 @@ export function eventStartOptionsBetween(previousStart: string | null, nextStart
   return choices;
 }
 
+/** Start choices that only split the final phase of the preceding event. */
+export function eventSplitStartOptions(
+  previousEvent: readonly EventSchedulePhase[],
+  nextStart: string | null,
+): string[] {
+  if (!eventWindow(previousEvent)) return [];
+  const finalPhase = previousEvent.at(-1);
+  const finalPhaseRange = finalPhase ? parseLessonTimeRange(finalPhase.time) : null;
+  return eventStartOptionsBetween(finalPhaseRange?.start ?? null, nextStart);
+}
+
 export function insertedEventStartOptions(
   previousEvent: readonly EventSchedulePhase[],
   nextEvent: readonly EventSchedulePhase[],
 ): string[] {
-  const previous = eventWindow(previousEvent);
   const next = eventWindow(nextEvent);
-  const previousStart = previous?.start ?? null;
   const nextStart = next?.start ?? null;
-  return eventStartOptionsBetween(previousStart, nextStart);
+  return eventSplitStartOptions(previousEvent, nextStart);
 }

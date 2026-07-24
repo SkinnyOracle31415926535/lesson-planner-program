@@ -13,6 +13,8 @@ export type LibraryTransferIdea = Omit<
   | "mediaWidth"
   | "mediaHeight"
   | "mediaDurationSeconds"
+  | "stationSetupId"
+  | "stationPreviewKind"
   | "photoId"
   | "photoFilename"
   | "photoWidth"

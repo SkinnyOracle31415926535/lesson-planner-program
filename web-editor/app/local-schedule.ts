@@ -176,7 +176,7 @@ export function isSafeScheduleInterval(value: unknown): value is SafeScheduleInt
     && typeof endMinute === "number"
     && Number.isInteger(endMinute)
     && endMinute > startMinute
-    && endMinute <= 1440
+    && endMinute < 1440
     && endMinute % 5 === 0;
 }
 
@@ -299,8 +299,8 @@ function normalizeTimeBlocks(value: unknown): SafeScheduleTimeBlock[] {
     if (block.week !== "Odd" && block.week !== "Even") throw new ScheduleValidationError(`${path}.week must be Odd or Even.`);
     const startMinute = requireInteger(block.startMinute, `${path}.startMinute`);
     const endMinute = requireInteger(block.endMinute, `${path}.endMinute`);
-    if (startMinute >= endMinute || endMinute > 1440 || startMinute % 5 || endMinute % 5) {
-      throw new ScheduleValidationError(`${path} must use a forward five-minute time range.`);
+    if (startMinute >= endMinute || endMinute >= 1440 || startMinute % 5 || endMinute % 5) {
+      throw new ScheduleValidationError(`${path} must use a forward same-day five-minute time range ending before midnight.`);
     }
     if (!Array.isArray(block.equipment)) throw new ScheduleValidationError(`${path}.equipment must be a list.`);
     const equipment = block.equipment.map((token, tokenIndex) => requireSafeText(token, `${path}.equipment[${tokenIndex}]`, 80));

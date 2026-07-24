@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   eventScheduleIssues,
+  eventSplitStartOptions,
   eventStartOptionsBetween,
   eventWindow,
   insertedEventStartOptions,
@@ -92,4 +93,25 @@ test("new-event start choices stay strictly inside the event being split", () =>
     [{ id: "previous", time: "3:30 PM–3:45 PM" }],
     [{ id: "next", time: "3:45 PM–4:00 PM" }],
   ), ["15:35", "15:40"]);
+});
+
+test("splitting a multi-phase event only offers starts after its final phase begins", () => {
+  const previous = [
+    { id: "first", time: "3:30 PM–3:40 PM" },
+    { id: "final", time: "3:40 PM–3:55 PM" },
+  ];
+
+  assert.deepEqual(eventSplitStartOptions(previous, "16:00"), ["15:45", "15:50", "15:55"]);
+  assert.deepEqual(insertedEventStartOptions(
+    previous,
+    [{ id: "next", time: "4:00 PM–4:15 PM" }],
+  ), ["15:45", "15:50", "15:55"]);
+});
+
+test("pending events cannot be used as either side of a new-event split", () => {
+  const complete = [{ id: "complete", time: "3:30 PM–3:45 PM" }];
+  const pending = [{ id: "pending", time: "TBD" }];
+
+  assert.deepEqual(eventSplitStartOptions(pending, "16:00"), []);
+  assert.deepEqual(insertedEventStartOptions(complete, pending), []);
 });
