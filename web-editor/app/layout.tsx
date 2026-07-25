@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Gym Lesson Planner",
-  description: "Local-first lesson planning for gymnastics coaching.",
+  description: "Public shared lesson planning for gymnastics coaching.",
   manifest: "/site.webmanifest",
   icons: {
     icon: [

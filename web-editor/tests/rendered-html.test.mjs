@@ -30,22 +30,22 @@ test("server-renders the Gym Lesson Planner shell", async () => {
 
   const html = await response.text();
   assert.match(html, /<title>Gym Lesson Planner<\/title>/i);
-  assert.match(html, /Local-first lesson planning for gymnastics coaching\./);
+  assert.match(html, /Public shared lesson planning for gymnastics coaching\./);
   assert.match(html, /LESSON PLANNER/);
   assert.match(html, /\+ LESSON PLAN/);
   assert.match(html, /\+ IMPORT CLASS/);
-  assert.match(html, /LOCAL-ONLY PLAN DATA/);
+  assert.match(html, /CONNECTING PUBLIC WORKSPACE/);
   assert.doesNotMatch(html, /Your site is taking shape|Building your site|SkeletonPreview/i);
 });
 
-test("keeps the planner's local-first metadata and capability surface", async () => {
+test("keeps the planner's public-shared metadata and capability surface", async () => {
   const [page, layout] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
   ]);
 
   assert.match(layout, /title:\s*"Gym Lesson Planner"/);
-  assert.match(layout, /description:\s*"Local-first lesson planning for gymnastics coaching\."/);
+  assert.match(layout, /description:\s*"Public shared lesson planning for gymnastics coaching\."/);
   assert.match(layout, /manifest:\s*"\/site\.webmanifest"/);
   assert.match(layout, /appleWebApp:/);
   assert.match(page, /createLessonPlanMeta/);

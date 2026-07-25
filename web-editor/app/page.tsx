@@ -81,6 +81,25 @@ import {
   sharedPhotoLibraryManagerUrl,
 } from "./shared-photo-library";
 import {
+  bootstrapSharedPlannerWorkspace,
+  fetchSharedPlannerWorkspace,
+  fetchSharedPlannerWorkspaceManifest,
+  putSharedPlannerWorkspace,
+  type SharedPlannerDocumentKind,
+  type SharedPlannerWorkspace as SharedPlannerWorkspaceRecord,
+} from "./shared-planner-documents";
+import {
+  LOCAL_CLASS_STORAGE_KEY,
+  LOCAL_LESSON_PLAN_INDEX_STORAGE_KEY,
+  LOCAL_LESSON_STORAGE_KEY,
+  LOCAL_OPERATIONS_STORAGE_KEY,
+  LOCAL_SAFE_SCHEDULE_STORAGE_KEY,
+  lessonPlanStorageKey,
+  readSharedPlannerStorageSnapshot,
+  replaceSharedPlannerStorage,
+  type SharedPlannerStorageSnapshot,
+} from "./shared-planner-storage";
+import {
   createIdeaMediaId,
   ideaMediaKindForFile,
   ideaMediaValidationMessage,
@@ -243,17 +262,12 @@ import {
   type LessonBoardSnapshot,
 } from "./lesson-board-snapshot";
 
-const LOCAL_LESSON_STORAGE_KEY = "gym-lesson-planner-local-l3-2026-07-20-v1";
-const LOCAL_LESSON_PLAN_INDEX_STORAGE_KEY = "gym-lesson-planner-local-plan-index-v1";
 const LOCAL_LIBRARY_STORAGE_KEY = "gym-lesson-planner-local-library-v1";
 const LOCAL_LIBRARY_VIEW_STORAGE_KEY = "gym-lesson-planner-local-library-view-v1";
-const LOCAL_OPERATIONS_STORAGE_KEY = "gym-lesson-planner-local-operations-demo-v1";
 const LOCAL_REMINDER_STORAGE_KEY = "gym-lesson-planner-local-reminders-v1";
 const LOCAL_CUSTOM_BOARD_STORAGE_KEY = "gym-lesson-planner-local-custom-boards-v1";
 const LOCAL_STATION_BOARD_OVERRIDE_STORAGE_KEY = "gym-lesson-planner-local-station-board-overrides-v1";
 const LOCAL_AREA_CATALOG_STORAGE_KEY = "gym-lesson-planner-local-area-catalog-v1";
-const LOCAL_CLASS_STORAGE_KEY = "gym-lesson-planner-local-classes-v1";
-const LOCAL_SAFE_SCHEDULE_STORAGE_KEY = "gym-lesson-planner-local-full-schedule-v1";
 const BUILT_IN_BOARD_TOOL_PREFIX = "built-in:";
 const BUILT_IN_ZONE_IDS = zoneCatalog.map((zone) => zone.id);
 const INITIAL_DEMO_GEM_IDS: string[] = [];
@@ -568,6 +582,28 @@ type StoredOperationsV1 = {
   taskDoneById: Record<string, boolean>;
   updateDecisionByRevision: Record<string, UpdateDecision>;
 };
+
+type SharedPlannerDocumentEntry = {
+  kind: SharedPlannerDocumentKind;
+  id: string;
+  value: unknown;
+};
+
+type SharedPlannerWorkspace = {
+  snapshot: SharedPlannerStorageSnapshot;
+  revision: number;
+};
+
+type KnownSharedPlannerWorkspace = {
+  revision: number;
+  fingerprint: string;
+};
+
+type SharedPlannerWorkspaceCheckpoint = KnownSharedPlannerWorkspace & {
+  version: 1;
+};
+
+const SHARED_PLANNER_CHECKPOINT_STORAGE_KEY = "gym-lesson-planner-public-workspace-checkpoint-v1";
 
 const updateDecisionOptions: Array<{ value: UpdateDecision; label: string }> = [
   { value: "IMPORTANT", label: "IMPORTANT" },
@@ -1692,6 +1728,136 @@ function isStoredOperationsV1(value: unknown): value is StoredOperationsV1 {
     && isUpdateDecisionRecord(candidate.updateDecisionByRevision);
 }
 
+function normalizeSharedPlannerOperations(value: unknown, index: LessonPlanIndex): StoredOperations | null {
+  if (isStoredOperations(value)) return value;
+  if (!isStoredOperationsV1(value)) return null;
+  return {
+    version: 2,
+    taskDoneByPlanId: { [index.activePlanId]: { ...value.taskDoneById } },
+    attendanceByPlanId: {},
+    updateDecisionByRevision: { ...value.updateDecisionByRevision },
+  };
+}
+
+/** Validates a remote or browser-cached public workspace before it can replace planner state. */
+function normalizeSharedPlannerWorkspaceSnapshot(value: SharedPlannerStorageSnapshot): SharedPlannerStorageSnapshot | null {
+  if (!isLocalClassStorage(value.classes)) return null;
+  const rotationSchedule = normalizeSafeScheduleStorage(value.rotationSchedule);
+  const normalizedIndex = normalizeLessonPlanIndex(value.lessonIndex);
+  if (!rotationSchedule || !normalizedIndex) return null;
+  const operations = normalizeSharedPlannerOperations(value.operations, normalizedIndex.index);
+  if (!operations) return null;
+
+  const lessonsByPlanId: Record<string, unknown> = {};
+  for (const plan of normalizedIndex.index.plans) {
+    if (!Object.prototype.hasOwnProperty.call(value.lessonsByPlanId, plan.id)) return null;
+    const storedLesson = value.lessonsByPlanId[plan.id];
+    if (!restoreLesson(storedLesson)) return null;
+    lessonsByPlanId[plan.id] = storedLesson;
+  }
+  return {
+    classes: value.classes,
+    rotationSchedule,
+    lessonIndex: normalizedIndex.index,
+    operations,
+    lessonsByPlanId,
+  };
+}
+
+function sharedPlannerDocumentEntries(snapshot: SharedPlannerStorageSnapshot): SharedPlannerDocumentEntry[] {
+  const index = normalizeLessonPlanIndex(snapshot.lessonIndex)?.index;
+  if (!index) return [];
+  return [
+    { kind: "classes", id: "default", value: snapshot.classes },
+    { kind: "rotation-schedule", id: "default", value: snapshot.rotationSchedule },
+    { kind: "operations", id: "default", value: snapshot.operations },
+    ...index.plans.map((plan) => ({ kind: "lesson" as const, id: plan.id, value: snapshot.lessonsByPlanId[plan.id] })),
+    // Publish the index last. Until it exists, a partially uploaded first workspace is never treated as authoritative.
+    { kind: "lesson-index", id: "default", value: index },
+  ];
+}
+
+/** A compact persisted checkpoint avoids duplicating the complete workspace in browser storage. */
+function sharedPlannerWorkspaceFingerprint(snapshot: SharedPlannerStorageSnapshot): string | null {
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(sharedPlannerDocumentEntries(snapshot));
+  } catch {
+    return null;
+  }
+  if (!serialized) return null;
+  let first = 0x811c9dc5;
+  let second = 0x9e3779b9;
+  for (let index = 0; index < serialized.length; index += 1) {
+    const code = serialized.charCodeAt(index);
+    first = Math.imul(first ^ code, 0x01000193);
+    second = Math.imul(second ^ code, 0x5bd1e995);
+  }
+  return `${serialized.length}:${(first >>> 0).toString(36)}:${(second >>> 0).toString(36)}`;
+}
+
+function isSharedPlannerWorkspaceCheckpoint(value: unknown): value is SharedPlannerWorkspaceCheckpoint {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const checkpoint = value as Partial<SharedPlannerWorkspaceCheckpoint>;
+  return checkpoint.version === 1
+    && typeof checkpoint.revision === "number" && Number.isInteger(checkpoint.revision) && checkpoint.revision > 0
+    && typeof checkpoint.fingerprint === "string" && checkpoint.fingerprint.length > 0;
+}
+
+function readSharedPlannerWorkspaceCheckpoint(storage: Storage): SharedPlannerWorkspaceCheckpoint | null {
+  try {
+    const raw = storage.getItem(SHARED_PLANNER_CHECKPOINT_STORAGE_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    return isSharedPlannerWorkspaceCheckpoint(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSharedPlannerWorkspaceCheckpoint(storage: Storage, checkpoint: KnownSharedPlannerWorkspace): void {
+  try {
+    storage.setItem(SHARED_PLANNER_CHECKPOINT_STORAGE_KEY, JSON.stringify({ version: 1, ...checkpoint }));
+  } catch {
+    // The planner itself remains usable if a browser rejects this small sync checkpoint.
+  }
+}
+
+function workspaceFromSharedPlannerResponse(workspace: SharedPlannerWorkspaceRecord): SharedPlannerWorkspace {
+  const documentsByKey = new Map(workspace.documents.map((document) => [`${document.kind}:${document.id}`, document]));
+  const indexDocument = documentsByKey.get("lesson-index:default");
+  if (!indexDocument) throw new Error("The shared lesson-plan index is missing.");
+  const normalizedIndex = normalizeLessonPlanIndex(indexDocument.value);
+  if (!normalizedIndex) throw new Error("The shared lesson-plan index is invalid.");
+  const classesDocument = documentsByKey.get("classes:default");
+  const rotationDocument = documentsByKey.get("rotation-schedule:default");
+  const operationsDocument = documentsByKey.get("operations:default");
+  if (!classesDocument || !rotationDocument || !operationsDocument) {
+    throw new Error("The shared planner workspace is incomplete.");
+  }
+  const lessonDocuments = normalizedIndex.index.plans.map((plan) => {
+    const document = documentsByKey.get(`lesson:${plan.id}`);
+    if (!document) throw new Error("A shared lesson-plan record is missing.");
+    return document;
+  });
+  const snapshot = normalizeSharedPlannerWorkspaceSnapshot({
+    classes: classesDocument.value,
+    rotationSchedule: rotationDocument.value,
+    lessonIndex: indexDocument.value,
+    operations: operationsDocument.value,
+    lessonsByPlanId: Object.fromEntries(lessonDocuments.map((document) => [document.id, document.value])),
+  });
+  if (!snapshot) throw new Error("The shared planner workspace contains an invalid record.");
+  return {
+    snapshot,
+    revision: workspace.revision,
+  };
+}
+
+async function loadSharedPlannerWorkspace(): Promise<SharedPlannerWorkspace | null> {
+  const workspace = await fetchSharedPlannerWorkspace();
+  return workspace ? workspaceFromSharedPlannerResponse(workspace) : null;
+}
+
 function revisionKey(update: Pick<PlannerUpdate, "id" | "revisionId">) {
   return `${update.id}:${update.revisionId}`;
 }
@@ -1743,10 +1909,6 @@ function formatLessonPlanDate(value: string): string {
     day: "numeric",
     year: "numeric",
   }).format(new Date(`${value}T12:00:00`)).toUpperCase();
-}
-
-function lessonPlanStorageKey(planId: string): string {
-  return `gym-lesson-planner-local-plan-${planId}-v1`;
 }
 
 function makeLegacyLessonPlanMeta(date: string, now = new Date().toISOString()): LessonPlanMeta {
@@ -2251,10 +2413,16 @@ export default function Home() {
   const libraryPinchJustEndedRef = useRef(0);
   const libraryRowHeightRef = useRef(LIBRARY_ROW_HEIGHT_DEFAULT);
   const libraryStorageSnapshotRef = useRef<string | null>(null);
+  const sharedPlannerKnownWorkspaceRef = useRef<KnownSharedPlannerWorkspace | null>(null);
+  const sharedPlannerSyncStartedRef = useRef(false);
+  const sharedPlannerSyncReadyRef = useRef(false);
+  const sharedPlannerSyncInProgressRef = useRef(false);
+  const sharedPlannerSyncConflictRef = useRef(false);
   const [isLibraryWindow, setIsLibraryWindow] = useState(false);
   activeLessonPlanIdRef.current = activeLessonPlan.id;
   lessonModeRef.current = mode;
   const [lessonPlanIndex, setLessonPlanIndex] = useState<LessonPlanIndex | null>(null);
+  const hasLessonPlanIndex = lessonPlanIndex !== null;
   const [planShelf, setPlanShelf] = useState<PlanShelf>(null);
   const [futurePlanDate, setFuturePlanDate] = useState(() => localLessonPlanDate());
   const [futurePlanClassId, setFuturePlanClassId] = useState<string | null>(null);
@@ -2263,7 +2431,11 @@ export default function Home() {
   const [hydratedPlanId, setHydratedPlanId] = useState<string | null>(null);
   const [isEventEditorOpen, setIsEventEditorOpen] = useState(false);
   const [openStationSearchEventId, setOpenStationSearchEventId] = useState<string | null>(null);
-  const [notice, setNotice] = useState("DRAFT LOCAL · MEDIA/SYNC NOT CONFIGURED");
+  const [notice, setNotice] = useState("PUBLIC SHARED WORKSPACE · CONNECTING");
+  const [sharedPlannerSyncStatus, setSharedPlannerSyncStatus] = useState("CONNECTING PUBLIC WORKSPACE");
+  const [isSharedPlannerSyncReady, setIsSharedPlannerSyncReady] = useState(false);
+  const [hasSharedPlannerSyncConflict, setHasSharedPlannerSyncConflict] = useState(false);
+  const [sharedPlannerSyncRetry, setSharedPlannerSyncRetry] = useState(0);
   const [todoDone, setTodoDone] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [safetyAcknowledged, setSafetyAcknowledged] = useState(false);
@@ -2845,13 +3017,13 @@ export default function Home() {
         setFuturePlanClassChosen(false);
         setHydratedPlanId(planWithClass.id);
         setNotice(classReconciliationBlocked
-          ? "LOCAL LESSON PLAN RESTORED · ITS SAVED CLASS COULD NOT BE REASSIGNED BECAUSE THAT DATE ALREADY HAS A PLAN"
+          ? "BROWSER LESSON CACHE RESTORED · ITS SAVED CLASS COULD NOT BE REASSIGNED BECAUSE THAT DATE ALREADY HAS A PLAN"
           : restored.migrated
-            ? "LOCAL LESSON PLAN RESTORED · PHASE DATA UPGRADED IN THIS BROWSER"
-            : "LOCAL LESSON PLAN RESTORED · THIS BROWSER ONLY");
+            ? "BROWSER LESSON CACHE RESTORED · PHASE DATA UPGRADED BEFORE PUBLIC SYNC"
+            : "BROWSER LESSON CACHE RESTORED · CONNECTING TO THE PUBLIC WORKSPACE");
       }
     } catch {
-      setNotice("LOCAL DEMO DATA ACTIVE · COULD NOT RESTORE THE LAST EDIT");
+      setNotice("BROWSER CACHE COULD NOT RESTORE THE LAST EDIT · CONNECTING TO THE PUBLIC WORKSPACE");
     } finally {
       setHasLoadedLocalLesson(true);
     }
@@ -2893,7 +3065,7 @@ export default function Home() {
         return next;
       });
     } catch {
-      setNotice("LOCAL LESSON PLAN ACTIVE · BROWSER STORAGE IS UNAVAILABLE");
+      setNotice("LESSON PLAN IS ACTIVE · BROWSER CACHE IS UNAVAILABLE, SO PUBLIC SYNC MAY RETRY");
     }
   }, [activeLessonPlan, attendanceById, customBoards, hasLoadedCustomBoards, hasLoadedLocalLesson, hasLoadedStationBoardOverrides, hydratedPlanId, isPastActivePlan, isReady, lessonDocumentDetails, lessonPhases, safetyAcknowledged, stationBoardOverrides, todoDone, visualAnchorByCardId, visualLabelLayoutByCardId]);
 
@@ -3488,7 +3660,7 @@ export default function Home() {
         }
       }
     } catch {
-      setNotice("LOCAL CLASSES ARE AVAILABLE · THE LAST CLASS LIST COULD NOT BE RESTORED");
+      setNotice("SHARED CLASSES ARE AVAILABLE · THE LAST BROWSER CACHE COULD NOT BE RESTORED");
     } finally {
       setHasLoadedLocalClasses(true);
     }
@@ -3507,7 +3679,7 @@ export default function Home() {
     if (!hasLoadedLocalClasses || !activeClassId) return;
     if (classStorage.classes.some((localClass) => localClass.id === activeClassId)) return;
     setActiveClassId(null);
-    setNotice("THE CLASS SAVED ON THIS LESSON IS NO LONGER IN THIS BROWSER · SAMPLE ROSTER SHOWN");
+    setNotice("THE CLASS SAVED ON THIS LESSON IS NOT IN THIS BROWSER CACHE · SAMPLE ROSTER SHOWN UNTIL THE PUBLIC COPY LOADS");
   }, [activeClassId, classStorage.classes, hasLoadedLocalClasses]);
 
   useEffect(() => {
@@ -3519,7 +3691,7 @@ export default function Home() {
         else setNotice("SAVED FULL SCHEDULE WAS NOT VALID · CLASSES AND LESSONS WERE NOT CHANGED");
       }
     } catch {
-      setNotice("FULL SCHEDULE IMPORT IS AVAILABLE · THE LAST LOCAL SCHEDULE COULD NOT BE RESTORED");
+      setNotice("FULL SCHEDULE IMPORT IS AVAILABLE · THE LAST BROWSER CACHE COULD NOT BE RESTORED");
     } finally {
       setHasLoadedSafeSchedule(true);
     }
@@ -3832,11 +4004,11 @@ export default function Home() {
           const savedAttendance = parsed.attendanceByPlanId[activeLessonPlanIdRef.current];
           if (savedAttendance) setAttendanceById((current) => ({ ...current, ...savedAttendance }));
           setUpdateDecisionByRevision(parsed.updateDecisionByRevision);
-          setNotice("LOCAL DEMO OPERATIONS RESTORED · THIS BROWSER ONLY");
+          setNotice("BROWSER OPERATIONS CACHE RESTORED · CONNECTING TO THE PUBLIC WORKSPACE");
         } else if (isStoredOperationsV1(parsed)) {
           setOperationTaskDoneByPlanId({ [activeLessonPlanIdRef.current]: parsed.taskDoneById });
           setUpdateDecisionByRevision(parsed.updateDecisionByRevision);
-          setNotice("LOCAL DEMO OPERATIONS RESTORED · THIS BROWSER ONLY");
+          setNotice("BROWSER OPERATIONS CACHE RESTORED · CONNECTING TO THE PUBLIC WORKSPACE");
         }
       }
     } catch {
@@ -3860,6 +4032,295 @@ export default function Home() {
       setNotice("LOCAL DEMO OPERATIONS ACTIVE · BROWSER STORAGE IS UNAVAILABLE");
     }
   }, [hasLoadedOperations, operationTaskDoneByPlanId, updateDecisionByRevision, viewAttendanceByPlanId]);
+
+  const rememberSharedPlannerWorkspace = useCallback((workspace: SharedPlannerWorkspace, fingerprint: string) => {
+    const known = { revision: workspace.revision, fingerprint };
+    sharedPlannerKnownWorkspaceRef.current = known;
+    sharedPlannerSyncConflictRef.current = false;
+    saveSharedPlannerWorkspaceCheckpoint(window.localStorage, known);
+    setHasSharedPlannerSyncConflict(false);
+    return known;
+  }, []);
+
+  const pauseSharedPlannerSync = useCallback(() => {
+    sharedPlannerSyncConflictRef.current = true;
+    setHasSharedPlannerSyncConflict(true);
+    setSharedPlannerSyncStatus("SYNC PAUSED · LOCAL CHANGES KEPT");
+    setNotice("PUBLIC WORKSPACE CHANGED ELSEWHERE · YOUR LOCAL CHANGES ARE KEPT UNTIL YOU CHOOSE LOAD PUBLIC COPY");
+  }, []);
+
+  const loadPublicSharedCopy = useCallback(() => {
+    void (async () => {
+      setSharedPlannerSyncStatus("LOADING PUBLIC WORKSPACE");
+      try {
+        const remoteWorkspace = await loadSharedPlannerWorkspace();
+        if (!remoteWorkspace) throw new Error("The public workspace is not available yet.");
+        const fingerprint = sharedPlannerWorkspaceFingerprint(remoteWorkspace.snapshot);
+        if (!fingerprint) throw new Error("The public workspace could not be verified.");
+        replaceSharedPlannerStorage(window.localStorage, remoteWorkspace.snapshot);
+        rememberSharedPlannerWorkspace(remoteWorkspace, fingerprint);
+        sharedPlannerSyncReadyRef.current = false;
+        setIsSharedPlannerSyncReady(false);
+        setSharedPlannerSyncStatus("PUBLIC WORKSPACE LOADED · RESTARTING PLANNER");
+        window.location.reload();
+      } catch {
+        setSharedPlannerSyncStatus("PUBLIC COPY UNAVAILABLE · LOCAL CHANGES KEPT");
+      }
+    })();
+  }, [rememberSharedPlannerWorkspace]);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("library") === "1"
+      || !hasLoadedLocalLesson
+      || !hasLoadedLocalClasses
+      || !hasLoadedSafeSchedule
+      || !hasLoadedOperations
+      || !hasLoadedCustomBoards
+      || !hasLoadedStationBoardOverrides
+      || !hasLessonPlanIndex
+      || sharedPlannerSyncStartedRef.current) {
+      return;
+    }
+
+    sharedPlannerSyncStartedRef.current = true;
+    let active = true;
+    let retryTimer: number | null = null;
+    const retry = (status: string, delay: number) => {
+      if (!active) return;
+      sharedPlannerSyncStartedRef.current = false;
+      setSharedPlannerSyncStatus(status);
+      retryTimer = window.setTimeout(() => setSharedPlannerSyncRetry((attempt) => attempt + 1), delay);
+    };
+    const markReady = (workspace: SharedPlannerWorkspace, fingerprint: string, status: string, notice: string) => {
+      rememberSharedPlannerWorkspace(workspace, fingerprint);
+      sharedPlannerSyncReadyRef.current = true;
+      setIsSharedPlannerSyncReady(true);
+      setSharedPlannerSyncStatus(status);
+      setNotice(notice);
+    };
+    const replaceWithRemote = (workspace: SharedPlannerWorkspace) => {
+      const fingerprint = sharedPlannerWorkspaceFingerprint(workspace.snapshot);
+      if (!fingerprint) throw new Error("The public workspace could not be verified.");
+      replaceSharedPlannerStorage(window.localStorage, workspace.snapshot);
+      rememberSharedPlannerWorkspace(workspace, fingerprint);
+      sharedPlannerSyncReadyRef.current = false;
+      setIsSharedPlannerSyncReady(false);
+      setSharedPlannerSyncStatus("PUBLIC WORKSPACE LOADED · RESTARTING PLANNER");
+      window.location.reload();
+    };
+    const beginTimer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          setSharedPlannerSyncStatus("CHECKING PUBLIC WORKSPACE");
+          // Remote comes first so a damaged or incomplete browser cache can be repaired.
+          const remoteWorkspace = await loadSharedPlannerWorkspace();
+          if (!active) return;
+          const localSnapshot = normalizeSharedPlannerWorkspaceSnapshot(readSharedPlannerStorageSnapshot(window.localStorage));
+
+          if (!remoteWorkspace) {
+            if (!localSnapshot) {
+              retry("PREPARING PUBLIC WORKSPACE", 400);
+              return;
+            }
+            const created = await bootstrapSharedPlannerWorkspace(sharedPlannerDocumentEntries(localSnapshot));
+            if (!active) return;
+            if (created.status === "conflict") {
+              retry("PUBLIC WORKSPACE FOUND · LOADING LATEST COPY", 400);
+              return;
+            }
+            const createdWorkspace = workspaceFromSharedPlannerResponse(created.workspace);
+            const fingerprint = sharedPlannerWorkspaceFingerprint(createdWorkspace.snapshot);
+            if (!fingerprint) throw new Error("The public workspace could not be verified.");
+            markReady(
+              createdWorkspace,
+              fingerprint,
+              "PUBLIC SHARED SYNC · ONLINE",
+              "PUBLIC SHARED WORKSPACE READY · LESSONS, CLASSES, ATTENDANCE, AND ROTATIONS SYNC ON EVERY WEB LINK",
+            );
+            return;
+          }
+
+          const remoteFingerprint = sharedPlannerWorkspaceFingerprint(remoteWorkspace.snapshot);
+          if (!remoteFingerprint) throw new Error("The public workspace could not be verified.");
+          if (!localSnapshot) {
+            replaceWithRemote(remoteWorkspace);
+            return;
+          }
+          const localFingerprint = sharedPlannerWorkspaceFingerprint(localSnapshot);
+          if (!localFingerprint) throw new Error("The local workspace could not be verified.");
+          const checkpoint = readSharedPlannerWorkspaceCheckpoint(window.localStorage);
+
+          if (localFingerprint === remoteFingerprint) {
+            markReady(
+              remoteWorkspace,
+              remoteFingerprint,
+              "PUBLIC SHARED SYNC · ONLINE",
+              "PUBLIC SHARED WORKSPACE LOADED · LESSONS, CLASSES, ATTENDANCE, AND ROTATIONS ARE AVAILABLE ON EVERY WEB LINK",
+            );
+            return;
+          }
+          if (!checkpoint || checkpoint.fingerprint === localFingerprint) {
+            // This device has no unsynced local edit; the shared workspace is authoritative.
+            replaceWithRemote(remoteWorkspace);
+            return;
+          }
+          if (checkpoint.fingerprint === remoteFingerprint) {
+            // Local edits were made offline while the shared workspace stayed unchanged.
+            markReady(
+              remoteWorkspace,
+              remoteFingerprint,
+              "LOCAL CHANGES READY TO SYNC",
+              "LOCAL PLANNER CHANGES KEPT · SAVING THEM TO THE PUBLIC WORKSPACE",
+            );
+            return;
+          }
+
+          // Both sides changed since the checkpoint. Never overwrite either one automatically.
+          sharedPlannerSyncReadyRef.current = true;
+          setIsSharedPlannerSyncReady(true);
+          pauseSharedPlannerSync();
+        } catch {
+          retry("PUBLIC SYNC PENDING · LOCAL COPY STILL AVAILABLE", 3_000);
+        }
+      })();
+    }, 150);
+
+    return () => {
+      active = false;
+      window.clearTimeout(beginTimer);
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
+      if (!sharedPlannerSyncReadyRef.current) sharedPlannerSyncStartedRef.current = false;
+    };
+  }, [
+    hasLessonPlanIndex,
+    hasLoadedCustomBoards,
+    hasLoadedLocalClasses,
+    hasLoadedLocalLesson,
+    hasLoadedOperations,
+    hasLoadedSafeSchedule,
+    hasLoadedStationBoardOverrides,
+    pauseSharedPlannerSync,
+    rememberSharedPlannerWorkspace,
+    sharedPlannerSyncRetry,
+  ]);
+
+  useEffect(() => {
+    if (!isSharedPlannerSyncReady) return;
+    let active = true;
+    type SyncOutcome = "idle" | "saved" | "uncertain" | "paused";
+
+    const acknowledge = (workspace: SharedPlannerWorkspace, fingerprint: string, status: string) => {
+      rememberSharedPlannerWorkspace(workspace, fingerprint);
+      if (active) setSharedPlannerSyncStatus(status);
+    };
+    const loadRemoteAndReconcile = async (
+      localSnapshot: SharedPlannerStorageSnapshot,
+      localFingerprint: string,
+    ): Promise<SyncOutcome> => {
+      try {
+        const remoteWorkspace = await loadSharedPlannerWorkspace();
+        if (!remoteWorkspace) return "uncertain";
+        const remoteFingerprint = sharedPlannerWorkspaceFingerprint(remoteWorkspace.snapshot);
+        if (!remoteFingerprint) return "uncertain";
+        if (remoteFingerprint === localFingerprint) {
+          acknowledge(remoteWorkspace, remoteFingerprint, "PUBLIC SHARED SYNC · SAVED");
+          return "saved";
+        }
+        const known = sharedPlannerKnownWorkspaceRef.current;
+        if (known && remoteFingerprint === known.fingerprint) {
+          // Another save used the same content, so only the revision needs rebasing.
+          acknowledge(remoteWorkspace, remoteFingerprint, "PUBLIC SYNC RETRYING");
+          return "uncertain";
+        }
+        if (known && localFingerprint === known.fingerprint) {
+          replaceSharedPlannerStorage(window.localStorage, remoteWorkspace.snapshot);
+          acknowledge(remoteWorkspace, remoteFingerprint, "PUBLIC WORKSPACE CHANGED · RESTARTING PLANNER");
+          sharedPlannerSyncReadyRef.current = false;
+          setIsSharedPlannerSyncReady(false);
+          window.location.reload();
+          return "paused";
+        }
+        pauseSharedPlannerSync();
+        return "paused";
+      } catch {
+        if (active) setSharedPlannerSyncStatus("PUBLIC SYNC PENDING · RETRYING");
+        return "uncertain";
+      }
+    };
+
+    const persistChanges = async (): Promise<SyncOutcome> => {
+      if (!active || !sharedPlannerSyncReadyRef.current || sharedPlannerSyncInProgressRef.current) return "idle";
+      if (sharedPlannerSyncConflictRef.current) return "paused";
+      const snapshot = normalizeSharedPlannerWorkspaceSnapshot(readSharedPlannerStorageSnapshot(window.localStorage));
+      if (!snapshot) return "uncertain";
+      const fingerprint = sharedPlannerWorkspaceFingerprint(snapshot);
+      const known = sharedPlannerKnownWorkspaceRef.current;
+      if (!fingerprint || !known) return "uncertain";
+      if (fingerprint === known.fingerprint) return "idle";
+
+      sharedPlannerSyncInProgressRef.current = true;
+      setSharedPlannerSyncStatus("SAVING PUBLIC SHARED WORKSPACE");
+      try {
+        const result = await putSharedPlannerWorkspace(sharedPlannerDocumentEntries(snapshot), known.revision);
+        if (result.status === "conflict") return await loadRemoteAndReconcile(snapshot, fingerprint);
+        const savedWorkspace = workspaceFromSharedPlannerResponse(result.workspace);
+        const savedFingerprint = sharedPlannerWorkspaceFingerprint(savedWorkspace.snapshot);
+        if (savedFingerprint === fingerprint) {
+          acknowledge(savedWorkspace, fingerprint, "PUBLIC SHARED SYNC · SAVED");
+          return "saved";
+        }
+        return await loadRemoteAndReconcile(snapshot, fingerprint);
+      } catch {
+        // A lost response may still have committed. Reconcile values before deciding it is a conflict.
+        return await loadRemoteAndReconcile(snapshot, fingerprint);
+      } finally {
+        sharedPlannerSyncInProgressRef.current = false;
+      }
+    };
+
+    const checkForRemoteChanges = async (): Promise<void> => {
+      if (!active || !sharedPlannerSyncReadyRef.current || sharedPlannerSyncInProgressRef.current || sharedPlannerSyncConflictRef.current) return;
+      const known = sharedPlannerKnownWorkspaceRef.current;
+      if (!known) return;
+      try {
+        const manifest = await fetchSharedPlannerWorkspaceManifest();
+        if (manifest.revision === known.revision) return;
+        const localSnapshot = normalizeSharedPlannerWorkspaceSnapshot(readSharedPlannerStorageSnapshot(window.localStorage));
+        if (!localSnapshot) {
+          const remoteWorkspace = await loadSharedPlannerWorkspace();
+          if (!remoteWorkspace) return;
+          const remoteFingerprint = sharedPlannerWorkspaceFingerprint(remoteWorkspace.snapshot);
+          if (!remoteFingerprint) return;
+          replaceSharedPlannerStorage(window.localStorage, remoteWorkspace.snapshot);
+          acknowledge(remoteWorkspace, remoteFingerprint, "PUBLIC WORKSPACE CHANGED · RESTARTING PLANNER");
+          sharedPlannerSyncReadyRef.current = false;
+          setIsSharedPlannerSyncReady(false);
+          window.location.reload();
+          return;
+        }
+        const localFingerprint = sharedPlannerWorkspaceFingerprint(localSnapshot);
+        if (!localFingerprint) return;
+        await loadRemoteAndReconcile(localSnapshot, localFingerprint);
+      } catch {
+        // Keep the browser cache available while the deliberately public service is unavailable.
+      }
+    };
+
+    const sync = async () => {
+      const outcome = await persistChanges();
+      if (outcome === "uncertain" || outcome === "paused") return;
+      await checkForRemoteChanges();
+    };
+    const interval = window.setInterval(() => { void sync(); }, 2_000);
+    const onFocus = () => { void sync(); };
+    window.addEventListener("focus", onFocus);
+    void sync();
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [isSharedPlannerSyncReady, pauseSharedPlannerSync, rememberSharedPlannerWorkspace]);
 
   useEffect(() => {
     const restore = () => {
@@ -6154,12 +6615,12 @@ export default function Home() {
     }));
     if (taskId === LEGACY_RECURRING_TASK_ID) setTodoDone(isDone);
     const task = operationTasks.find((candidate) => candidate.id === taskId);
-    setNotice(`${task?.title.toUpperCase() ?? "TASK"} ${isDone ? "MARKED COMPLETE" : "REOPENED"} · LOCAL DEMO ONLY`);
+    setNotice(`${task?.title.toUpperCase() ?? "TASK"} ${isDone ? "MARKED COMPLETE" : "REOPENED"} · SAVED TO THE PUBLIC WORKSPACE`);
   }
 
   function recordUpdateDecision(update: Pick<PlannerUpdate, "id" | "revisionId">, decision: UpdateDecision) {
     setUpdateDecisionByRevision((current) => ({ ...current, [revisionKey(update)]: decision }));
-    setNotice(`${decision} SAVED FOR ${update.revisionId.toUpperCase()} · LOCAL PLANNER ONLY`);
+    setNotice(`${decision} SAVED FOR ${update.revisionId.toUpperCase()} · PUBLIC WORKSPACE`);
   }
 
   function resetLibrarySearch() {
@@ -6227,7 +6688,7 @@ export default function Home() {
       [activeLessonPlan.id]: { ...current[activeLessonPlan.id], [athleteId]: status },
     }));
     const athlete = attendanceRoster.find((candidate) => candidate.id === athleteId);
-    setNotice(`${athlete?.name.toUpperCase() ?? "ATHLETE"} · ${status.toUpperCase()} · SAVED FOR THIS LOCAL LESSON`);
+    setNotice(`${athlete?.name.toUpperCase() ?? "ATHLETE"} · ${status.toUpperCase()} · SAVED FOR THIS SHARED LESSON`);
   }
 
   function openClassImportManager() {
@@ -6774,13 +7235,14 @@ export default function Home() {
   return (
     <main id="today" className={`app-shell ${isLibraryWindow ? "library-workspace-shell" : ""}`}>
       <header className="titlebar">
-        <div className="titlebar-label"><span className="title-dot" /> <span className="title-spark" aria-hidden="true">✦</span> <span className="routine-builder-title">{isLibraryWindow ? "IDEA LIBRARY" : "LESSON PLANNER"}</span> <small>{isLibraryWindow ? "LOCAL WORKSPACE" : "v0.1 LOCAL"}</small></div>
+        <div className="titlebar-label"><span className="title-dot" /> <span className="title-spark" aria-hidden="true">✦</span> <span className="routine-builder-title">{isLibraryWindow ? "IDEA LIBRARY" : "LESSON PLANNER"}</span> <small>{isLibraryWindow ? "LOCAL WORKSPACE" : "v0.1 PUBLIC SYNC"}</small></div>
       </header>
 
       <section className="terminal" role="status">
         <span>● {isLibraryWindow ? "IDEA LIBRARY READY · CHANGES SAVE IN THIS BROWSER" : notice}</span>
-        <span className="demo-indicator">{isLibraryWindow ? "DEDICATED VIEW · EDIT · ORGANIZE" : "LOCAL-ONLY PLAN DATA · THIS BROWSER"}</span>
-        <span>WORKSPACE: RYAN / {isLibraryWindow ? "IDEAS" : "PRIVATE LOCAL"}</span>
+        <span className="demo-indicator">{isLibraryWindow ? "DEDICATED VIEW · EDIT · ORGANIZE" : sharedPlannerSyncStatus}</span>
+        {!isLibraryWindow && hasSharedPlannerSyncConflict ? <button type="button" className="terminal-sync-action" onClick={loadPublicSharedCopy}>LOAD PUBLIC COPY</button> : null}
+        <span>WORKSPACE: RYAN / {isLibraryWindow ? "IDEAS" : "PUBLIC SHARED"}</span>
       </section>
 
       {isLibraryWindow ? (
@@ -6821,10 +7283,10 @@ export default function Home() {
 
       {mode === "EDIT" && isClassManagerOpen ? (
         <section className="class-manager retro-window" aria-label="Import and manage local classes">
-          <div className="window-title">LOCAL CLASSES <span>PRIVATE · THIS BROWSER</span><button type="button" onClick={() => { setIsClassManagerOpen(false); setRemoveClassCandidate(null); }} aria-label="Close local classes">×</button></div>
+          <div className="window-title">SHARED CLASSES <span>PUBLIC WORKSPACE</span><button type="button" onClick={() => { setIsClassManagerOpen(false); setRemoveClassCandidate(null); }} aria-label="Close shared classes">×</button></div>
           <div className="class-manager-body">
-            <section className="local-class-list" aria-label="Saved local classes">
-              <div className="local-class-list-heading"><b>SAVED CLASSES</b><span>{classStorage.classes.length} LOCAL</span></div>
+            <section className="local-class-list" aria-label="Saved shared classes">
+              <div className="local-class-list-heading"><b>SAVED CLASSES</b><span>{classStorage.classes.length} SHARED</span></div>
               {classStorage.classes.length ? classStorage.classes.map((localClass) => (
                 <article key={localClass.id} className={`local-class-card ${activeClassId === localClass.id ? "selected" : ""}`}>
                   <div><b>{localClass.name}</b><span>{localClass.group ?? "No group / level"}{localClass.coach ? ` · ${localClass.coach}` : ""}</span></div>
@@ -6854,24 +7316,24 @@ export default function Home() {
                     <button type="button" className="remove-local-class" onClick={() => setRemoveClassCandidate(localClass)}>REMOVE</button>
                   </div>
                 </article>
-              )) : <p className="local-class-empty">No local classes yet. Import a JSON class schedule below.</p>}
+              )) : <p className="local-class-empty">No shared classes yet. Import a JSON class schedule below.</p>}
               {activeLocalClass ? <button type="button" className="clear-local-class" onClick={() => selectClassForLesson(null)}>USE SAMPLE ROSTER FOR THIS LESSON</button> : null}
             </section>
           </div>
 
           {removeClassCandidate ? (
             <section className="remove-local-class-confirm" aria-label={`Confirm removal of ${removeClassCandidate.name}`}>
-              <div><b>{removeClassPlanCount ? `REASSIGN ${removeClassPlanCount} SAVED LESSON PLAN${removeClassPlanCount === 1 ? "" : "S"} FIRST` : `REMOVE ${removeClassCandidate.name.toUpperCase()}?`}</b><span>{removeClassPlanCount ? "This class is still used by saved lesson plans. Open each one and choose another class or the sample type before removing the class record." : "This is the second confirmation. Its class record and private roster will be removed from this browser; lesson phases stay untouched."}</span></div>
+              <div><b>{removeClassPlanCount ? `REASSIGN ${removeClassPlanCount} SAVED LESSON PLAN${removeClassPlanCount === 1 ? "" : "S"} FIRST` : `REMOVE ${removeClassCandidate.name.toUpperCase()}?`}</b><span>{removeClassPlanCount ? "This class is still used by saved lesson plans. Open each one and choose another class or the sample type before removing the class record." : "This is the second confirmation. Its class record and roster will be removed from the public workspace; lesson phases stay untouched."}</span></div>
               <div><button type="button" onClick={() => setRemoveClassCandidate(null)}>KEEP CLASS</button><button type="button" onClick={confirmRemoveLocalClass} disabled={removeClassPlanCount > 0}>REMOVE CLASS NOW</button></div>
             </section>
           ) : null}
 
-          <section className="class-import-panel" aria-label="Import a local class schedule as JSON">
-            <div className="class-import-heading"><div><b>IMPORT CLASS + SCHEDULE</b><span>JSON ONLY · imports add a new local class and never overwrite an existing roster, schedule, or lesson phase.</span></div><button type="button" onClick={() => { setClassImportRaw(LOCAL_CLASS_SCHEDULE_JSON_EXAMPLE); setClassImportPreview(null); }}>LOAD EXAMPLE</button></div>
+          <section className="class-import-panel" aria-label="Import a shared class schedule as JSON">
+            <div className="class-import-heading"><div><b>IMPORT CLASS + SCHEDULE</b><span>JSON ONLY · imports add a new shared class and never overwrite an existing roster, schedule, or lesson phase.</span></div><button type="button" onClick={() => { setClassImportRaw(LOCAL_CLASS_SCHEDULE_JSON_EXAMPLE); setClassImportPreview(null); }}>LOAD EXAMPLE</button></div>
             <label>PASTE JSON<textarea value={classImportRaw} onChange={(event) => { setClassImportRaw(event.target.value); setClassImportPreview(null); }} placeholder={LOCAL_CLASS_SCHEDULE_JSON_EXAMPLE} spellCheck={false} /></label>
-            <div className="class-import-actions"><button type="button" onClick={previewClassScheduleImport}>PREVIEW JSON</button>{classImportPreview?.ok ? <button type="button" onClick={applyClassScheduleImport}>APPLY AS NEW LOCAL CLASS</button> : null}</div>
+            <div className="class-import-actions"><button type="button" onClick={previewClassScheduleImport}>PREVIEW JSON</button>{classImportPreview?.ok ? <button type="button" onClick={applyClassScheduleImport}>APPLY AS NEW SHARED CLASS</button> : null}</div>
             {classImportPreview ? classImportPreview.ok ? (
-              <div className="class-import-preview ok"><b>READY: {classImportPreview.value.class.name}</b><span>{classImportPreview.value.class.students.length} students · {classImportPreview.value.class.schedule.length} schedule blocks · choose APPLY to save a separate local class.</span></div>
+              <div className="class-import-preview ok"><b>READY: {classImportPreview.value.class.name}</b><span>{classImportPreview.value.class.students.length} students · {classImportPreview.value.class.schedule.length} schedule blocks · choose APPLY to save a separate shared class.</span></div>
             ) : <div className="class-import-preview error"><b>CHECK JSON</b><span>{classImportPreview.error}</span></div> : <p className="class-import-help">Use the example’s <code>version</code>, <code>class</code>, <code>students</code>, and <code>schedule</code> fields. SQL is intentionally not run inside the planner.</p>}
           </section>
 
@@ -6899,29 +7361,29 @@ export default function Home() {
               );
             })() : <div className="class-import-preview error"><b>CHECK SAFE SCHEDULE</b><span>{safeScheduleImportPreview.result.error}</span></div> : safeScheduleBundle ? (
               <div className="class-import-preview ok">
-                <b>LOCAL FULL SCHEDULE ACTIVE</b>
+                <b>SHARED FULL SCHEDULE ACTIVE</b>
                 <span>{safeScheduleBundle.schedule.sourceId} / {safeScheduleBundle.schedule.scheduleId} · {safeScheduleGroupOptions.length} groups · {safeScheduleBundle.schedule.timeBlocks.length} blocks · revision {safeScheduleBundle.schedule.revision.slice(0, 12)}…</span>
               </div>
-            ) : <p className="class-import-help">Choose <code>lesson-planner-safe-schedule.json</code>. The complete file is validated before anything replaces the current browser-local schedule.</p>}
+            ) : <p className="class-import-help">Choose <code>lesson-planner-safe-schedule.json</code>. The complete file is validated before anything replaces the current shared schedule.</p>}
             <div className="class-import-actions">
-              <button type="button" onClick={loadSummer2026LocalSchedule}>{safeScheduleBundle?.schedule.scheduleId === "summer_2026" ? "RELOAD SUMMER 2026 LOCAL COPY" : "LOAD SUMMER 2026 LOCAL COPY"}</button>
-              {safeScheduleImportPreview?.result.ok ? <button type="button" onClick={applySafeScheduleImport}>{safeScheduleBundle ? "REPLACE LOCAL SCHEDULE COPY" : "APPLY FULL SCHEDULE"}</button> : null}
+              <button type="button" onClick={loadSummer2026LocalSchedule}>{safeScheduleBundle?.schedule.scheduleId === "summer_2026" ? "RELOAD SUMMER 2026 SHARED COPY" : "LOAD SUMMER 2026 SHARED COPY"}</button>
+              {safeScheduleImportPreview?.result.ok ? <button type="button" onClick={applySafeScheduleImport}>{safeScheduleBundle ? "REPLACE SHARED SCHEDULE" : "APPLY FULL SCHEDULE"}</button> : null}
             </div>
-            <p className="class-import-help">The included Summer 2026 copy is browser-local and advisory only. It retains the source&apos;s accepted-as-is status and unresolved review warnings; it never reserves equipment or changes the source vault.</p>
+            <p className="class-import-help">The included Summer 2026 copy is public-shared and advisory only. It retains the source&apos;s accepted-as-is status and unresolved review warnings; it never reserves equipment or changes the source vault.</p>
           </section>
         </section>
       ) : null}
 
       {planShelf === "PAST" ? (
-        <section className="lesson-plan-shelf retro-window" aria-label="Saved local lesson plans">
+        <section className="lesson-plan-shelf retro-window" aria-label="Saved shared lesson plans">
           <div className="window-title">SAVED LESSON PLANS <button type="button" onClick={() => setPlanShelf(null)} aria-label="Close saved lesson plans">×</button></div>
           <div className="lesson-plan-shelf-body">
             {savedLessonPlans.length ? savedLessonPlans.map((plan) => (
               <button key={plan.id} type="button" className={`saved-lesson-plan ${plan.id === activeLessonPlan.id ? "current" : ""}`} onClick={() => openLessonPlan(plan)}>
                 <strong>{formatLessonPlanDate(plan.date)}</strong>
-                <span>{localClassById(classStorage, plan.classId)?.name ?? (plan.classId ? plan.title.replace(/\s+LESSON$/i, "") || "REMOVED LOCAL CLASS" : "SAMPLE LEVEL 3")} · {plan.id === activeLessonPlan.id ? "CURRENT PLAN" : isPastLessonPlanDate(plan.date, lessonToday) ? "VIEW READ-ONLY SNAPSHOT" : "OPEN LOCAL DRAFT"}</span>
+                <span>{localClassById(classStorage, plan.classId)?.name ?? (plan.classId ? plan.title.replace(/\s+LESSON$/i, "") || "REMOVED CLASS" : "SAMPLE LEVEL 3")} · {plan.id === activeLessonPlan.id ? "CURRENT PLAN" : isPastLessonPlanDate(plan.date, lessonToday) ? "VIEW READ-ONLY SNAPSHOT" : "OPEN SHARED DRAFT"}</span>
               </button>
-            )) : <p>No local lesson plans are saved in this browser yet.</p>}
+            )) : <p>No shared lesson plans are available yet.</p>}
           </div>
         </section>
       ) : null}
@@ -6988,7 +7450,7 @@ export default function Home() {
       <section className="identity-strip">
         <div>
           <p className="eyebrow">{activeLessonDateLabel}</p>
-          <h1>LESSON PLANNER <span>•</span> {activePlanClassName.toUpperCase()} · {activeLocalClass ? "LOCAL CLASS" : hasMissingActiveClass ? "REMOVED LOCAL CLASS" : "3:30–5:25 PM"}</h1>
+          <h1>LESSON PLANNER <span>•</span> {activePlanClassName.toUpperCase()} · {activeLocalClass ? "SHARED CLASS" : hasMissingActiveClass ? "REMOVED CLASS" : "3:30–5:25 PM"}</h1>
         </div>
         <div className="readiness">
           <span className="pixel-label">READY STATE</span>
@@ -7001,26 +7463,26 @@ export default function Home() {
       </section>
 
       <section className="workspace-grid">
-        <aside className="schedule-column" aria-label="Schedule advisory and local lesson phases">
-          <section className="retro-window schedule-advisory-window" aria-label="Local schedule advisory preview">
-            <div className="window-title">SCHEDULE ADVISORY <span>LOCAL PLAN</span></div>
+        <aside className="schedule-column" aria-label="Schedule advisory and shared lesson phases">
+          <section className="retro-window schedule-advisory-window" aria-label="Shared schedule advisory preview">
+            <div className="window-title">SCHEDULE ADVISORY <span>PUBLIC SHARED PLAN</span></div>
             <div className="schedule-advisory-body">
               <dl className="schedule-advisory-meta">
                 <div><dt>DATE</dt><dd>{activeLessonDateLabel}</dd></div>
                 <div><dt>GROUP</dt><dd>{activeScheduleGroup}</dd></div>
-                <div><dt>ROSTER</dt><dd>{activeLocalClass ? `${activeLocalClass.students.length} LOCAL` : hasMissingActiveClass ? "UNAVAILABLE" : "SAMPLE"}</dd></div>
+                <div><dt>ROSTER</dt><dd>{activeLocalClass ? `${activeLocalClass.students.length} SHARED` : hasMissingActiveClass ? "UNAVAILABLE" : "SAMPLE"}</dd></div>
               </dl>
 
               <div className="schedule-advisory-guard">
                 <b>{hasMissingActiveClass
-                  ? "REMOVED LOCAL CLASS"
+                  ? "REMOVED CLASS"
                   : usesSafeScheduleDay
                   ? "FULL SAFE SCHEDULE"
                   : safeScheduleBundle && activeLocalClass && !linkedSafeScheduleGroup
                     ? "LINK AN EXACT SCHEDULE GROUP"
                     : safeScheduleBundle
-                      ? "LOCAL SCHEDULE FALLBACK"
-                      : activeLocalClass ? "LOCAL CLASS SCHEDULE" : "ADVISORY ONLY"}</b>
+                      ? "SHARED SCHEDULE FALLBACK"
+                      : activeLocalClass ? "SHARED CLASS SCHEDULE" : "ADVISORY ONLY"}</b>
                 <span>{hasMissingActiveClass
                   ? "This saved plan keeps its phases, but its local class record, roster, and schedule link are no longer available."
                   : usesSafeScheduleDay
@@ -7028,8 +7490,8 @@ export default function Home() {
                   : safeScheduleBundle && activeLocalClass && !linkedSafeScheduleGroup
                     ? "Open Local Classes and choose this class’s exact imported schedule group. Class names are never fuzzy-matched."
                     : activeLocalClass
-                      ? "Local class blocks remain visible, but they cannot confirm which gym areas are free without a ready full-schedule link."
-                      : "Import a local class to replace this sample schedule and roster."}</span>
+                      ? "Shared class blocks remain visible, but they cannot confirm which gym areas are free without a ready full-schedule link."
+                      : "Import a shared class to replace this sample schedule and roster."}</span>
                 {suggestedSafeScheduleGroup && activeLocalClass ? <button type="button" className="schedule-advisory-link" onClick={() => linkLocalClassToSafeSchedule(activeLocalClass.id, suggestedSafeScheduleGroup)}>REVIEW LINK {suggestedSafeScheduleGroup} →</button> : null}
               </div>
 
@@ -7048,8 +7510,8 @@ export default function Home() {
                 <p className="schedule-advisory-warning">⚠ {safeScheduleBundle.schedule.collisionWarnings.warningCount} unresolved schedule collision warnings remain. Availability is advisory, not a reservation.</p>
               ) : null}
 
-              <section className="schedule-advisory-section" aria-label="Local schedule blocks for the selected lesson date">
-                <div className="schedule-advisory-section-title"><b>{hasMissingActiveClass ? "SAVED PLAN PHASES" : usesSafeScheduleDay ? "FULL SCHEDULE BLOCKS" : activeLocalClass ? "LOCAL SCHEDULE BLOCKS" : "ADVISORY ROTATION BLOCKS"}</b><span>{activeScheduleBlockCount} BLOCKS</span></div>
+              <section className="schedule-advisory-section" aria-label="Shared schedule blocks for the selected lesson date">
+                <div className="schedule-advisory-section-title"><b>{hasMissingActiveClass ? "SAVED PLAN PHASES" : usesSafeScheduleDay ? "FULL SCHEDULE BLOCKS" : activeLocalClass ? "SHARED SCHEDULE BLOCKS" : "ADVISORY ROTATION BLOCKS"}</b><span>{activeScheduleBlockCount} BLOCKS</span></div>
                 <div className="schedule-advisory-block-list">
                   {hasMissingActiveClass ? <p className="schedule-advisory-empty">The saved class record is unavailable. Use the phase list below to review this plan.</p> : usesSafeScheduleDay ? safeScheduleDay.nonOpenBlocks.map((block) => (
                     <article key={block.bookingId} className="schedule-advisory-block">
@@ -7118,12 +7580,12 @@ export default function Home() {
                 <p className="schedule-open-advisory">ADVISORY ONLY · AREAS ARE NOT RESERVED · NOTHING IS ADDED UNTIL YOU CHOOSE AREAS AND TAP ADD OPEN EVENT</p>
               </section>
 
-              <p className="schedule-advisory-source">BROWSER-LOCAL SCHEDULE COPY · NO LIVE SCHEDULE, CALENDAR, AUTOMATION, OR SERVER CONNECTION</p>
+              <p className="schedule-advisory-source">PUBLIC SHARED SCHEDULE COPY · NO LIVE SCHEDULE, CALENDAR, OR AUTOMATION CONNECTION</p>
             </div>
           </section>
 
           <section className="retro-window schedule-window">
-            <div className="window-title schedule-phase-window-title"><b>YOUR LESSON PHASES</b><div><span>{isPastActivePlan ? "PAST SNAPSHOT · READ-ONLY" : "LOCAL DRAFT"}</span>{mode === "EDIT" && !isPastActivePlan ? <button type="button" onClick={syncCurrentLessonSchedule}>SYNC DAY →</button> : null}{mode === "EDIT" && !isPastActivePlan ? <button type="button" onClick={() => { setIsEventEditorOpen(true); scrollToPlannerSection("lesson-plan"); }}>EDIT EVENTS →</button> : null}</div></div>
+            <div className="window-title schedule-phase-window-title"><b>YOUR LESSON PHASES</b><div><span>{isPastActivePlan ? "PAST SNAPSHOT · READ-ONLY" : "PUBLIC SHARED DRAFT"}</span>{mode === "EDIT" && !isPastActivePlan ? <button type="button" onClick={syncCurrentLessonSchedule}>SYNC DAY →</button> : null}{mode === "EDIT" && !isPastActivePlan ? <button type="button" onClick={() => { setIsEventEditorOpen(true); scrollToPlannerSection("lesson-plan"); }}>EDIT EVENTS →</button> : null}</div></div>
             <div className="window-body schedule-list">
               {lessonPhases.map((phase) => {
                 const eventName = eventNameForPhase(phase);
@@ -7145,7 +7607,7 @@ export default function Home() {
             </div>
             <div className="schedule-footer">
               <p>✦ Smart draft surfaced 4 useful ideas. It has not placed any for you.</p>
-              <span className="tiny-static-note">PAST PLANS STAY SAVED IN THIS BROWSER</span>
+              <span className="tiny-static-note">PAST PLANS STAY IN THE PUBLIC SHARED WORKSPACE</span>
             </div>
           </section>
         </aside>
