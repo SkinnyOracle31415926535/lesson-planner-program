@@ -52,3 +52,20 @@ test("keeps the planner's public-shared metadata and capability surface", async 
   assert.match(page, /LOCAL_REMINDER_STORAGE_KEY/);
   assert.doesNotMatch(page, /SkeletonPreview|_sites-preview/);
 });
+
+test("keeps direct Draft actions beside the public Idea save actions", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const newIdeaActionsStart = page.indexOf('<div className="new-idea-actions">');
+  const newIdeaActions = page.slice(newIdeaActionsStart, page.indexOf("</div>", newIdeaActionsStart));
+  const editorActionsStart = page.lastIndexOf('<div className="idea-editor-actions">', page.lastIndexOf("onClick={closeLibraryEdit}"));
+  const editorActions = page.slice(editorActionsStart, page.indexOf("</div>", editorActionsStart));
+
+  assert.ok(newIdeaActionsStart >= 0);
+  assert.ok(editorActionsStart >= 0);
+  assert.ok(newIdeaActions.indexOf("SAVE IDEA") < newIdeaActions.indexOf("DRAFT IDEA"));
+  assert.ok(newIdeaActions.indexOf("DRAFT IDEA") < newIdeaActions.indexOf("CANCEL"));
+  assert.match(newIdeaActions, /<button type="button"[\s\S]*?saveNewIdea\(\{ asDraft: true \}\)[\s\S]*?>DRAFT IDEA<\/button>/);
+  assert.ok(editorActions.indexOf("CANCEL") < editorActions.indexOf("MOVE TO DRAFT"));
+  assert.ok(editorActions.indexOf("MOVE TO DRAFT") < editorActions.indexOf("SAVE PUBLIC EDIT"));
+  assert.match(editorActions, /<button type="button"[\s\S]*?saveLibraryEdit\(\{ moveToDraft: true \}\)[\s\S]*?>MOVE TO DRAFT<\/button>/);
+});

@@ -6785,16 +6785,20 @@ export default function Home() {
     setNotice(`${card.title.toUpperCase()} MOVED TO ARCHIVE · NOTHING WAS DELETED · SYNCING TO THE PUBLIC IDEA LIBRARY`);
   }
 
+  function moveIdeaToDraft(card: LibraryItem) {
+    setArchivedIdeaIds((ids) => ids.filter((id) => id !== card.id));
+    setRemovedIdeaIds((ids) => ids.filter((id) => id !== card.id));
+    if (card.defaultArchived) setRestoredIdeaIds((ids) => [...new Set([...ids, card.id])]);
+    setDraftIdeaIds((ids) => [...new Set([...ids, card.id])]);
+  }
+
   function toggleDraft(card: LibraryItem) {
     if (draftIdeaIds.includes(card.id)) {
       setDraftIdeaIds((ids) => ids.filter((id) => id !== card.id));
       setNotice(`${card.title.toUpperCase()} MARKED COMPLETE · REMOVED FROM DRAFTS · SYNCING TO THE PUBLIC IDEA LIBRARY`);
       return;
     }
-    setArchivedIdeaIds((ids) => ids.filter((id) => id !== card.id));
-    setRemovedIdeaIds((ids) => ids.filter((id) => id !== card.id));
-    if (card.defaultArchived) setRestoredIdeaIds((ids) => [...new Set([...ids, card.id])]);
-    setDraftIdeaIds((ids) => [...new Set([...ids, card.id])]);
+    moveIdeaToDraft(card);
     setNotice(`${card.title.toUpperCase()} MARKED AS DRAFT · KEEP EDITING IT FROM DRAFTS · SYNCING TO THE PUBLIC IDEA LIBRARY`);
   }
 
@@ -6864,7 +6868,7 @@ export default function Home() {
     return { ...metadata, mediaId };
   }
 
-  async function saveLibraryEdit() {
+  async function saveLibraryEdit({ moveToDraft = false }: { moveToDraft?: boolean } = {}) {
     if (!editingLibraryItem || !libraryEditDraft || isSavingLibraryEdit) return;
     const title = libraryEditDraft.title.trim();
     if (!title) {
@@ -6911,12 +6915,15 @@ export default function Home() {
       } else {
         setItemOverridesById((current) => ({ ...current, [edited.id]: edited }));
       }
+      if (moveToDraft) moveIdeaToDraft(edited);
       setEditingLibraryItem(null);
       setLibraryEditDraft(null);
       setEditingIdeaMediaFile(null);
       setRemoveEditingIdeaMedia(false);
       setRemoveEditingStation(false);
-      setNotice(`${edited.title.toUpperCase()} SAVED${edited.mediaId ? ` WITH A ${edited.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · SYNCING TO THE PUBLIC IDEA LIBRARY`);
+      setNotice(moveToDraft
+        ? `${edited.title.toUpperCase()} SAVED AS A DRAFT${edited.mediaId ? ` WITH A ${edited.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · KEEP EDITING IT FROM DRAFTS · SYNCING TO THE PUBLIC IDEA LIBRARY`
+        : `${edited.title.toUpperCase()} SAVED${edited.mediaId ? ` WITH A ${edited.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · SYNCING TO THE PUBLIC IDEA LIBRARY`);
     } catch {
       if (newMediaId) {
         try {
@@ -7472,7 +7479,7 @@ export default function Home() {
     }
   }
 
-  async function saveNewIdea() {
+  async function saveNewIdea({ asDraft = false }: { asDraft?: boolean } = {}) {
     if (isSavingNewIdea) return;
     const title = newIdeaTitle.trim();
     if (!title) {
@@ -7504,12 +7511,15 @@ export default function Home() {
         setStationSetupsById((current) => ({ ...current, [newIdeaStationSetup.id]: newIdeaStationSetup }));
       }
       setCustomLibraryCards((cards) => [idea, ...cards]);
+      if (asDraft) moveIdeaToDraft(idea);
       resetNewIdeaDraft();
       setIsAddingIdea(false);
       setLibraryFilter("all");
-      setNotice(mode === "VIEW"
-        ? `${idea.title.toUpperCase()} SAVED TO THE PUBLIC IDEA LIBRARY${idea.mediaId ? ` WITH A ${idea.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · READY TO PLACE WHEN YOU RETURN TO EDIT`
-        : `${idea.title.toUpperCase()} SAVED TO THE PUBLIC IDEA LIBRARY${idea.mediaId ? ` WITH A ${idea.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · SELECT IT TO PLACE IT`);
+      setNotice(asDraft
+        ? `${idea.title.toUpperCase()} SAVED AS A DRAFT${idea.mediaId ? ` WITH A ${idea.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · KEEP EDITING IT FROM DRAFTS · SYNCING TO THE PUBLIC IDEA LIBRARY`
+        : mode === "VIEW"
+          ? `${idea.title.toUpperCase()} SAVED TO THE PUBLIC IDEA LIBRARY${idea.mediaId ? ` WITH A ${idea.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · READY TO PLACE WHEN YOU RETURN TO EDIT`
+          : `${idea.title.toUpperCase()} SAVED TO THE PUBLIC IDEA LIBRARY${idea.mediaId ? ` WITH A ${idea.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · SELECT IT TO PLACE IT`);
     } catch {
       setNotice("THE IDEA ATTACHMENT COULD NOT BE SAVED · THE IDEA IS STILL OPEN SO YOU CAN TRY AGAIN");
     } finally {
@@ -7582,7 +7592,7 @@ export default function Home() {
           </figure>
         ) : null}
       </div>
-      <div className="new-idea-actions"><button type="submit" disabled={isSavingNewIdea}>{isSavingNewIdea ? "SAVING…" : "SAVE IDEA"}</button><button type="button" disabled={isSavingNewIdea} onClick={() => { resetNewIdeaDraft(); setIsAddingIdea(false); }}>CANCEL</button></div>
+      <div className="new-idea-actions"><button type="submit" disabled={isSavingNewIdea}>{isSavingNewIdea ? "SAVING…" : "SAVE IDEA"}</button><button type="button" disabled={isSavingNewIdea} onClick={() => void saveNewIdea({ asDraft: true })}>DRAFT IDEA</button><button type="button" disabled={isSavingNewIdea} onClick={() => { resetNewIdeaDraft(); setIsAddingIdea(false); }}>CANCEL</button></div>
     </form>
   ) : null;
 
@@ -9382,6 +9392,7 @@ export default function Home() {
               </section>
               <div className="idea-editor-actions">
                 <button type="button" disabled={isSavingLibraryEdit} onClick={closeLibraryEdit}>CANCEL</button>
+                <button type="button" disabled={isSavingLibraryEdit} onClick={() => void saveLibraryEdit({ moveToDraft: true })}>MOVE TO DRAFT</button>
                 <button type="submit" disabled={isSavingLibraryEdit}>{isSavingLibraryEdit ? "SAVING…" : "SAVE PUBLIC EDIT"}</button>
               </div>
             </div>
