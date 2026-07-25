@@ -22,6 +22,13 @@
       "when": 1784978258136,
       "tag": "0002_famous_fenris",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1784982583641,
+      "tag": "0003_nifty_thunderbolt_ross",
+      "breakpoints": true
     }
   ]
 }

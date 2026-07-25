@@ -52,7 +52,7 @@ export function stationAsset(assetId: StationAssetId): StationAsset {
   return stationAssets.find((asset) => asset.id === assetId) ?? stationAssets[0];
 }
 
-export function createStationSetup(id = `station-${Date.now()}`): StationSetup {
+export function createStationSetup(id = `station-${typeof globalThis.crypto?.randomUUID === "function" ? globalThis.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`}`): StationSetup {
   const now = new Date().toISOString();
   return { id, version: STATION_SETUP_VERSION, canvas: STATION_CANVAS, objects: [], createdAt: now, updatedAt: now };
 }

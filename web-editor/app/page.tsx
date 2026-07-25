@@ -89,6 +89,23 @@ import {
   type SharedPlannerWorkspace as SharedPlannerWorkspaceRecord,
 } from "./shared-planner-documents";
 import {
+  bootstrapSharedIdeaLibrary,
+  copySharedIdeaLibraryState,
+  fetchSharedIdeaLibrary,
+  fetchSharedIdeaLibraryManifest,
+  fetchSharedIdeaMediaMetadata,
+  isSharedIdeaLibraryEmpty,
+  parseSharedIdeaLibraryState,
+  putSharedIdeaLibrary,
+  sharedIdeaLibraryFingerprint,
+  sharedIdeaMediaReferences,
+  sharedIdeaMediaUrl,
+  uploadSharedIdeaMedia,
+  type SharedIdeaLibraryPreferences,
+  type SharedIdeaLibraryState,
+  type SharedIdeaLibraryWorkspace as SharedIdeaLibraryWorkspaceRecord,
+} from "./shared-idea-library";
+import {
   LOCAL_CLASS_STORAGE_KEY,
   LOCAL_LESSON_PLAN_INDEX_STORAGE_KEY,
   LOCAL_LESSON_STORAGE_KEY,
@@ -280,10 +297,10 @@ const TODAY_LESSON_PLAN_ID = "legacy-current";
 const FUTURE_SAMPLE_CLASS_VALUE = "__sample_level_3__";
 
 const shelfCopy: Record<LibraryShelf, string> = {
-  all: "Your locally created skills, drills, routines, activities, and references",
-  gems: "Your starred planning shelf",
-  recent: "Your most recently placed ideas in this browser",
-  archive: "Your archived ideas — nothing is deleted",
+  all: "Your shared skills, drills, routines, activities, and references",
+  gems: "Your shared starred planning shelf",
+  recent: "Your most recently placed shared ideas",
+  archive: "Your archived shared ideas — nothing is deleted",
 };
 
 type LessonDocumentDetails = {
@@ -604,6 +621,17 @@ type SharedPlannerWorkspaceCheckpoint = KnownSharedPlannerWorkspace & {
 };
 
 const SHARED_PLANNER_CHECKPOINT_STORAGE_KEY = "gym-lesson-planner-public-workspace-checkpoint-v1";
+
+type KnownSharedIdeaLibraryWorkspace = {
+  revision: number;
+  fingerprint: string;
+};
+
+type SharedIdeaLibraryCheckpoint = KnownSharedIdeaLibraryWorkspace & {
+  version: 1;
+};
+
+const SHARED_IDEA_LIBRARY_CHECKPOINT_STORAGE_KEY = "gym-lesson-planner-public-idea-library-checkpoint-v1";
 
 const updateDecisionOptions: Array<{ value: UpdateDecision; label: string }> = [
   { value: "IMPORTANT", label: "IMPORTANT" },
@@ -1822,6 +1850,54 @@ function saveSharedPlannerWorkspaceCheckpoint(storage: Storage, checkpoint: Know
   }
 }
 
+function isSharedIdeaLibraryCheckpoint(value: unknown): value is SharedIdeaLibraryCheckpoint {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const checkpoint = value as Partial<SharedIdeaLibraryCheckpoint>;
+  return checkpoint.version === 1
+    && typeof checkpoint.revision === "number" && Number.isInteger(checkpoint.revision) && checkpoint.revision >= 0
+    && typeof checkpoint.fingerprint === "string" && checkpoint.fingerprint.length > 0;
+}
+
+function readSharedIdeaLibraryCheckpoint(storage: Storage): SharedIdeaLibraryCheckpoint | null {
+  try {
+    const raw = storage.getItem(SHARED_IDEA_LIBRARY_CHECKPOINT_STORAGE_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    return isSharedIdeaLibraryCheckpoint(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSharedIdeaLibraryCheckpoint(storage: Storage, checkpoint: KnownSharedIdeaLibraryWorkspace): void {
+  try {
+    storage.setItem(SHARED_IDEA_LIBRARY_CHECKPOINT_STORAGE_KEY, JSON.stringify({ version: 1, ...checkpoint }));
+  } catch {
+    // The local library remains usable if this small synchronization marker cannot be saved.
+  }
+}
+
+/** Uploads only media that the canonical public store does not already have. */
+async function ensureSharedIdeaLibraryMedia(state: SharedIdeaLibraryState): Promise<void> {
+  for (const reference of sharedIdeaMediaReferences(state)) {
+    const mediaId = reference.mediaId!;
+    const remote = await fetchSharedIdeaMediaMetadata(mediaId);
+    if (remote) {
+      if (remote.ideaId !== reference.id || remote.kind !== reference.mediaKind) {
+        throw new Error("A public Idea Library attachment ID belongs to different media.");
+      }
+      continue;
+    }
+    const local = await loadIdeaMedia(mediaId);
+    if (!local) throw new Error("An Idea Library attachment is unavailable in this browser.");
+    await uploadSharedIdeaMedia({
+      ...local,
+      kind: reference.mediaKind!,
+      filename: reference.mediaFilename!,
+      mimeType: reference.mediaMimeType!,
+    });
+  }
+}
+
 function workspaceFromSharedPlannerResponse(workspace: SharedPlannerWorkspaceRecord): SharedPlannerWorkspace {
   const documentsByKey = new Map(workspace.documents.map((document) => [`${document.kind}:${document.id}`, document]));
   const indexDocument = documentsByKey.get("lesson-index:default");
@@ -2418,6 +2494,12 @@ export default function Home() {
   const sharedPlannerSyncReadyRef = useRef(false);
   const sharedPlannerSyncInProgressRef = useRef(false);
   const sharedPlannerSyncConflictRef = useRef(false);
+  const sharedIdeaLibraryKnownWorkspaceRef = useRef<KnownSharedIdeaLibraryWorkspace | null>(null);
+  const sharedIdeaLibrarySyncStartedRef = useRef(false);
+  const sharedIdeaLibrarySyncReadyRef = useRef(false);
+  const sharedIdeaLibrarySyncInProgressRef = useRef(false);
+  const sharedIdeaLibrarySyncConflictRef = useRef(false);
+  const sharedIdeaStationFallbackRef = useRef<Record<string, StationSetup>>({});
   const [isLibraryWindow, setIsLibraryWindow] = useState(false);
   activeLessonPlanIdRef.current = activeLessonPlan.id;
   lessonModeRef.current = mode;
@@ -2436,6 +2518,10 @@ export default function Home() {
   const [isSharedPlannerSyncReady, setIsSharedPlannerSyncReady] = useState(false);
   const [hasSharedPlannerSyncConflict, setHasSharedPlannerSyncConflict] = useState(false);
   const [sharedPlannerSyncRetry, setSharedPlannerSyncRetry] = useState(0);
+  const [sharedIdeaLibrarySyncStatus, setSharedIdeaLibrarySyncStatus] = useState("CONNECTING PUBLIC IDEAS");
+  const [isSharedIdeaLibrarySyncReady, setIsSharedIdeaLibrarySyncReady] = useState(false);
+  const [hasSharedIdeaLibrarySyncConflict, setHasSharedIdeaLibrarySyncConflict] = useState(false);
+  const [sharedIdeaLibrarySyncRetry, setSharedIdeaLibrarySyncRetry] = useState(0);
   const [todoDone, setTodoDone] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [safetyAcknowledged, setSafetyAcknowledged] = useState(false);
@@ -2508,6 +2594,7 @@ export default function Home() {
   const [gemIds, setGemIds] = useState<string[]>(INITIAL_DEMO_GEM_IDS);
   const [customLibraryCards, setCustomLibraryCards] = useState<LibraryItem[]>([]);
   const [ideaMediaUrls, setIdeaMediaUrls] = useState<Record<string, string>>({});
+  const [loadedIdeaMediaSignature, setLoadedIdeaMediaSignature] = useState("");
   const [recentIdeaIds, setRecentIdeaIds] = useState<string[]>([]);
   const [archivedIdeaIds, setArchivedIdeaIds] = useState<string[]>([]);
   const [restoredIdeaIds, setRestoredIdeaIds] = useState<string[]>([]);
@@ -2522,6 +2609,7 @@ export default function Home() {
   const [newIdeaMediaFile, setNewIdeaMediaFile] = useState<File | null>(null);
   const [newIdeaStationSetup, setNewIdeaStationSetup] = useState<StationSetup | null>(null);
   const [stationSetupsById, setStationSetupsById] = useState<Record<string, StationSetup>>({});
+  const [loadedIdeaStationSignature, setLoadedIdeaStationSignature] = useState("");
   const [stationMakerSetup, setStationMakerSetup] = useState<StationSetup | null>(null);
   const [stationMakerTarget, setStationMakerTarget] = useState<"new" | LibraryItem | null>(null);
   const [isSavingNewIdea, setIsSavingNewIdea] = useState(false);
@@ -2876,6 +2964,39 @@ export default function Home() {
     () => customLibraryCards.map(copyLibraryItem),
     [customLibraryCards],
   );
+  // The visible shelf currently contains custom cards, but hidden overrides can
+  // still own an attachment or station setup and must travel with the library.
+  const sharedIdeaLibraryCards = useMemo(
+    () => [...customLibraryCards, ...Object.values(itemOverridesById)].map(copyLibraryItem),
+    [customLibraryCards, itemOverridesById],
+  );
+  const sharedIdeaMediaIds = useMemo(
+    () => [...new Set(sharedIdeaLibraryCards.flatMap((item) => item.mediaId ? [item.mediaId] : []))].sort(),
+    [sharedIdeaLibraryCards],
+  );
+  const sharedIdeaStationIds = useMemo(
+    () => [...new Set(sharedIdeaLibraryCards.flatMap((item) => item.stationSetupId ? [item.stationSetupId] : []))].sort(),
+    [sharedIdeaLibraryCards],
+  );
+  const sharedIdeaMediaSignature = sharedIdeaMediaIds.join("|");
+  const sharedIdeaStationSignature = sharedIdeaStationIds.join("|");
+  const sharedIdeaLibraryState = useMemo<SharedIdeaLibraryState | null>(() => {
+    const stationSetups = sharedIdeaStationIds.map((id) => stationSetupsById[id]).filter((setup): setup is StationSetup => Boolean(setup));
+    if (stationSetups.length !== sharedIdeaStationIds.length) return null;
+    const preferences: SharedIdeaLibraryPreferences = {
+      version: 6,
+      gemIds: [...gemIds],
+      customCards: customLibraryCards.map(copyLibraryItem),
+      recentIdeaIds: [...recentIdeaIds],
+      archivedIdeaIds: [...archivedIdeaIds],
+      restoredIdeaIds: [...restoredIdeaIds],
+      itemOverridesById: Object.fromEntries(Object.entries(itemOverridesById).map(([id, card]) => [id, copyLibraryItem(card)])),
+      removedIdeaIds: [...removedIdeaIds],
+    };
+    return parseSharedIdeaLibraryState({ version: 1, preferences, stationSetups });
+  }, [archivedIdeaIds, customLibraryCards, gemIds, itemOverridesById, recentIdeaIds, removedIdeaIds, restoredIdeaIds, sharedIdeaStationIds, stationSetupsById]);
+  const sharedIdeaLibraryMediaReady = loadedIdeaMediaSignature === sharedIdeaMediaSignature;
+  const sharedIdeaLibraryStationsReady = loadedIdeaStationSignature === sharedIdeaStationSignature;
   const libraryCards = useMemo(() => {
     const normalizedSearch = librarySearch.trim().toLocaleLowerCase();
     const gemIdSet = new Set(gemIds);
@@ -3961,37 +4082,378 @@ export default function Home() {
     if (!hasLoadedLibraryPreferences) return;
     let active = true;
     const urls: string[] = [];
-    const mediaIds = [...new Set(allLibraryItems.flatMap((item) => item.mediaId ? [item.mediaId] : []))];
-    void Promise.all(mediaIds.map(async (mediaId) => {
+    void Promise.all(sharedIdeaMediaIds.map(async (mediaId) => {
       const media = await loadIdeaMedia(mediaId);
-      if (!media || !active) return [mediaId, ""] as const;
+      if (!active) return [mediaId, ""] as const;
+      if (!media) return [mediaId, sharedIdeaMediaUrl(mediaId)] as const;
       const url = URL.createObjectURL(media.blob);
       urls.push(url);
       return [mediaId, url] as const;
     })).then((entries) => {
       if (!active) return;
       setIdeaMediaUrls(Object.fromEntries(entries.filter(([, url]) => Boolean(url))));
+      setLoadedIdeaMediaSignature(sharedIdeaMediaSignature);
     }).catch(() => {
-      if (active) setNotice("IDEA LIBRARY RESTORED · ONE OR MORE LOCAL ATTACHMENTS ARE UNAVAILABLE ON THIS DEVICE");
+      if (active) {
+        setLoadedIdeaMediaSignature(sharedIdeaMediaSignature);
+        setNotice("IDEA LIBRARY RESTORED · ONE OR MORE ATTACHMENTS ARE UNAVAILABLE ON THIS DEVICE");
+      }
     });
     return () => {
       active = false;
       urls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [allLibraryItems, hasLoadedLibraryPreferences]);
+  }, [hasLoadedLibraryPreferences, sharedIdeaMediaIds, sharedIdeaMediaSignature]);
 
   useEffect(() => {
     if (!hasLoadedLibraryPreferences) return;
     let active = true;
-    const stationIds = [...new Set(allLibraryItems.flatMap((item) => item.stationSetupId ? [item.stationSetupId] : []))];
-    void Promise.all(stationIds.map(async (id) => [id, await loadStationSetup(id)] as const)).then((entries) => {
+    void Promise.all(sharedIdeaStationIds.map(async (id) => [id, await loadStationSetup(id)] as const)).then((entries) => {
       if (!active) return;
-      setStationSetupsById(Object.fromEntries(entries.filter((entry): entry is readonly [string, StationSetup] => Boolean(entry[1]))));
+      const locallyLoaded = Object.fromEntries(entries.filter((entry): entry is readonly [string, StationSetup] => Boolean(entry[1])));
+      const fallback = sharedIdeaStationFallbackRef.current;
+      setStationSetupsById(Object.fromEntries(sharedIdeaStationIds.flatMap((id) => {
+        const setup = locallyLoaded[id] ?? fallback[id];
+        return setup ? [[id, setup] as const] : [];
+      })));
+      setLoadedIdeaStationSignature(sharedIdeaStationSignature);
     }).catch(() => {
-      if (active) setNotice("IDEA LIBRARY RESTORED · ONE OR MORE PIXEL STATIONS ARE UNAVAILABLE ON THIS DEVICE");
+      if (active) {
+        setLoadedIdeaStationSignature(sharedIdeaStationSignature);
+        setNotice("IDEA LIBRARY RESTORED · ONE OR MORE PIXEL STATIONS ARE UNAVAILABLE ON THIS DEVICE");
+      }
     });
     return () => { active = false; };
-  }, [allLibraryItems, hasLoadedLibraryPreferences]);
+  }, [hasLoadedLibraryPreferences, sharedIdeaStationIds, sharedIdeaStationSignature]);
+
+  const applyPublicIdeaLibraryState = useCallback(async (state: SharedIdeaLibraryState) => {
+    const next = copySharedIdeaLibraryState(state);
+    const stationResults = await Promise.allSettled(next.stationSetups.map((setup) => saveStationSetup(setup)));
+    // Keep a memory fallback even if this browser temporarily rejects IndexedDB.
+    // The canonical public state stays readable and will retry local caching later.
+    sharedIdeaStationFallbackRef.current = Object.fromEntries(next.stationSetups.map((setup) => [setup.id, setup]));
+    const preferences = next.preferences;
+    const serialized = JSON.stringify(preferences);
+    libraryStorageSnapshotRef.current = serialized;
+    window.localStorage.setItem(LOCAL_LIBRARY_STORAGE_KEY, serialized);
+    setGemIds([...preferences.gemIds]);
+    setCustomLibraryCards(preferences.customCards.map(copyLibraryItem));
+    setRecentIdeaIds([...preferences.recentIdeaIds]);
+    setArchivedIdeaIds([...preferences.archivedIdeaIds]);
+    setRestoredIdeaIds([...preferences.restoredIdeaIds]);
+    setItemOverridesById(Object.fromEntries(Object.entries(preferences.itemOverridesById).map(([id, card]) => [id, copyLibraryItem(card)])));
+    setRemovedIdeaIds([...preferences.removedIdeaIds]);
+    setStationSetupsById(Object.fromEntries(next.stationSetups.map((setup) => [setup.id, setup])));
+    if (stationResults.some((result) => result.status === "rejected")) {
+      setNotice("PUBLIC IDEA LIBRARY LOADED · PIXEL STATIONS WILL RETRY SAVING TO THIS DEVICE");
+    }
+  }, []);
+
+  const rememberSharedIdeaLibraryWorkspace = useCallback((workspace: SharedIdeaLibraryWorkspaceRecord, fingerprint: string) => {
+    const known = { revision: workspace.revision, fingerprint };
+    sharedIdeaLibraryKnownWorkspaceRef.current = known;
+    sharedIdeaLibrarySyncConflictRef.current = false;
+    saveSharedIdeaLibraryCheckpoint(window.localStorage, known);
+    setHasSharedIdeaLibrarySyncConflict(false);
+    return known;
+  }, []);
+
+  const pauseSharedIdeaLibrarySync = useCallback(() => {
+    sharedIdeaLibrarySyncConflictRef.current = true;
+    setHasSharedIdeaLibrarySyncConflict(true);
+    setSharedIdeaLibrarySyncStatus("IDEA SYNC PAUSED · LOCAL CHANGES KEPT");
+    setNotice("PUBLIC IDEA LIBRARY CHANGED ELSEWHERE · YOUR LOCAL CHANGES ARE KEPT UNTIL YOU CHOOSE LOAD PUBLIC COPY");
+  }, []);
+
+  const dropUnavailableIdeaStationReferences = useCallback((): boolean => {
+    const available = new Set(Object.keys(stationSetupsById));
+    let changed = false;
+    const withoutUnavailableStation = (card: LibraryItem): LibraryItem => {
+      if (!card.stationSetupId || available.has(card.stationSetupId)) return card;
+      changed = true;
+      const next = { ...card };
+      delete next.stationSetupId;
+      delete next.stationPreviewKind;
+      return next;
+    };
+    const nextCards = customLibraryCards.map(withoutUnavailableStation);
+    const nextOverrides = Object.fromEntries(Object.entries(itemOverridesById).map(([id, card]) => [id, withoutUnavailableStation(card)]));
+    if (!changed) return false;
+    setCustomLibraryCards(nextCards);
+    setItemOverridesById(nextOverrides);
+    setNotice("A MISSING PIXEL STATION WAS DETACHED · THE REST OF THE IDEA LIBRARY CAN NOW SYNC");
+    return true;
+  }, [customLibraryCards, itemOverridesById, stationSetupsById]);
+
+  const loadPublicIdeaLibraryCopy = useCallback(() => {
+    void (async () => {
+      setSharedIdeaLibrarySyncStatus("LOADING PUBLIC IDEA LIBRARY");
+      try {
+        const remote = await fetchSharedIdeaLibrary();
+        if (!remote) throw new Error("The public Idea Library has not been created yet.");
+        const fingerprint = sharedIdeaLibraryFingerprint(remote.value);
+        if (!fingerprint) throw new Error("The public Idea Library could not be verified.");
+        await applyPublicIdeaLibraryState(remote.value);
+        rememberSharedIdeaLibraryWorkspace(remote, fingerprint);
+        sharedIdeaLibrarySyncReadyRef.current = true;
+        setIsSharedIdeaLibrarySyncReady(true);
+        setSharedIdeaLibrarySyncStatus("PUBLIC IDEA LIBRARY LOADED · ONLINE");
+        setNotice("PUBLIC IDEA LIBRARY LOADED · LOCAL CHANGES WERE REPLACED WITH THE PUBLIC COPY");
+      } catch {
+        setSharedIdeaLibrarySyncStatus("PUBLIC IDEA COPY UNAVAILABLE · LOCAL CHANGES KEPT");
+      }
+    })();
+  }, [applyPublicIdeaLibraryState, rememberSharedIdeaLibraryWorkspace]);
+
+  useEffect(() => {
+    if (!hasLoadedLibraryPreferences
+      || !sharedIdeaLibraryMediaReady
+      || !sharedIdeaLibraryStationsReady
+      || sharedIdeaLibrarySyncStartedRef.current) return;
+
+    sharedIdeaLibrarySyncStartedRef.current = true;
+    let active = true;
+    let retryTimer: number | null = null;
+    const retry = (status: string, delay: number) => {
+      if (!active) return;
+      sharedIdeaLibrarySyncStartedRef.current = false;
+      setSharedIdeaLibrarySyncStatus(status);
+      retryTimer = window.setTimeout(() => setSharedIdeaLibrarySyncRetry((attempt) => attempt + 1), delay);
+    };
+    const markReady = (workspace: SharedIdeaLibraryWorkspaceRecord, fingerprint: string, status: string, notice: string) => {
+      rememberSharedIdeaLibraryWorkspace(workspace, fingerprint);
+      sharedIdeaLibrarySyncReadyRef.current = true;
+      setIsSharedIdeaLibrarySyncReady(true);
+      setSharedIdeaLibrarySyncStatus(status);
+      setNotice(notice);
+    };
+    const replaceWithRemote = async (workspace: SharedIdeaLibraryWorkspaceRecord) => {
+      const fingerprint = sharedIdeaLibraryFingerprint(workspace.value);
+      if (!fingerprint) throw new Error("The public Idea Library could not be verified.");
+      await applyPublicIdeaLibraryState(workspace.value);
+      if (!active) return;
+      rememberSharedIdeaLibraryWorkspace(workspace, fingerprint);
+      sharedIdeaLibrarySyncReadyRef.current = true;
+      setIsSharedIdeaLibrarySyncReady(true);
+      setSharedIdeaLibrarySyncStatus("PUBLIC IDEA LIBRARY LOADED · ONLINE");
+      setNotice("PUBLIC IDEA LIBRARY LOADED · IDEAS, REFERENCE MEDIA, AND PIXEL STATIONS ARE READY ON THIS LINK");
+    };
+    const beginTimer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          setSharedIdeaLibrarySyncStatus("CHECKING PUBLIC IDEA LIBRARY");
+          const remote = await fetchSharedIdeaLibrary();
+          if (!active) return;
+          const local = sharedIdeaLibraryState;
+          if (!remote) {
+            if (!local) {
+              if (dropUnavailableIdeaStationReferences()) {
+                retry("REPAIRING LOCAL IDEA LIBRARY", 200);
+              } else {
+                setSharedIdeaLibrarySyncStatus("LOCAL IDEA LIBRARY NEEDS REVIEW");
+              }
+              return;
+            }
+            const localFingerprint = sharedIdeaLibraryFingerprint(local);
+            if (!localFingerprint) {
+              retry("PUBLIC IDEA SYNC PENDING · LOCAL COPY STILL AVAILABLE", 3_000);
+              return;
+            }
+            if (isSharedIdeaLibraryEmpty(local)) {
+              markReady(
+                { version: 1, revision: 0, updatedAt: null, value: local },
+                localFingerprint,
+                "PUBLIC IDEA LIBRARY READY · WAITING FOR FIRST IDEA",
+                "PUBLIC IDEA LIBRARY READY · CREATE OR IMPORT AN IDEA TO SHARE IT ON EVERY WEB LINK",
+              );
+              return;
+            }
+            await ensureSharedIdeaLibraryMedia(local);
+            const created = await bootstrapSharedIdeaLibrary(local);
+            if (!active) return;
+            if (created.status === "conflict") {
+              retry("PUBLIC IDEA LIBRARY FOUND · LOADING LATEST COPY", 400);
+              return;
+            }
+            const fingerprint = sharedIdeaLibraryFingerprint(created.workspace.value);
+            if (!fingerprint) throw new Error("The public Idea Library could not be verified.");
+            markReady(
+              created.workspace,
+              fingerprint,
+              "PUBLIC IDEA SYNC · ONLINE",
+              "PUBLIC IDEA LIBRARY READY · IDEAS, REFERENCE MEDIA, AND PIXEL STATIONS SYNC ON EVERY WEB LINK",
+            );
+            return;
+          }
+
+          if (!local) {
+            await replaceWithRemote(remote);
+            return;
+          }
+          const localFingerprint = sharedIdeaLibraryFingerprint(local);
+          if (!localFingerprint) {
+            retry("PUBLIC IDEA SYNC PENDING · LOCAL COPY STILL AVAILABLE", 3_000);
+            return;
+          }
+          const remoteFingerprint = sharedIdeaLibraryFingerprint(remote.value);
+          if (!remoteFingerprint) throw new Error("The public Idea Library could not be verified.");
+          const checkpoint = readSharedIdeaLibraryCheckpoint(window.localStorage);
+          if (localFingerprint === remoteFingerprint) {
+            markReady(
+              remote,
+              remoteFingerprint,
+              "PUBLIC IDEA SYNC · ONLINE",
+              "PUBLIC IDEA LIBRARY LOADED · IDEAS, REFERENCE MEDIA, AND PIXEL STATIONS ARE AVAILABLE ON EVERY WEB LINK",
+            );
+            return;
+          }
+          if (!checkpoint || checkpoint.fingerprint === localFingerprint) {
+            await replaceWithRemote(remote);
+            return;
+          }
+          if (checkpoint.fingerprint === remoteFingerprint) {
+            markReady(
+              remote,
+              remoteFingerprint,
+              "LOCAL IDEA CHANGES READY TO SYNC",
+              "LOCAL IDEA CHANGES KEPT · SAVING THEM TO THE PUBLIC IDEA LIBRARY",
+            );
+            return;
+          }
+          sharedIdeaLibrarySyncReadyRef.current = true;
+          setIsSharedIdeaLibrarySyncReady(true);
+          pauseSharedIdeaLibrarySync();
+        } catch {
+          retry("PUBLIC IDEA SYNC PENDING · LOCAL COPY STILL AVAILABLE", 3_000);
+        }
+      })();
+    }, 150);
+    return () => {
+      active = false;
+      window.clearTimeout(beginTimer);
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
+      if (!sharedIdeaLibrarySyncReadyRef.current) sharedIdeaLibrarySyncStartedRef.current = false;
+    };
+  }, [
+    applyPublicIdeaLibraryState,
+    dropUnavailableIdeaStationReferences,
+    hasLoadedLibraryPreferences,
+    pauseSharedIdeaLibrarySync,
+    rememberSharedIdeaLibraryWorkspace,
+    sharedIdeaLibraryMediaReady,
+    sharedIdeaLibraryState,
+    sharedIdeaLibraryStationsReady,
+    sharedIdeaLibrarySyncRetry,
+  ]);
+
+  useEffect(() => {
+    if (!isSharedIdeaLibrarySyncReady || !sharedIdeaLibraryState || !sharedIdeaLibraryMediaReady || !sharedIdeaLibraryStationsReady) return;
+    let active = true;
+    type SyncOutcome = "idle" | "saved" | "uncertain" | "paused";
+
+    const acknowledge = (workspace: SharedIdeaLibraryWorkspaceRecord, fingerprint: string, status: string) => {
+      rememberSharedIdeaLibraryWorkspace(workspace, fingerprint);
+      if (active) setSharedIdeaLibrarySyncStatus(status);
+    };
+    const replaceWithRemote = async (workspace: SharedIdeaLibraryWorkspaceRecord): Promise<SyncOutcome> => {
+      const fingerprint = sharedIdeaLibraryFingerprint(workspace.value);
+      if (!fingerprint) return "uncertain";
+      await applyPublicIdeaLibraryState(workspace.value);
+      acknowledge(workspace, fingerprint, "PUBLIC IDEA LIBRARY CHANGED · LOADED");
+      setNotice("PUBLIC IDEA LIBRARY CHANGED ELSEWHERE · THE LATEST PUBLIC COPY IS NOW LOADED");
+      return "paused";
+    };
+    const loadRemoteAndReconcile = async (
+      local: SharedIdeaLibraryState,
+      localFingerprint: string,
+    ): Promise<SyncOutcome> => {
+      try {
+        const remote = await fetchSharedIdeaLibrary();
+        if (!remote) return "uncertain";
+        const remoteFingerprint = sharedIdeaLibraryFingerprint(remote.value);
+        if (!remoteFingerprint) return "uncertain";
+        if (remoteFingerprint === localFingerprint) {
+          acknowledge(remote, remoteFingerprint, "PUBLIC IDEA SYNC · SAVED");
+          return "saved";
+        }
+        const known = sharedIdeaLibraryKnownWorkspaceRef.current;
+        if (known && remoteFingerprint === known.fingerprint) {
+          acknowledge(remote, remoteFingerprint, "PUBLIC IDEA SYNC RETRYING");
+          return "uncertain";
+        }
+        if (known && localFingerprint === known.fingerprint) return replaceWithRemote(remote);
+        pauseSharedIdeaLibrarySync();
+        return "paused";
+      } catch {
+        if (active) setSharedIdeaLibrarySyncStatus("PUBLIC IDEA SYNC PENDING · RETRYING");
+        return "uncertain";
+      }
+    };
+    const persistChanges = async (): Promise<SyncOutcome> => {
+      if (!active || !sharedIdeaLibrarySyncReadyRef.current || sharedIdeaLibrarySyncInProgressRef.current) return "idle";
+      if (sharedIdeaLibrarySyncConflictRef.current) return "paused";
+      const local = sharedIdeaLibraryState;
+      const fingerprint = sharedIdeaLibraryFingerprint(local);
+      const known = sharedIdeaLibraryKnownWorkspaceRef.current;
+      if (!fingerprint || !known) return "uncertain";
+      if (fingerprint === known.fingerprint) return "idle";
+
+      sharedIdeaLibrarySyncInProgressRef.current = true;
+      setSharedIdeaLibrarySyncStatus("SAVING PUBLIC IDEA LIBRARY");
+      try {
+        await ensureSharedIdeaLibraryMedia(local);
+        if (!active) return "idle";
+        const result = known.revision === 0
+          ? await bootstrapSharedIdeaLibrary(local)
+          : await putSharedIdeaLibrary(local, known.revision);
+        if (result.status === "conflict") return await loadRemoteAndReconcile(local, fingerprint);
+        const savedFingerprint = sharedIdeaLibraryFingerprint(result.workspace.value);
+        if (savedFingerprint === fingerprint) {
+          acknowledge(result.workspace, fingerprint, "PUBLIC IDEA SYNC · SAVED");
+          return "saved";
+        }
+        return await loadRemoteAndReconcile(local, fingerprint);
+      } catch {
+        return await loadRemoteAndReconcile(local, fingerprint);
+      } finally {
+        sharedIdeaLibrarySyncInProgressRef.current = false;
+      }
+    };
+    const checkForRemoteChanges = async (): Promise<void> => {
+      if (!active || !sharedIdeaLibrarySyncReadyRef.current || sharedIdeaLibrarySyncInProgressRef.current || sharedIdeaLibrarySyncConflictRef.current) return;
+      const known = sharedIdeaLibraryKnownWorkspaceRef.current;
+      if (!known) return;
+      try {
+        const manifest = await fetchSharedIdeaLibraryManifest();
+        if (manifest.revision === known.revision) return;
+        await loadRemoteAndReconcile(sharedIdeaLibraryState, sharedIdeaLibraryFingerprint(sharedIdeaLibraryState) ?? "");
+      } catch {
+        // Keep the browser's cache available while the deliberately public service is unavailable.
+      }
+    };
+    const sync = async () => {
+      const outcome = await persistChanges();
+      if (outcome === "uncertain" || outcome === "paused") return;
+      await checkForRemoteChanges();
+    };
+    const interval = window.setInterval(() => { void sync(); }, 2_000);
+    const onFocus = () => { void sync(); };
+    window.addEventListener("focus", onFocus);
+    void sync();
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [
+    applyPublicIdeaLibraryState,
+    isSharedIdeaLibrarySyncReady,
+    pauseSharedIdeaLibrarySync,
+    rememberSharedIdeaLibraryWorkspace,
+    sharedIdeaLibraryMediaReady,
+    sharedIdeaLibraryState,
+    sharedIdeaLibraryStationsReady,
+  ]);
 
   useEffect(() => {
     try {
@@ -6253,7 +6715,7 @@ export default function Home() {
     const card = allLibraryItems.find((item) => item.id === cardId);
     const willBeGem = !gemIds.includes(cardId);
     setGemIds((ids) => willBeGem ? [...ids, cardId] : ids.filter((id) => id !== cardId));
-    setNotice(`${card?.title.toUpperCase() ?? "CARD"} ${willBeGem ? "SAVED AS A GEM" : "REMOVED FROM GEMS"} · THIS BROWSER ONLY`);
+    setNotice(`${card?.title.toUpperCase() ?? "CARD"} ${willBeGem ? "SAVED AS A GEM" : "REMOVED FROM GEMS"} · SYNCING TO THE PUBLIC IDEA LIBRARY`);
   }
 
   function toggleArchive(card: LibraryItem) {
@@ -6263,7 +6725,7 @@ export default function Home() {
     if (isCurrentlyArchived) {
       setArchivedIdeaIds((ids) => ids.filter((id) => id !== card.id));
       if (isDefaultArchived) setRestoredIdeaIds((ids) => [...new Set([...ids, card.id])]);
-      setNotice(`${card.title.toUpperCase()} RESTORED TO ALL IDEAS · THIS BROWSER ONLY`);
+      setNotice(`${card.title.toUpperCase()} RESTORED TO ALL IDEAS · SYNCING TO THE PUBLIC IDEA LIBRARY`);
       return;
     }
     setRestoredIdeaIds((ids) => ids.filter((id) => id !== card.id));
@@ -6389,7 +6851,7 @@ export default function Home() {
       setEditingIdeaMediaFile(null);
       setRemoveEditingIdeaMedia(false);
       setRemoveEditingStation(false);
-      setNotice(`${edited.title.toUpperCase()} SAVED${edited.mediaId ? ` WITH A LOCAL ${edited.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · THIS BROWSER'S LIBRARY COPY WAS UPDATED`);
+      setNotice(`${edited.title.toUpperCase()} SAVED${edited.mediaId ? ` WITH A ${edited.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · SYNCING TO THE PUBLIC IDEA LIBRARY`);
     } catch {
       if (newMediaId) {
         try {
@@ -6467,7 +6929,7 @@ export default function Home() {
   function restoreLibraryItem(card: LibraryItem) {
     if (removedIdeaIds.includes(card.id)) {
       setRemovedIdeaIds((ids) => ids.filter((id) => id !== card.id));
-      setNotice(`${card.title.toUpperCase()} RESTORED TO ACTIVE LIBRARY · THIS BROWSER ONLY`);
+      setNotice(`${card.title.toUpperCase()} RESTORED TO ACTIVE LIBRARY · SYNCING TO THE PUBLIC IDEA LIBRARY`);
       return;
     }
     toggleArchive(card);
@@ -6638,7 +7100,7 @@ export default function Home() {
     link.click();
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setNotice(`${allLibraryItems.length} IDEA${allLibraryItems.length === 1 ? "" : "S"} EXPORTED · ATTACHMENTS STAYED ON THIS DEVICE`);
+    setNotice(`${allLibraryItems.length} IDEA${allLibraryItems.length === 1 ? "" : "S"} EXPORTED · THE BACKUP JSON EXCLUDES ATTACHMENTS`);
   }
 
   async function previewIdeaLibraryImport(file: File | null) {
@@ -6925,7 +7387,7 @@ export default function Home() {
           return;
         }
         setNewIdeaStationSetup(setup);
-        setNotice("PIXEL STATION READY · SAVE THE IDEA TO KEEP IT IN THIS BROWSER");
+        setNotice("PIXEL STATION READY · SAVE THE IDEA TO SHARE IT IN THE PUBLIC LIBRARY");
       } else {
         await saveStationSetup(setup);
         setStationSetupsById((current) => ({ ...current, [setup.id]: setup }));
@@ -6933,7 +7395,7 @@ export default function Home() {
         if (customLibraryCards.some((idea) => idea.id === target.id)) setCustomLibraryCards((ideas) => ideas.map(update));
         else setItemOverridesById((current) => ({ ...current, [target.id]: update(target) }));
         if (target.mediaId) await removeIdeaMedia(target.mediaId);
-        setNotice("PIXEL STATION SAVED · REOPEN IT ANYTIME FROM THIS IDEA");
+        setNotice("PIXEL STATION SAVED · SYNCING WITH THIS IDEA");
       }
       setStationMakerSetup(null);
       setStationMakerTarget(null);
@@ -6946,7 +7408,7 @@ export default function Home() {
     if (isSavingNewIdea) return;
     const title = newIdeaTitle.trim();
     if (!title) {
-      setNotice("NAME THE IDEA BEFORE SAVING IT TO YOUR LOCAL LIBRARY");
+      setNotice("NAME THE IDEA BEFORE SAVING IT TO YOUR PUBLIC IDEA LIBRARY");
       return;
     }
     const tags = newIdeaTags.split(",").map((tag) => tag.trim()).filter(Boolean);
@@ -6978,8 +7440,8 @@ export default function Home() {
       setIsAddingIdea(false);
       setLibraryFilter("all");
       setNotice(mode === "VIEW"
-        ? `${idea.title.toUpperCase()} SAVED TO YOUR LOCAL IDEA LIBRARY${idea.mediaId ? ` WITH A LOCAL ${idea.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · READY TO PLACE WHEN YOU RETURN TO EDIT`
-        : `${idea.title.toUpperCase()} SAVED TO YOUR LOCAL IDEA LIBRARY${idea.mediaId ? ` WITH A LOCAL ${idea.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · SELECT IT TO PLACE IT`);
+        ? `${idea.title.toUpperCase()} SAVED TO THE PUBLIC IDEA LIBRARY${idea.mediaId ? ` WITH A ${idea.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · READY TO PLACE WHEN YOU RETURN TO EDIT`
+        : `${idea.title.toUpperCase()} SAVED TO THE PUBLIC IDEA LIBRARY${idea.mediaId ? ` WITH A ${idea.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · SELECT IT TO PLACE IT`);
     } catch {
       setNotice("THE IDEA ATTACHMENT COULD NOT BE SAVED · THE IDEA IS STILL OPEN SO YOU CAN TRY AGAIN");
     } finally {
@@ -7015,7 +7477,7 @@ export default function Home() {
       <label>MATS NEEDED <small>one per line or comma</small><textarea value={newIdeaMats} onChange={(event) => setNewIdeaMats(event.target.value)} placeholder="panel mat, 8-inch mat" maxLength={220} /></label>
       <label>TAGS<input value={newIdeaTags} onChange={(event) => setNewIdeaTags(event.target.value)} placeholder="floor, L3, warmup" maxLength={120} /></label>
       <div className="new-idea-media-actions">
-        <b>REFERENCE PHOTO OR VIDEO <small>optional · one attachment · stays only in this browser</small></b>
+        <b>REFERENCE PHOTO OR VIDEO <small>optional · one public attachment · syncs with this Idea Library</small></b>
         <input
           ref={newIdeaCameraInputRef}
           className="new-idea-file-input"
@@ -7171,13 +7633,13 @@ export default function Home() {
       >
         {libraryCards.length ? libraryCards.map((card) => {
           const state = card.isRemoved
-            ? "HIDDEN LOCALLY"
+            ? "HIDDEN IN LIBRARY"
             : recentIdeaIds.includes(card.id)
               ? "RECENTLY PLACED"
               : card.defaultArchived && card.sourceType === "lesson_plan_activity"
                 ? "IMPORTED NOTE · REVIEW"
                 : card.id.startsWith("local-idea-")
-                  ? "LOCAL IDEA"
+                  ? "SHARED IDEA"
                   : card.sourceStatus.toUpperCase();
           const tags = card.tags.slice(0, 2).join(" · ");
           const extraDetail = card.safety ? `⚠ ${card.safety}` : card.skills.slice(0, 3).join(" · ");
@@ -7235,13 +7697,15 @@ export default function Home() {
   return (
     <main id="today" className={`app-shell ${isLibraryWindow ? "library-workspace-shell" : ""}`}>
       <header className="titlebar">
-        <div className="titlebar-label"><span className="title-dot" /> <span className="title-spark" aria-hidden="true">✦</span> <span className="routine-builder-title">{isLibraryWindow ? "IDEA LIBRARY" : "LESSON PLANNER"}</span> <small>{isLibraryWindow ? "LOCAL WORKSPACE" : "v0.1 PUBLIC SYNC"}</small></div>
+        <div className="titlebar-label"><span className="title-dot" /> <span className="title-spark" aria-hidden="true">✦</span> <span className="routine-builder-title">{isLibraryWindow ? "IDEA LIBRARY" : "LESSON PLANNER"}</span> <small>{isLibraryWindow ? "PUBLIC IDEA SYNC" : "v0.1 PUBLIC SYNC"}</small></div>
       </header>
 
       <section className="terminal" role="status">
-        <span>● {isLibraryWindow ? "IDEA LIBRARY READY · CHANGES SAVE IN THIS BROWSER" : notice}</span>
-        <span className="demo-indicator">{isLibraryWindow ? "DEDICATED VIEW · EDIT · ORGANIZE" : sharedPlannerSyncStatus}</span>
+        <span>● {isLibraryWindow ? `IDEA LIBRARY · ${sharedIdeaLibrarySyncStatus}` : notice}</span>
+        <span className="demo-indicator">{isLibraryWindow ? sharedIdeaLibrarySyncStatus : sharedPlannerSyncStatus}</span>
         {!isLibraryWindow && hasSharedPlannerSyncConflict ? <button type="button" className="terminal-sync-action" onClick={loadPublicSharedCopy}>LOAD PUBLIC COPY</button> : null}
+        {!isLibraryWindow && hasSharedIdeaLibrarySyncConflict ? <button type="button" className="terminal-sync-action" onClick={loadPublicIdeaLibraryCopy}>LOAD PUBLIC IDEAS</button> : null}
+        {isLibraryWindow && hasSharedIdeaLibrarySyncConflict ? <button type="button" className="terminal-sync-action" onClick={loadPublicIdeaLibraryCopy}>LOAD PUBLIC COPY</button> : null}
         <span>WORKSPACE: RYAN / {isLibraryWindow ? "IDEAS" : "PUBLIC SHARED"}</span>
       </section>
 
@@ -7249,12 +7713,12 @@ export default function Home() {
         <>
           <nav className="library-workspace-nav" aria-label="Idea Library window controls">
             <button type="button" onClick={returnToPlanner}>← BACK TO PLANNER</button>
-            <span>STAR IDEAS FOR GEMS · ARCHIVE IDEAS TO HIDE THEM · EDITS STAY LOCAL</span>
+            <span>STAR IDEAS FOR GEMS · ARCHIVE IDEAS TO HIDE THEM · EDITS SYNC PUBLICLY</span>
           </nav>
           <section className="library-workspace-body">
             {ideaLibraryPanel}
           </section>
-          <footer className="statusbar"><span>☑ LOCAL FIRST</span><span>{allLibraryItems.length} SAVED IDEAS</span><span>LIBRARY WINDOW</span></footer>
+          <footer className="statusbar"><span>☑ PUBLIC SHARED</span><span>{allLibraryItems.length} SAVED IDEAS</span><span>LIBRARY WINDOW</span></footer>
         </>
       ) : (
       <>
@@ -8686,7 +9150,7 @@ export default function Home() {
                 <>
                   {detailCard.mediaId && ideaMediaUrls[detailCard.mediaId] ? (
                     <figure className="idea-reference-media">
-                      <figcaption>LOCAL REFERENCE {detailCard.mediaKind === "video" ? "VIDEO" : "PHOTO"} · {detailCard.mediaFilename ?? "IDEA ATTACHMENT"}</figcaption>
+                      <figcaption>PUBLIC REFERENCE {detailCard.mediaKind === "video" ? "VIDEO" : "PHOTO"} · {detailCard.mediaFilename ?? "IDEA ATTACHMENT"}</figcaption>
                       {detailCard.mediaKind === "video"
                         ? <video src={ideaMediaUrls[detailCard.mediaId]} controls playsInline preload="metadata" aria-label={`Reference video for ${detailCard.title}`} />
                         : <img src={ideaMediaUrls[detailCard.mediaId]} alt={`Reference photo for ${detailCard.title}`} />}
@@ -8740,10 +9204,10 @@ export default function Home() {
                 </>
               ) : (
                 <section className="media-placeholder" aria-label="Media and reference placeholders">
-                  <div><b>VIDEO</b><span>LOCAL VIDEO SLOT</span></div>
+                  <div><b>VIDEO</b><span>PUBLIC VIDEO SLOT</span></div>
                   <div><b>PHOTO</b><span>PERFECT-DEMO SLOT</span></div>
                   <div><b>LINK</b><span>REFERENCE SLOT</span></div>
-                  <p>Media has not been linked in this local prototype yet. This is where a saved demo video, photo, or reference will open.</p>
+                  <p>Media has not been linked to this Idea yet. This is where a saved demo video, photo, or reference will open.</p>
                 </section>
               )}
               {detailCard.lessonLocal && mode === "EDIT" ? (
@@ -8764,9 +9228,9 @@ export default function Home() {
             onMouseDown={(event) => event.stopPropagation()}
             onSubmit={(event) => { event.preventDefault(); void saveLibraryEdit(); }}
           >
-            <div className="window-title">EDIT LOCAL LIBRARY IDEA <button type="button" disabled={isSavingLibraryEdit} onClick={closeLibraryEdit} aria-label="Close idea editor">×</button></div>
+            <div className="window-title">EDIT PUBLIC LIBRARY IDEA <button type="button" disabled={isSavingLibraryEdit} onClick={closeLibraryEdit} aria-label="Close idea editor">×</button></div>
             <div className="idea-detail-body idea-editor-body">
-              <p className="idea-editor-note">Changes stay in this browser. The saved vault/Freeform source stays untouched.</p>
+              <p className="idea-editor-note">Changes sync with the public Idea Library. The saved vault/Freeform source stays untouched.</p>
               <div className="idea-editor-grid">
                 <label>NAME<input value={libraryEditDraft.title} onChange={(event) => updateLibraryEditDraft("title", event.target.value)} maxLength={100} autoFocus /></label>
                 <label>TYPE
@@ -8789,7 +9253,7 @@ export default function Home() {
                 <label className="wide">SAFETY NOTE<input value={libraryEditDraft.safety} onChange={(event) => updateLibraryEditDraft("safety", event.target.value)} maxLength={260} /></label>
               </div>
               <section className="idea-editor-media" aria-label="Idea picture or video attachment">
-                <b>REFERENCE PHOTO OR VIDEO <small>one local attachment · 35 MB photo / 100 MB video</small></b>
+                <b>REFERENCE PHOTO OR VIDEO <small>one public attachment · 35 MB photo / 100 MB video</small></b>
                 <input
                   ref={editIdeaCameraInputRef}
                   className="new-idea-file-input"
@@ -8847,7 +9311,7 @@ export default function Home() {
               </section>
               <div className="idea-editor-actions">
                 <button type="button" disabled={isSavingLibraryEdit} onClick={closeLibraryEdit}>CANCEL</button>
-                <button type="submit" disabled={isSavingLibraryEdit}>{isSavingLibraryEdit ? "SAVING…" : "SAVE LOCAL EDIT"}</button>
+                <button type="submit" disabled={isSavingLibraryEdit}>{isSavingLibraryEdit ? "SAVING…" : "SAVE PUBLIC EDIT"}</button>
               </div>
             </div>
           </form>

@@ -60,3 +60,40 @@ export const sharedPlannerWorkspaces = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.workspaceId] })],
 );
+
+/** One revisioned public Idea Library state, separate from lesson-plan commits. */
+export const sharedIdeaLibraryWorkspaces = sqliteTable(
+  "shared_idea_library_workspaces",
+  {
+    workspaceId: text("workspace_id").notNull(),
+    revision: integer("revision").notNull(),
+    writeToken: text("write_token").notNull(),
+    payloadJson: text("payload_json").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.workspaceId] })],
+);
+
+/** Public Idea Library attachment metadata. The photo/video bytes live in R2. */
+export const sharedIdeaMedia = sqliteTable(
+  "shared_idea_media",
+  {
+    mediaId: text("media_id").notNull(),
+    ideaId: text("idea_id").notNull(),
+    mediaKind: text("media_kind").notNull(),
+    filename: text("filename").notNull(),
+    mimeType: text("mime_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    durationSeconds: real("duration_seconds"),
+    objectKey: text("object_key").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.mediaId] }),
+    index("shared_idea_media_idea_id_idx").on(table.ideaId),
+  ],
+);
