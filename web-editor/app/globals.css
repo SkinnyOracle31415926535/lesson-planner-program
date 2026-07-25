@@ -402,6 +402,9 @@ button { cursor: pointer; touch-action:manipulation; -webkit-tap-highlight-color
 .schedule-group-link { display:grid; gap:3px; padding:5px; background:#dff8ff; border:1px dotted var(--navy); }
 .schedule-group-link span { color:var(--navy); font:900 7px ui-monospace,monospace; letter-spacing:.03em; }
 .schedule-group-link select { width:100%; min-width:0; min-height:29px; padding:4px 5px; border:2px inset var(--window); background:var(--white); color:var(--ink); font:800 10px "Arial Narrow",Arial,sans-serif; }
+.schedule-group-suggestion { display:flex; flex-wrap:wrap; align-items:center; gap:5px; padding:5px; background:#fff6a5; border:1px dotted #9c7300; }
+.schedule-group-suggestion span { flex:1 1 150px; color:#5d4600; font:900 7px/1.25 ui-monospace,monospace; letter-spacing:.03em; }
+.schedule-group-suggestion button,.schedule-advisory-link,.future-schedule-link-suggestion button { min-height:27px; border:2px outset var(--window); padding:4px 6px; background:var(--yellow); color:var(--navy); font:900 8px ui-monospace,monospace; white-space:nowrap; }
 .safe-schedule-import-panel { background:#e9ffec; border-color:#168f20; box-shadow:3px 3px 0 #087c12; }
 .safe-schedule-import-panel .class-import-heading b,.safe-schedule-import-panel label { color:#0c6613; }
 .safe-schedule-file-field input { width:100%; min-height:34px; padding:5px; border:2px inset var(--window); background:var(--white); color:var(--ink); font:800 10px ui-monospace,monospace; letter-spacing:0; }
@@ -876,6 +879,7 @@ button { cursor: pointer; touch-action:manipulation; -webkit-tap-highlight-color
 .reminder-row-actions { display:grid; justify-items:end; gap:4px; }
 .reminder-row-actions em { color:var(--navy); font:800 8px ui-monospace,monospace; font-style:normal; }
 .reminder-row-actions button,.saved-reminders button { min-height:22px; padding:3px 4px; color:#850000; background:#ffd2d2; border-color:#8b0000; }
+.reminder-row-actions .reminder-edit-button,.saved-reminder-actions .reminder-edit-button { color:var(--navy); background:var(--yellow); border-color:var(--black); }
 .reminder-row .task-roll-forward { grid-column:1 / -1; }
 .reminder-empty,.reminder-form-help { margin:0; padding:5px; background:#eef7ff; border:1px dotted #49637b; color:#315463; font:800 9px/1.3 Arial,sans-serif; }
 .reminder-form { display:grid; gap:6px; padding:7px; background:#fff6a5; border:2px dotted #9c7300; }
@@ -891,12 +895,37 @@ button { cursor: pointer; touch-action:manipulation; -webkit-tap-highlight-color
 .saved-reminders summary { cursor:pointer; color:var(--navy); font:900 8px ui-monospace,monospace; }
 .saved-reminders > div { display:grid; gap:4px; margin-top:5px; }
 .saved-reminders article { display:flex; justify-content:space-between; align-items:start; gap:6px; padding:5px; background:#eef7ff; border:1px dotted #49637b; }
+.saved-reminder-actions { display:grid; justify-items:end; gap:4px; }
 .saved-reminders article span { display:grid; gap:2px; min-width:0; }
 .saved-reminders article b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink); font-size:10px; }
 .saved-reminders article small { color:#43545a; font:800 8px/1.2 ui-monospace,monospace; }
 .task-demo-heading { margin:9px 8px 0; color:#4c4c4c; font:900 8px ui-monospace,monospace; letter-spacing:.04em; }
+.future-schedule-link-suggestion { grid-column:1 / -1; display:flex; flex-wrap:wrap; align-items:center; gap:7px; padding:7px; background:#e9ffec; border:2px solid #168f20; color:#075c0e; }
+.future-schedule-link-suggestion > div { flex:1 1 220px; display:grid; gap:2px; }
+.future-schedule-link-suggestion b { font:900 9px ui-monospace,monospace; letter-spacing:.03em; }
+.future-schedule-link-suggestion span { font-size:9px; font-weight:700; line-height:1.2; }
+.saved-lesson-plan.current { background:#fff6a5; outline:2px solid var(--pink); outline-offset:1px; }
+.readiness small { grid-column:1 / -1; max-width:220px; font:900 8px/1.25 ui-monospace,monospace; }
+.readiness .readiness-blocked { color:#850000; }
+.readiness .readiness-clear { color:#075c0e; }
+.lesson-details-editor { margin-bottom:10px; }
+.lesson-details-fields { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; padding:8px; }
+.lesson-details-fields label { min-width:0; display:grid; gap:4px; color:var(--navy); font:900 8px ui-monospace,monospace; letter-spacing:.04em; }
+.lesson-details-fields label small { color:#40525a; font:700 8px/1.2 Arial,sans-serif; letter-spacing:0; }
+.lesson-details-fields textarea { width:100%; min-height:72px; resize:vertical; border:2px inset var(--window); padding:5px 6px; background:var(--white); color:var(--ink); font:700 12px/1.3 Arial,sans-serif; }
+.lesson-details-fields textarea:focus { outline:2px solid var(--cyan); outline-offset:1px; }
+.safety-callout.acknowledged { border-color:#087c12; background:#d8f9dd; }
+.safety-callout.acknowledged b { color:#075c0e; }
+.safety-callout button:disabled { cursor:default; background:#d8f9dd; color:#075c0e; border-color:#087c12; }
+.library-workspace-window .library-empty { grid-column:1 / -1; }
+
+@media (max-width:1000px) {
+  .visual-label-tool { grid-template-columns:1fr; align-items:stretch; }
+  .visual-label-tool button { justify-self:start; }
+}
 
 @media (max-width: 800px) {
+  .lesson-details-fields { grid-template-columns:1fr; }
   .reminder-manager-head { align-items:stretch; flex-direction:column; }
   .reminder-manager-head button { align-self:start; }
   .reminder-form-grid { grid-template-columns:1fr; }

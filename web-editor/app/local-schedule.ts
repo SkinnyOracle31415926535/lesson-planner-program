@@ -477,6 +477,22 @@ export function safeScheduleGroups(bundle: SafeScheduleBundleV1): string[] {
   return [...new Set(bundle.schedule.timeBlocks.map((block) => block.group))].sort((first, second) => first.localeCompare(second));
 }
 
+/**
+ * Offers a reviewable schedule-group suggestion without relaxing the exact
+ * mapping contract. A local group may link to the identical schedule group,
+ * or to one unambiguous explicitly suffixed schedule group (for example,
+ * "B4" to "B4-6" or "B4/6"). Callers must still pass the returned value
+ * through setSafeScheduleClassGroup before storing it.
+ */
+export function suggestSafeScheduleGroup(localGroup: string, availableGroups: readonly string[]): string | null {
+  if (availableGroups.includes(localGroup)) return localGroup;
+
+  const explicitExpansions = availableGroups.filter((group) => (
+    group.startsWith(`${localGroup}-`) || group.startsWith(`${localGroup}/`)
+  ));
+  return explicitExpansions.length === 1 ? explicitExpansions[0] : null;
+}
+
 function scheduleDayForDate(date: string): ScheduleDay {
   const { year, month, day } = isoDateParts(date, "date");
   const sundayFirst = new Date(Date.UTC(year, month - 1, day)).getUTCDay();

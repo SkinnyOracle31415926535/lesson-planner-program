@@ -85,9 +85,25 @@ function isEmptyUnscheduledShell(phase: LessonPhase): boolean {
     && !phase.note?.trim();
 }
 
+/**
+ * Scheduled phases open in MIXED mode with one blank cue so the coach can
+ * write immediately. That UI affordance is not authored planning content and
+ * must not survive a schedule refresh as though it were a real coaching cue.
+ */
+function isEmptyWritableScheduledShell(phase: LessonPhase): boolean {
+  return isScheduleGeneratedPhase(phase)
+    && phase.mode === "MIXED"
+    && phase.zones.length === 0
+    && !phase.parkedZones?.length
+    && phase.text.length === 1
+    && !phase.text[0]?.trim()
+    && !phase.textCards?.length
+    && !phase.note?.trim();
+}
+
 /** True when removing a phase would discard coach-entered planning work. */
 export function phaseHasCoachPlanningContent(phase: LessonPhase): boolean {
-  if (isEmptyUnscheduledShell(phase)) return false;
+  if (isEmptyUnscheduledShell(phase) || isEmptyWritableScheduledShell(phase)) return false;
   return phase.mode !== "VISUAL"
     || phase.zones.length > 0
     || Boolean(phase.parkedZones?.length)

@@ -49,10 +49,13 @@ function blankPhase(
     eventId: id,
     eventLabel,
     title,
-    mode: "VISUAL",
+    // A scheduled block should be ready for a coach to type into as soon as
+    // it is selected. Keep the visual canvas available too, but seed one
+    // blank text input rather than making the coach switch formats first.
+    mode: "MIXED",
     zones: [],
     parkedZones: [],
-    text: [],
+    text: [""],
     textCards: [],
   };
 }

@@ -462,6 +462,35 @@ export function addLocalReminderTemplate(
   return localReminderStorage([...storage.templates, template], storage.occurrences);
 }
 
+/**
+ * Replaces one local reminder's editable fields while retaining its stable
+ * identity, original creation time, and per-plan completion records.
+ */
+export function updateLocalReminderTemplate(
+  storage: LocalReminderStorage,
+  templateId: string,
+  draft: unknown,
+  options: Pick<LocalReminderCreateOptions, "now"> = {},
+): LocalReminderStorage {
+  if (!isLocalReminderStorage(storage) || !isLocalReminderId(templateId)) return storage;
+  const current = storage.templates.find((template) => template.id === templateId);
+  const normalized = normalizeLocalReminderDraft(draft);
+  if (!current || !normalized) return storage;
+
+  const timestamp = normalizedTimestamp(options.now);
+  const updated: LocalReminderTemplate = {
+    id: current.id,
+    ...normalized,
+    scope: cloneScope(normalized.scope),
+    createdAt: current.createdAt,
+    updatedAt: timestamp < current.updatedAt ? current.updatedAt : timestamp,
+  };
+  return localReminderStorage(
+    storage.templates.map((template) => template.id === templateId ? updated : template),
+    storage.occurrences,
+  );
+}
+
 function normalizeLessonContext(value: unknown): LocalReminderLesson | null {
   if (!isRecord(value) || !hasOnlyKeys(value, ["planId", "lessonId", "classId", "date", "phaseIds"])) return null;
   if (typeof value.planId !== "string" || typeof value.date !== "string") return null;

@@ -16,6 +16,7 @@ import {
   safeScheduleGroups,
   setSafeScheduleClassGroup,
   setSafeScheduleManualWeek,
+  suggestSafeScheduleGroup,
   type SafeScheduleBundleV1,
   type SafeScheduleTimeBlock,
 } from "../app/local-schedule";
@@ -235,6 +236,19 @@ test("class mappings are explicit exact values and survive only compatible repla
   const replacement = replaceSafeScheduleBundle(withWeek!, bundle([block({ group: "B4" })]));
   assert.deepEqual(replacement.scheduleGroupByClassId, {});
   assert.equal(replacement.manualWeekByDate["2026-07-27"], "Odd");
+});
+
+test("schedule group suggestions only surface an exact or unique explicit expansion", () => {
+  const availableGroups = ["B3", "B4-6", "G1/2"];
+  assert.equal(suggestSafeScheduleGroup("B3", availableGroups), "B3");
+  assert.equal(suggestSafeScheduleGroup("B4", availableGroups), "B4-6");
+  assert.equal(suggestSafeScheduleGroup("G1", availableGroups), "G1/2");
+
+  assert.equal(suggestSafeScheduleGroup("b4", availableGroups), null);
+  assert.equal(suggestSafeScheduleGroup("B4 ", availableGroups), null);
+  assert.equal(suggestSafeScheduleGroup("B5", availableGroups), null);
+  assert.equal(suggestSafeScheduleGroup("B4", ["B4-6", "B4/5"]), null);
+  assert.equal(suggestSafeScheduleGroup("B4", ["B40-6"]), null);
 });
 
 test("the Summer 2026 local fixture is a privacy-safe, advisory-only schedule bundle", () => {

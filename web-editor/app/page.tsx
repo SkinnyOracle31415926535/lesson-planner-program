@@ -141,13 +141,16 @@ import {
   createLocalReminderTemplate,
   emptyLocalReminderStorage,
   localReminderStorage,
+  normalizeLocalReminderDraft,
   parseLocalReminderStorage,
   resolveLocalReminders,
   serializeLocalReminderStorage,
   setLocalReminderComplete,
+  updateLocalReminderTemplate,
   type LocalReminderCadence,
   type LocalReminderScope,
   type LocalReminderStorage,
+  type LocalReminderTemplate,
 } from "./local-reminders";
 import { migrateEditableLessonToUserPhotoAreas } from "./user-photo-areas";
 import {
@@ -204,12 +207,17 @@ import {
   safeScheduleGroups,
   setSafeScheduleClassGroup,
   setSafeScheduleManualWeek,
+  suggestSafeScheduleGroup,
   type SafeScheduleParseResult,
   type SafeScheduleStorage,
   type SafeScheduleTimeBlock,
   type ScheduleWeek,
 } from "./local-schedule";
-import { generatePlannerUpdates, type PlannerUpdate } from "./planner-updates";
+import {
+  generatePlannerUpdates,
+  getLessonReadinessReview,
+  type PlannerUpdate,
+} from "./planner-updates";
 import { summer2026SafeScheduleFixture } from "../fixtures/summer-2026-safe-schedule-fixture";
 import {
   copyLessonBoardSnapshot,
@@ -248,7 +256,34 @@ const shelfCopy: Record<LibraryShelf, string> = {
   archive: "Your archived ideas — nothing is deleted",
 };
 
+type LessonDocumentDetails = {
+  announcements: string;
+  goals: string;
+  reflection: string;
+};
+
 type StoredLesson = {
+  version: 8;
+  phases: LessonPhase[];
+  todoDone: boolean;
+  isReady: boolean;
+  /** A coach must explicitly acknowledge the ready-check guidance. */
+  safetyAcknowledged: boolean;
+  /** Coach-authored copy for the generated local lesson document. */
+  documentDetails: LessonDocumentDetails;
+  /** The browser-local class selected for this lesson; never an automation ID. */
+  classId: string | null;
+  attendanceById: Record<string, AttendanceStatus>;
+  /** Browser-local canvas position for each placed lesson snapshot. */
+  visualAnchorByCardId: Record<string, string>;
+  /** Browser-local layout for labels arranged around a custom photo area. */
+  visualLabelLayoutByCardId: Record<string, VisualLabelLayout>;
+  /** Detached board/photo metadata and spot overrides frozen with this lesson. */
+  boardSnapshot: LessonBoardSnapshot;
+};
+
+/** The prior lesson shape before document details and Ready acknowledgement were saved. */
+type StoredLessonV7 = {
   version: 7;
   phases: LessonPhase[];
   todoDone: boolean;
@@ -928,12 +963,34 @@ function makeInitialLesson(): LessonPhase[] {
   return phaseData.map(normalizeLessonPhase);
 }
 
+function emptyLessonDocumentDetails(): LessonDocumentDetails {
+  return { announcements: "", goals: "", reflection: "" };
+}
+
+function copyLessonDocumentDetails(details: LessonDocumentDetails): LessonDocumentDetails {
+  return {
+    announcements: details.announcements,
+    goals: details.goals,
+    reflection: details.reflection,
+  };
+}
+
+function isLessonDocumentDetails(value: unknown): value is LessonDocumentDetails {
+  if (!value || typeof value !== "object") return false;
+  const details = value as Partial<LessonDocumentDetails>;
+  return typeof details.announcements === "string"
+    && typeof details.goals === "string"
+    && typeof details.reflection === "string";
+}
+
 function makeBlankStoredLesson(classId: string | null = null): StoredLesson {
   return {
-    version: 7,
+    version: 8,
     phases: makeInitialLesson(),
     todoDone: false,
     isReady: false,
+    safetyAcknowledged: false,
+    documentDetails: emptyLessonDocumentDetails(),
     classId,
     attendanceById: makeDefaultAttendance(),
     visualAnchorByCardId: {},
@@ -1192,6 +1249,25 @@ function hasUniquePhaseIds(phases: LessonPhase[]): boolean {
 function isStoredLesson(value: unknown): value is StoredLesson {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<StoredLesson>;
+  return candidate.version === 8
+    && Array.isArray(candidate.phases)
+    && candidate.phases.length > 0
+    && candidate.phases.every(isLessonPhase)
+    && hasUniquePhaseIds(candidate.phases)
+    && typeof candidate.todoDone === "boolean"
+    && typeof candidate.isReady === "boolean"
+    && typeof candidate.safetyAcknowledged === "boolean"
+    && isLessonDocumentDetails(candidate.documentDetails)
+    && (candidate.classId === null || typeof candidate.classId === "string")
+    && isAttendanceRecord(candidate.attendanceById)
+    && isVisualAnchorRecord(candidate.visualAnchorByCardId)
+    && isVisualLabelLayoutRecord(candidate.visualLabelLayoutByCardId)
+    && isLessonBoardSnapshot(candidate.boardSnapshot);
+}
+
+function isStoredLessonV7(value: unknown): value is StoredLessonV7 {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<StoredLessonV7>;
   return candidate.version === 7
     && Array.isArray(candidate.phases)
     && candidate.phases.length > 0
@@ -1294,6 +1370,8 @@ function restoreLesson(value: unknown): RestoredLesson | null {
       phases: value.phases.map(normalizeLessonPhase),
       todoDone: value.todoDone,
       isReady: value.isReady,
+      safetyAcknowledged: value.safetyAcknowledged,
+      documentDetails: copyLessonDocumentDetails(value.documentDetails),
       classId: value.classId,
       attendanceById: { ...makeDefaultAttendance(), ...value.attendanceById },
       visualAnchorByCardId: { ...value.visualAnchorByCardId },
@@ -1303,11 +1381,29 @@ function restoreLesson(value: unknown): RestoredLesson | null {
     };
   }
 
+  if (isStoredLessonV7(value)) {
+    return {
+      phases: value.phases.map(normalizeLessonPhase),
+      todoDone: value.todoDone,
+      isReady: value.isReady,
+      safetyAcknowledged: value.isReady,
+      documentDetails: emptyLessonDocumentDetails(),
+      classId: value.classId,
+      attendanceById: { ...makeDefaultAttendance(), ...value.attendanceById },
+      visualAnchorByCardId: { ...value.visualAnchorByCardId },
+      visualLabelLayoutByCardId: { ...value.visualLabelLayoutByCardId },
+      boardSnapshot: copyLessonBoardSnapshot(value.boardSnapshot),
+      migrated: true,
+    };
+  }
+
   if (isStoredLessonV6(value)) {
     return {
       phases: value.phases.map(normalizeLessonPhase),
       todoDone: value.todoDone,
       isReady: value.isReady,
+      safetyAcknowledged: value.isReady,
+      documentDetails: emptyLessonDocumentDetails(),
       classId: value.classId,
       attendanceById: { ...makeDefaultAttendance(), ...value.attendanceById },
       visualAnchorByCardId: { ...value.visualAnchorByCardId },
@@ -1322,6 +1418,8 @@ function restoreLesson(value: unknown): RestoredLesson | null {
       phases: value.phases.map(normalizeLessonPhase),
       todoDone: value.todoDone,
       isReady: value.isReady,
+      safetyAcknowledged: value.isReady,
+      documentDetails: emptyLessonDocumentDetails(),
       classId: null,
       attendanceById: { ...makeDefaultAttendance(), ...value.attendanceById },
       visualAnchorByCardId: { ...value.visualAnchorByCardId },
@@ -1336,6 +1434,8 @@ function restoreLesson(value: unknown): RestoredLesson | null {
       phases: value.phases.map(normalizeLessonPhase),
       todoDone: value.todoDone,
       isReady: value.isReady,
+      safetyAcknowledged: value.isReady,
+      documentDetails: emptyLessonDocumentDetails(),
       classId: null,
       attendanceById: { ...makeDefaultAttendance(), ...value.attendanceById },
       visualAnchorByCardId: { ...value.visualAnchorByCardId },
@@ -1350,6 +1450,8 @@ function restoreLesson(value: unknown): RestoredLesson | null {
       phases: value.phases.map(normalizeLessonPhase),
       todoDone: value.todoDone,
       isReady: value.isReady,
+      safetyAcknowledged: value.isReady,
+      documentDetails: emptyLessonDocumentDetails(),
       classId: null,
       attendanceById: { ...makeDefaultAttendance(), ...value.attendanceById },
       visualAnchorByCardId: {},
@@ -1364,6 +1466,8 @@ function restoreLesson(value: unknown): RestoredLesson | null {
       phases: value.phases.map(normalizeLessonPhase),
       todoDone: value.todoDone,
       isReady: value.isReady,
+      safetyAcknowledged: value.isReady,
+      documentDetails: emptyLessonDocumentDetails(),
       classId: null,
       attendanceById: makeDefaultAttendance(),
       visualAnchorByCardId: {},
@@ -1378,6 +1482,8 @@ function restoreLesson(value: unknown): RestoredLesson | null {
       phases: value.phases.map(normalizeLessonPhase),
       todoDone: value.todoDone,
       isReady: value.isReady ?? false,
+      safetyAcknowledged: value.isReady ?? false,
+      documentDetails: emptyLessonDocumentDetails(),
       classId: null,
       attendanceById: makeDefaultAttendance(),
       visualAnchorByCardId: {},
@@ -1411,10 +1517,12 @@ function storedLessonWithBoardSnapshot(
   boardSnapshot: LessonBoardSnapshot,
 ): StoredLesson {
   return {
-    version: 7,
+    version: 8,
     phases: restored.phases,
     todoDone: restored.todoDone,
     isReady: restored.isReady,
+    safetyAcknowledged: restored.safetyAcknowledged,
+    documentDetails: copyLessonDocumentDetails(restored.documentDetails),
     classId: restored.classId,
     attendanceById: restored.attendanceById,
     visualAnchorByCardId: restored.visualAnchorByCardId,
@@ -1961,6 +2069,7 @@ function EventEditor({
 
 function LegacyLessonDocument({
   phases,
+  details,
   attendanceById,
   attendanceRoster,
   tasks,
@@ -1974,6 +2083,7 @@ function LegacyLessonDocument({
   onSetTaskDone,
 }: {
   phases: LessonPhase[];
+  details: LessonDocumentDetails;
   attendanceById: Record<string, AttendanceStatus>;
   attendanceRoster: Array<{ id: string; name: string }>;
   tasks: PlannerTaskDisplay[];
@@ -2014,17 +2124,18 @@ function LegacyLessonDocument({
       <article ref={paperRef} className="legacy-document-paper">
         <h3>✧ {className.toUpperCase()} LESSON ✧</h3>
         <p className="legacy-date">{dateLabel}</p>
-        <section><h4>ANNOUNCEMENTS</h4><p>—</p></section>
-        <section><h4>GOALS</h4><p>Keep rotations clear and use the lesson plan as the shared coaching reference.</p></section>
+        <section><h4>ANNOUNCEMENTS</h4>{details.announcements.trim() ? <pre>{details.announcements}</pre> : <p>—</p>}</section>
+        <section><h4>GOALS</h4>{details.goals.trim() ? <pre>{details.goals}</pre> : <p>—</p>}</section>
         <section>
           <h4>PLAN</h4>
           <div className="legacy-plan-list">
             {phases.map((phase) => {
               const drills = phaseDrillEntries(phase);
+              const coachingCues = phase.text.filter((item) => item.trim());
               return (
                 <article key={phase.id} className="legacy-phase-plan">
                   <h5>{displayLessonTimeRange(phase.time)} · {documentPhaseName(phase)}</h5>
-                  {phase.text.map((item, index) => <p key={`${phase.id}-cue-${index}`} className="legacy-text-cue"><b>COACHING CUE:</b> {item}</p>)}
+                  {coachingCues.map((item, index) => <p key={`${phase.id}-cue-${index}`} className="legacy-text-cue"><b>COACHING CUE:</b> {item}</p>)}
                   {drills.map(({ area, card }) => {
                     const mats = listedMats(card.mats);
                     return (
@@ -2035,7 +2146,7 @@ function LegacyLessonDocument({
                       </div>
                     );
                   })}
-                  {!phase.text.length && !drills.length ? <p className="legacy-plan-empty">No activities or drills added for this phase yet.</p> : null}
+                  {!coachingCues.length && !drills.length ? <p className="legacy-plan-empty">No activities or drills added for this phase yet.</p> : null}
                 </article>
               );
             })}
@@ -2057,7 +2168,7 @@ function LegacyLessonDocument({
             })}
           </div>
         </section>
-        <section><h4>REFLECTION</h4><p>—</p></section>
+        <section><h4>REFLECTION</h4>{details.reflection.trim() ? <pre>{details.reflection}</pre> : <p>—</p>}</section>
         <section>
           <h4>ATTENDANCE</h4>
           <ul className="legacy-attendance-list">
@@ -2119,6 +2230,8 @@ export default function Home() {
   const [notice, setNotice] = useState("DRAFT LOCAL · MEDIA/SYNC NOT CONFIGURED");
   const [todoDone, setTodoDone] = useState(false);
   const [isReady, setIsReady] = useState(false);
+  const [safetyAcknowledged, setSafetyAcknowledged] = useState(false);
+  const [lessonDocumentDetails, setLessonDocumentDetails] = useState<LessonDocumentDetails>(emptyLessonDocumentDetails);
   const [placedCard, setPlacedCard] = useState<string | null>(null);
   const [pendingZonePlacement, setPendingZonePlacement] = useState<PendingZonePlacement | null>(null);
   const [lessonPhases, setLessonPhases] = useState<LessonPhase[]>(makeInitialLesson);
@@ -2214,10 +2327,11 @@ export default function Home() {
   const [reminderTitleDraft, setReminderTitleDraft] = useState("");
   const [reminderDetailDraft, setReminderDetailDraft] = useState("");
   const [reminderCadenceDraft, setReminderCadenceDraft] = useState<LocalReminderCadence>("recurring");
-  const [reminderScopeDraft, setReminderScopeDraft] = useState<"all_classes" | "classes" | "lesson">("classes");
+  const [reminderScopeDraft, setReminderScopeDraft] = useState<"all_classes" | "classes" | "lesson" | "phase">("classes");
   const [reminderStartDateDraft, setReminderStartDateDraft] = useState(() => localLessonPlanDate());
   const [reminderEndDateDraft, setReminderEndDateDraft] = useState("");
   const [reminderRollForwardDraft, setReminderRollForwardDraft] = useState(false);
+  const [editingReminder, setEditingReminder] = useState<LocalReminderTemplate | null>(null);
   const [timerSeconds, setTimerSeconds] = useState(30 * 60);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   useEffect(() => {
@@ -2329,6 +2443,9 @@ export default function Home() {
   const linkedSafeScheduleGroup = activeLocalClass
     ? safeScheduleStorageState.scheduleGroupByClassId[activeLocalClass.id] ?? null
     : null;
+  const suggestedSafeScheduleGroup = activeLocalClass && !linkedSafeScheduleGroup
+    ? suggestSafeScheduleGroup(activeLocalClass.group ?? "", safeScheduleGroupOptions)
+    : null;
   const safeScheduleDay = useMemo(
     () => safeScheduleBundle
       ? resolveSafeScheduleDay(
@@ -2346,6 +2463,9 @@ export default function Home() {
   );
   const futureLinkedSafeScheduleGroup = futureLocalClass
     ? safeScheduleStorageState.scheduleGroupByClassId[futureLocalClass.id] ?? null
+    : null;
+  const futureSuggestedSafeScheduleGroup = futureLocalClass && !futureLinkedSafeScheduleGroup
+    ? suggestSafeScheduleGroup(futureLocalClass.group ?? "", safeScheduleGroupOptions)
     : null;
   const futurePlanResolvedWeek = futurePlanManualWeek
     || safeScheduleStorageState.manualWeekByDate[futurePlanDate]
@@ -2388,10 +2508,9 @@ export default function Home() {
     ?? activeLocalClass?.name
     ?? scheduleDayAdvisoryDemo.selectedGroup;
   const savedLessonPlans = useMemo(
-    () => (lessonPlanIndex?.plans ?? [])
-      .filter((plan) => plan.id !== activeLessonPlan.id)
+    () => [...(lessonPlanIndex?.plans ?? [])]
       .sort((first, second) => second.date.localeCompare(first.date) || second.updatedAt.localeCompare(first.updatedAt)),
-    [activeLessonPlan.id, lessonPlanIndex],
+    [lessonPlanIndex],
   );
   const removeClassPlanCount = useMemo(
     () => removeClassCandidate
@@ -2514,6 +2633,20 @@ export default function Home() {
     }),
     [lessonPhases, plannerScheduleEventConflicts, safeScheduleBundle?.schedule.collisionWarnings.warningCount, safeScheduleDay?.status],
   );
+  const lessonReadinessReview = useMemo(
+    () => getLessonReadinessReview(assistantUpdates, updateDecisionByRevision),
+    [assistantUpdates, updateDecisionByRevision],
+  );
+  const readyBlockerCount = Number(!safetyAcknowledged)
+    + lessonReadinessReview.blockingPlanUpdates.length
+    + lessonReadinessReview.pendingScheduleReviewUpdates.length;
+  const readyBlockerCopy = !safetyAcknowledged
+    ? "ACKNOWLEDGE THE READY CHECK"
+    : lessonReadinessReview.blockingPlanUpdates.length
+      ? `COMPLETE ${lessonReadinessReview.blockingPlanUpdates.length} REQUIRED PLAN ITEM${lessonReadinessReview.blockingPlanUpdates.length === 1 ? "" : "S"}`
+      : lessonReadinessReview.pendingScheduleReviewUpdates.length
+        ? `REVIEW ${lessonReadinessReview.pendingScheduleReviewUpdates.length} SCHEDULE ${lessonReadinessReview.pendingScheduleReviewUpdates.length === 1 ? "ADVISORY" : "ADVISORIES"}`
+        : "READY TO MARK";
   const hiddenAreaEntries = useMemo(
     () => customBoards
       .filter((board) => isCustomBoardHidden(areaCatalog, board.id))
@@ -2658,6 +2791,8 @@ export default function Home() {
         setLessonPhases(restored.phases);
         setTodoDone(restored.todoDone);
         setIsReady(restored.isReady);
+        setSafetyAcknowledged(restored.safetyAcknowledged);
+        setLessonDocumentDetails(restored.documentDetails);
         setActiveClassId(planWithClass.classId);
         setAttendanceById(restored.attendanceById);
         setVisualAnchorByCardId(restored.visualAnchorByCardId);
@@ -2688,10 +2823,12 @@ export default function Home() {
       || hydratedPlanId !== activeLessonPlan.id
       || isPastActivePlan) return;
     const savedLesson: StoredLesson = {
-      version: 7,
+      version: 8,
       phases: lessonPhases,
       todoDone,
       isReady,
+      safetyAcknowledged,
+      documentDetails: lessonDocumentDetails,
       classId: activeLessonPlan.classId,
       attendanceById,
       visualAnchorByCardId,
@@ -2717,14 +2854,16 @@ export default function Home() {
     } catch {
       setNotice("LOCAL LESSON PLAN ACTIVE · BROWSER STORAGE IS UNAVAILABLE");
     }
-  }, [activeLessonPlan, attendanceById, customBoards, hasLoadedCustomBoards, hasLoadedLocalLesson, hasLoadedStationBoardOverrides, hydratedPlanId, isPastActivePlan, isReady, lessonPhases, stationBoardOverrides, todoDone, visualAnchorByCardId, visualLabelLayoutByCardId]);
+  }, [activeLessonPlan, attendanceById, customBoards, hasLoadedCustomBoards, hasLoadedLocalLesson, hasLoadedStationBoardOverrides, hydratedPlanId, isPastActivePlan, isReady, lessonDocumentDetails, lessonPhases, safetyAcknowledged, stationBoardOverrides, todoDone, visualAnchorByCardId, visualLabelLayoutByCardId]);
 
   function currentLessonSnapshot(): StoredLesson {
     return {
-      version: 7,
+      version: 8,
       phases: lessonPhases,
       todoDone,
       isReady,
+      safetyAcknowledged,
+      documentDetails: lessonDocumentDetails,
       classId: activeLessonPlan.classId,
       attendanceById,
       visualAnchorByCardId,
@@ -2911,6 +3050,8 @@ export default function Home() {
     setLessonPhases(isPastLessonPlanDate(plan.date, lessonToday) ? restored.phases : refreshAreaZoneMetadata(restored.phases));
     setTodoDone(restored.todoDone);
     setIsReady(restored.isReady);
+    setSafetyAcknowledged(restored.safetyAcknowledged);
+    setLessonDocumentDetails(restored.documentDetails);
     setActiveClassId(plan.classId);
     setAttendanceById({ ...restored.attendanceById, ...viewAttendanceByPlanId[plan.id] });
     setVisualAnchorByCardId(restored.visualAnchorByCardId);
@@ -3708,6 +3849,7 @@ export default function Home() {
 
   function updateActivePhase(updater: (phase: LessonPhase) => LessonPhase) {
     if (activePlanIsReadOnly()) return;
+    if (isReady) setIsReady(false);
     setLessonPhases((phases) => phases.map((phase) => (
       phase.id === activePhaseId ? updater(phase) : phase
     )));
@@ -5410,11 +5552,37 @@ export default function Home() {
 
   function toggleReady() {
     if (activePlanIsReadOnly()) return;
-    const nextReady = !isReady;
-    setIsReady(nextReady);
-    setNotice(nextReady
-      ? "READY DEMO FLAG SET · LOCAL BROWSER ONLY · NO MEDIA DOWNLOAD"
-      : "RETURNED TO LOCAL DRAFT · NO SHARED VERSION EXISTS");
+    if (isReady) {
+      setIsReady(false);
+      setNotice("RETURNED TO LOCAL DRAFT · NO SHARED VERSION EXISTS");
+      return;
+    }
+    if (!safetyAcknowledged) {
+      setNotice("ACKNOWLEDGE THE READY CHECK BEFORE MARKING THIS LOCAL PLAN READY");
+      return;
+    }
+    if (lessonReadinessReview.blockingPlanUpdates.length) {
+      setNotice(`${lessonReadinessReview.blockingPlanUpdates.length} REQUIRED PLAN ITEM${lessonReadinessReview.blockingPlanUpdates.length === 1 ? "" : "S"} STILL NEED${lessonReadinessReview.blockingPlanUpdates.length === 1 ? "S" : ""} WORK · SEE UPDATE INBOX`);
+      return;
+    }
+    if (lessonReadinessReview.pendingScheduleReviewUpdates.length) {
+      setNotice(`${lessonReadinessReview.pendingScheduleReviewUpdates.length} SCHEDULE ${lessonReadinessReview.pendingScheduleReviewUpdates.length === 1 ? "ADVISORY NEEDS" : "ADVISORIES NEED"} YOUR LOCAL DECISION · SEE UPDATE INBOX`);
+      return;
+    }
+    setIsReady(true);
+    setNotice("READY FLAG SET · REQUIRED PLAN ITEMS ARE COMPLETE, SCHEDULE ADVISORIES ARE REVIEWED, AND SAFETY WAS ACKNOWLEDGED · LOCAL BROWSER ONLY");
+  }
+
+  function acknowledgeSafetyForReady() {
+    if (activePlanIsReadOnly()) return;
+    setSafetyAcknowledged(true);
+    setNotice("READY CHECK ACKNOWLEDGED · COMPLETE REQUIRED PLAN ITEMS AND REVIEW SCHEDULE ADVISORIES BEFORE MARKING READY");
+  }
+
+  function updateLessonDocumentDetail(field: keyof LessonDocumentDetails, value: string) {
+    if (activePlanIsReadOnly()) return;
+    if (isReady) setIsReady(false);
+    setLessonDocumentDetails((current) => ({ ...current, [field]: value }));
   }
 
   function toggleGem(cardId: string) {
@@ -5679,11 +5847,31 @@ export default function Home() {
     setReminderStartDateDraft(activeLessonPlan.date);
     setReminderEndDateDraft("");
     setReminderRollForwardDraft(false);
+    setEditingReminder(null);
   }
 
   function openReminderForm() {
     if (activePlanIsReadOnly()) return;
+    setEditingReminder(null);
     resetReminderDraft();
+    setIsReminderFormOpen(true);
+  }
+
+  function closeReminderForm() {
+    setIsReminderFormOpen(false);
+    setEditingReminder(null);
+  }
+
+  function openReminderEdit(template: LocalReminderTemplate) {
+    if (activePlanIsReadOnly()) return;
+    setEditingReminder(template);
+    setReminderTitleDraft(template.title);
+    setReminderDetailDraft(template.detail ?? "");
+    setReminderCadenceDraft(template.cadence);
+    setReminderScopeDraft(template.scope.kind);
+    setReminderStartDateDraft(template.startDate);
+    setReminderEndDateDraft(template.endDate ?? "");
+    setReminderRollForwardDraft(template.rollForwardUntilCompleted);
     setIsReminderFormOpen(true);
   }
 
@@ -5693,7 +5881,14 @@ export default function Home() {
     if (reminderScopeDraft === "all_classes") {
       scope = { kind: "all_classes" };
     } else if (reminderScopeDraft === "lesson") {
-      scope = { kind: "lesson", lessonId: activeLessonPlan.id };
+      scope = editingReminder?.scope.kind === "lesson"
+        ? editingReminder.scope
+        : { kind: "lesson", lessonId: activeLessonPlan.id };
+    } else if (reminderScopeDraft === "phase") {
+      if (editingReminder?.scope.kind !== "phase") return;
+      scope = editingReminder.scope;
+    } else if (editingReminder?.scope.kind === "classes") {
+      scope = editingReminder.scope;
     } else if (activeLessonPlan.classId) {
       scope = { kind: "classes", classIds: [activeLessonPlan.classId] };
     } else {
@@ -5702,22 +5897,39 @@ export default function Home() {
     }
 
     const isLessonOnly = reminderScopeDraft === "lesson";
-    const reminder = createLocalReminderTemplate({
+    const isExistingLessonScope = isLessonOnly && editingReminder?.scope.kind === "lesson";
+    const reminderDraft = {
       title: reminderTitleDraft,
       detail: reminderDetailDraft || undefined,
-      cadence: isLessonOnly ? "temporary" : reminderCadenceDraft,
+      cadence: isLessonOnly && !isExistingLessonScope ? "temporary" : reminderCadenceDraft,
       scope,
-      startDate: isLessonOnly ? activeLessonPlan.date : reminderStartDateDraft,
-      endDate: isLessonOnly ? activeLessonPlan.date : reminderEndDateDraft || null,
-      rollForwardUntilCompleted: isLessonOnly ? false : reminderRollForwardDraft,
-      active: true,
-    });
-    if (!reminder) {
+      startDate: isLessonOnly && !isExistingLessonScope ? activeLessonPlan.date : reminderStartDateDraft,
+      endDate: isLessonOnly && !isExistingLessonScope ? activeLessonPlan.date : reminderEndDateDraft || null,
+      rollForwardUntilCompleted: isLessonOnly && !isExistingLessonScope ? false : reminderRollForwardDraft,
+      active: editingReminder?.active ?? true,
+    };
+    const normalizedReminderDraft = normalizeLocalReminderDraft(reminderDraft);
+    if (!normalizedReminderDraft) {
       setNotice("CHECK THE REMINDER TITLE AND DATES, THEN TRY SAVING AGAIN");
       return;
     }
+    if (editingReminder) {
+      const previous = reminderStorage.templates.find((template) => template.id === editingReminder.id);
+      if (!previous) {
+        closeReminderForm();
+        setNotice("THAT REMINDER IS NO LONGER AVAILABLE TO EDIT");
+        return;
+      }
+      setReminderStorage((current) => updateLocalReminderTemplate(current, previous.id, normalizedReminderDraft));
+      closeReminderForm();
+      setNotice(`${previous.title.toUpperCase()} UPDATED IN YOUR LOCAL REMINDERS`);
+      return;
+    }
+
+    const reminder = createLocalReminderTemplate(normalizedReminderDraft);
+    if (!reminder) return;
     setReminderStorage((current) => addLocalReminderTemplate(current, reminder));
-    setIsReminderFormOpen(false);
+    closeReminderForm();
     setNotice(`${reminder.title.toUpperCase()} ADDED AS YOUR ${isLessonOnly ? "ONE-TIME LESSON" : reminder.cadence.toUpperCase()} REMINDER`);
   }
 
@@ -6185,7 +6397,7 @@ export default function Home() {
       <div className="window-title library-window-title">
         <b>IDEA LIBRARY</b>
         <div className="library-density-controls" aria-label="Idea Library detail size">
-          <span aria-live="polite">{allLibraryItems.length} SAVED · {libraryDetailLevel(libraryRowHeight)}</span>
+          <span aria-live="polite" aria-label={`${allLibraryItems.length} saved ideas · ${libraryDetailLevel(libraryRowHeight)}`} title={`${allLibraryItems.length} saved ideas · ${libraryDetailLevel(libraryRowHeight)}`}>{libraryDetailLevel(libraryRowHeight)}</span>
           <button type="button" aria-label="Show less detail in the Idea Library" title="Show less detail" disabled={libraryRowHeight <= LIBRARY_ROW_HEIGHT_MIN} onClick={() => adjustLibraryRowHeight(-LIBRARY_ROW_HEIGHT_STEP)}>−</button>
           <button type="button" aria-label="Show more detail in the Idea Library" title="Show more detail" disabled={libraryRowHeight >= LIBRARY_ROW_HEIGHT_MAX} onClick={() => adjustLibraryRowHeight(LIBRARY_ROW_HEIGHT_STEP)}>+</button>
         </div>
@@ -6357,7 +6569,7 @@ export default function Home() {
   );
 
   return (
-    <main id="today" className="app-shell">
+    <main id="today" className={`app-shell ${isLibraryWindow ? "library-workspace-shell" : ""}`}>
       <header className="titlebar">
         <div className="titlebar-label"><span className="title-dot" /> <span className="title-spark" aria-hidden="true">✦</span> <span className="routine-builder-title">{isLibraryWindow ? "IDEA LIBRARY" : "LESSON PLANNER"}</span> <small>{isLibraryWindow ? "LOCAL WORKSPACE" : "v0.1 LOCAL"}</small></div>
       </header>
@@ -6415,16 +6627,24 @@ export default function Home() {
                   <div><b>{localClass.name}</b><span>{localClass.group ?? "No group / level"}{localClass.coach ? ` · ${localClass.coach}` : ""}</span></div>
                   <p>{localClass.students.length} student{localClass.students.length === 1 ? "" : "s"} · {localClass.schedule.length} schedule block{localClass.schedule.length === 1 ? "" : "s"}</p>
                   {safeScheduleBundle ? (
-                    <label className="schedule-group-link">
-                      <span>FULL SCHEDULE GROUP · EXACT LINK</span>
-                      <select
-                        value={safeScheduleStorageState.scheduleGroupByClassId[localClass.id] ?? ""}
-                        onChange={(event) => linkLocalClassToSafeSchedule(localClass.id, event.target.value || null)}
-                      >
-                        <option value="">NOT LINKED</option>
-                        {safeScheduleGroupOptions.map((group) => <option key={group} value={group}>{group}</option>)}
-                      </select>
-                  </label>
+                    <>
+                      <label className="schedule-group-link">
+                        <span>FULL SCHEDULE GROUP · EXACT LINK</span>
+                        <select
+                          value={safeScheduleStorageState.scheduleGroupByClassId[localClass.id] ?? ""}
+                          onChange={(event) => linkLocalClassToSafeSchedule(localClass.id, event.target.value || null)}
+                        >
+                          <option value="">NOT LINKED</option>
+                          {safeScheduleGroupOptions.map((group) => <option key={group} value={group}>{group}</option>)}
+                        </select>
+                      </label>
+                      {!safeScheduleStorageState.scheduleGroupByClassId[localClass.id] && suggestSafeScheduleGroup(localClass.group ?? "", safeScheduleGroupOptions) ? (
+                        <div className="schedule-group-suggestion">
+                          <span>SUGGESTED FROM LOCAL GROUP {localClass.group}</span>
+                          <button type="button" onClick={() => linkLocalClassToSafeSchedule(localClass.id, suggestSafeScheduleGroup(localClass.group ?? "", safeScheduleGroupOptions)!)}>LINK {suggestSafeScheduleGroup(localClass.group ?? "", safeScheduleGroupOptions)} →</button>
+                        </div>
+                      ) : null}
+                    </>
                   ) : null}
                   <div className="local-class-actions">
                     <button type="button" className={activeClassId === localClass.id ? "selected" : ""} onClick={() => selectClassForLesson(localClass)}>{activeClassId === localClass.id ? "USED THIS LESSON" : "USE FOR THIS LESSON"}</button>
@@ -6494,11 +6714,11 @@ export default function Home() {
           <div className="window-title">SAVED LESSON PLANS <button type="button" onClick={() => setPlanShelf(null)} aria-label="Close saved lesson plans">×</button></div>
           <div className="lesson-plan-shelf-body">
             {savedLessonPlans.length ? savedLessonPlans.map((plan) => (
-              <button key={plan.id} type="button" className="saved-lesson-plan" onClick={() => openLessonPlan(plan)}>
+              <button key={plan.id} type="button" className={`saved-lesson-plan ${plan.id === activeLessonPlan.id ? "current" : ""}`} onClick={() => openLessonPlan(plan)}>
                 <strong>{formatLessonPlanDate(plan.date)}</strong>
-                <span>{localClassById(classStorage, plan.classId)?.name ?? (plan.classId ? plan.title.replace(/\s+LESSON$/i, "") || "REMOVED LOCAL CLASS" : "SAMPLE LEVEL 3")} · {isPastLessonPlanDate(plan.date, lessonToday) ? "VIEW READ-ONLY SNAPSHOT" : "OPEN LOCAL DRAFT"}</span>
+                <span>{localClassById(classStorage, plan.classId)?.name ?? (plan.classId ? plan.title.replace(/\s+LESSON$/i, "") || "REMOVED LOCAL CLASS" : "SAMPLE LEVEL 3")} · {plan.id === activeLessonPlan.id ? "CURRENT PLAN" : isPastLessonPlanDate(plan.date, lessonToday) ? "VIEW READ-ONLY SNAPSHOT" : "OPEN LOCAL DRAFT"}</span>
               </button>
-            )) : <p>No other local lesson plans are saved in this browser yet.</p>}
+            )) : <p>No local lesson plans are saved in this browser yet.</p>}
           </div>
         </section>
       ) : null}
@@ -6533,6 +6753,12 @@ export default function Home() {
                   {classStorage.classes.map((localClass) => <option key={localClass.id} value={localClass.id}>{localClass.name}{localClass.group ? ` · ${localClass.group}` : ""}</option>)}
                 </select>
               </label>
+              {futurePlanClassChosen && futureLocalClass && futureSuggestedSafeScheduleGroup ? (
+                <div className="future-schedule-link-suggestion">
+                  <div><b>SUGGESTED FULL-SCHEDULE LINK: {futureSuggestedSafeScheduleGroup}</b><span>Based on this class&apos;s local group. It will not link itself.</span></div>
+                  <button type="button" onClick={() => linkLocalClassToSafeSchedule(futureLocalClass.id, futureSuggestedSafeScheduleGroup)}>LINK {futureSuggestedSafeScheduleGroup} →</button>
+                </div>
+              ) : null}
               {futurePlanSafeScheduleDay?.status === "manual_week_confirmation_required" ? <label>
                 ROTATION WEEK
                 <select required value={futurePlanManualWeek || safeScheduleStorageState.manualWeekByDate[futurePlanDate] || ""} onChange={(event) => setFuturePlanManualWeek(event.currentTarget.value === "Odd" || event.currentTarget.value === "Even" ? event.currentTarget.value : "")}>
@@ -6564,7 +6790,10 @@ export default function Home() {
         <div className="readiness">
           <span className="pixel-label">READY STATE</span>
           <strong>{isPastActivePlan ? "PAST SNAPSHOT" : isReady ? "READY" : "DRAFT"}</strong>
-          {mode === "EDIT" && !isPastActivePlan ? <button onClick={toggleReady}>{isReady ? "RETURN TO DRAFT" : "MARK READY →"}</button> : null}
+          {mode === "EDIT" && !isPastActivePlan ? <>
+            <button onClick={toggleReady} title={isReady ? "Return this browser-local lesson to Draft." : readyBlockerCopy}>{isReady ? "RETURN TO DRAFT" : "MARK READY →"}</button>
+            {!isReady ? <small className={readyBlockerCount ? "readiness-blocked" : "readiness-clear"}>{readyBlockerCopy}</small> : null}
+          </> : null}
         </div>
       </section>
 
@@ -6598,6 +6827,7 @@ export default function Home() {
                     : activeLocalClass
                       ? "Local class blocks remain visible, but they cannot confirm which gym areas are free without a ready full-schedule link."
                       : "Import a local class to replace this sample schedule and roster."}</span>
+                {suggestedSafeScheduleGroup && activeLocalClass ? <button type="button" className="schedule-advisory-link" onClick={() => linkLocalClassToSafeSchedule(activeLocalClass.id, suggestedSafeScheduleGroup)}>REVIEW LINK {suggestedSafeScheduleGroup} →</button> : null}
               </div>
 
               {safeScheduleDay?.status === "manual_week_confirmation_required" ? (
@@ -6718,8 +6948,22 @@ export default function Home() {
         </aside>
 
         <section id="lesson-plan" className="lesson-area">
-          {mode === "VIEW" ? <LegacyLessonDocument phases={lessonPhases} attendanceById={attendanceById} attendanceRoster={attendanceRoster} tasks={plannerTasks} taskIsDone={plannerTaskIsDone} taskIsDisabled={(taskId) => isPastActivePlan && activeReminders.some((reminder) => reminder.template.id === taskId)} className={activePlanClassName} dateLabel={activeLessonDateLabel} dateIso={activeLessonPlan.date} isCurrentPlan={!isPastActivePlan && activeLessonPlan.date === lessonToday} onSetAttendanceStatus={setAttendanceStatus} onSetTaskDone={setPlannerTaskDone} /> : null}
+          {mode === "VIEW" ? <LegacyLessonDocument phases={lessonPhases} details={lessonDocumentDetails} attendanceById={attendanceById} attendanceRoster={attendanceRoster} tasks={plannerTasks} taskIsDone={plannerTaskIsDone} taskIsDisabled={(taskId) => isPastActivePlan && activeReminders.some((reminder) => reminder.template.id === taskId)} className={activePlanClassName} dateLabel={activeLessonDateLabel} dateIso={activeLessonPlan.date} isCurrentPlan={!isPastActivePlan && activeLessonPlan.date === lessonToday} onSetAttendanceStatus={setAttendanceStatus} onSetTaskDone={setPlannerTaskDone} /> : null}
           {mode === "VIEW" && isAddingIdea ? <section className="view-idea-capture" aria-label="Quickly save a new idea while viewing class">{newIdeaForm}</section> : null}
+          {mode === "EDIT" ? <section className="lesson-details-editor retro-window" aria-label="Lesson document details">
+            <div className="window-title">LESSON DETAILS <span>SHOWS IN VIEW + DOWNLOAD</span></div>
+            <div className="lesson-details-fields">
+              <label>ANNOUNCEMENTS
+                <textarea value={lessonDocumentDetails.announcements} onChange={(event) => updateLessonDocumentDetail("announcements", event.currentTarget.value)} placeholder="e.g. Warm up with your assigned group, then meet at floor." maxLength={1000} rows={3} />
+              </label>
+              <label>GOALS
+                <textarea value={lessonDocumentDetails.goals} onChange={(event) => updateLessonDocumentDetail("goals", event.currentTarget.value)} placeholder="e.g. Keep shapes tight and land with control." maxLength={1000} rows={3} />
+              </label>
+              <label>REFLECTION <small>Optional note for after class.</small>
+                <textarea value={lessonDocumentDetails.reflection} onChange={(event) => updateLessonDocumentDetail("reflection", event.currentTarget.value)} placeholder="What worked? What should change next time?" maxLength={1000} rows={3} />
+              </label>
+            </div>
+          </section> : null}
           <div className={`phase-editor-workspace ${mode === "EDIT" ? "editing" : ""}`}>
             <div className="phase-editor-plan">
           {mode === "EDIT" && isEventEditorOpen ? (
@@ -7542,6 +7786,7 @@ export default function Home() {
                       </label>
                       <div className="reminder-row-actions">
                         <em>{template.cadence.toUpperCase()}</em>
+                        <button className="reminder-edit-button" type="button" disabled={isPastActivePlan} onClick={() => openReminderEdit(template)} aria-label={`Edit reminder: ${template.title}`}>EDIT</button>
                         <button type="button" disabled={isPastActivePlan} onClick={() => removeReminder(template.id)} aria-label={`Remove reminder: ${template.title}`}>REMOVE</button>
                       </div>
                       {template.cadence === "temporary" && template.rollForwardUntilCompleted ? <span className="task-roll-forward">{isDone ? "Completed locally · it will not roll forward." : isRollForward ? "Past its original end date · still here until completed." : "Rolls forward until completed after its end date."}</span> : null}
@@ -7561,10 +7806,11 @@ export default function Home() {
                 <div className="reminder-form-grid">
                   <label>
                     APPLIES TO
-                    <select value={reminderScopeDraft} onChange={(event) => setReminderScopeDraft(event.currentTarget.value === "all_classes" || event.currentTarget.value === "lesson" ? event.currentTarget.value : "classes")}>
+                    <select value={reminderScopeDraft} onChange={(event) => setReminderScopeDraft(event.currentTarget.value === "all_classes" || event.currentTarget.value === "lesson" || event.currentTarget.value === "phase" ? event.currentTarget.value : "classes")}>
                       <option value="all_classes">EVERY CLASS</option>
-                      <option value="classes" disabled={!activeLessonPlan.classId}>THIS CLASS</option>
+                      <option value="classes" disabled={!activeLessonPlan.classId && editingReminder?.scope.kind !== "classes"}>{editingReminder?.scope.kind === "classes" ? "SAVED CLASS SELECTION" : "THIS CLASS"}</option>
                       <option value="lesson">THIS LESSON ONLY</option>
+                      {editingReminder?.scope.kind === "phase" ? <option value="phase">SAVED PHASE</option> : null}
                     </select>
                   </label>
                   {reminderScopeDraft !== "lesson" ? <>
@@ -7595,14 +7841,14 @@ export default function Home() {
                   </label>
                   <p className="reminder-form-help">Temporary reminders stop on the end date unless you explicitly enable roll-forward.</p>
                 </> : <p className="reminder-form-help">Recurring reminders appear on every matching lesson from the start date through the optional end date.</p>}
-                <div className="reminder-form-actions"><button type="submit">SAVE REMINDER</button><button type="button" onClick={() => setIsReminderFormOpen(false)}>CANCEL</button></div>
+                <div className="reminder-form-actions"><button type="submit">{editingReminder ? "UPDATE REMINDER" : "SAVE REMINDER"}</button><button type="button" onClick={closeReminderForm}>CANCEL</button></div>
               </form> : null}
               {reminderStorage.templates.length ? <details className="saved-reminders">
                 <summary>{reminderStorage.templates.length} SAVED REMINDER{reminderStorage.templates.length === 1 ? "" : "S"} · MANAGE</summary>
                 <div>
                   {reminderStorage.templates.map((template) => <article key={template.id}>
-                    <span><b>{template.title}</b><small>{template.cadence.toUpperCase()} · {template.scope.kind === "all_classes" ? "EVERY CLASS" : template.scope.kind === "classes" ? "SELECTED CLASS" : "THIS SAVED LESSON"} · {template.startDate}{template.endDate ? `–${template.endDate}` : " onward"}</small></span>
-                    <button type="button" disabled={isPastActivePlan} onClick={() => removeReminder(template.id)} aria-label={`Remove saved reminder: ${template.title}`}>REMOVE</button>
+                    <span><b>{template.title}</b><small>{template.cadence.toUpperCase()} · {template.scope.kind === "all_classes" ? "EVERY CLASS" : template.scope.kind === "classes" ? "SELECTED CLASS" : template.scope.kind === "phase" ? "SAVED PHASE" : "THIS SAVED LESSON"} · {template.startDate}{template.endDate ? `–${template.endDate}` : " onward"}</small></span>
+                    <div className="saved-reminder-actions"><button className="reminder-edit-button" type="button" disabled={isPastActivePlan} onClick={() => openReminderEdit(template)} aria-label={`Edit saved reminder: ${template.title}`}>EDIT</button><button type="button" disabled={isPastActivePlan} onClick={() => removeReminder(template.id)} aria-label={`Remove saved reminder: ${template.title}`}>REMOVE</button></div>
                   </article>)}
                 </div>
               </details> : null}
@@ -7628,7 +7874,7 @@ export default function Home() {
                 );
               })}
             </div>
-            <div className="safety-callout"><b>⚠ READY CHECK</b><span>Second coach is needed before spotting progressions.</span>{mode === "EDIT" ? <button onClick={() => setNotice("SAFETY CHECK ACKNOWLEDGED FOR READY REVIEW")}>ACKNOWLEDGE</button> : null}</div>
+            <div className={`safety-callout ${safetyAcknowledged ? "acknowledged" : ""}`}><b>⚠ READY CHECK</b><span>Second coach is needed before spotting progressions. Acknowledge this before marking the lesson Ready.</span>{mode === "EDIT" ? <button onClick={acknowledgeSafetyForReady} disabled={safetyAcknowledged}>{safetyAcknowledged ? "ACKNOWLEDGED ✓" : "ACKNOWLEDGE"}</button> : null}</div>
             <section className={`updates-inbox ${unresolvedUpdateCount ? "has-pending" : ""}`} aria-label="Local planner update inbox">
               <div className={`updates-inbox-header ${unresolvedUpdateCount ? "pending-shake" : ""}`}>
                 <div><b>UPDATE INBOX</b><span>DECISIONS STAY WITH THIS REVISION</span></div>

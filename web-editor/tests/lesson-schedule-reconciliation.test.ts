@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { eventWindow } from "../app/event-schedule";
 import type { LessonPhase } from "../app/lesson-data";
-import { reconcileLessonSchedulePhases } from "../app/lesson-schedule-reconciliation";
+import {
+  phaseHasCoachPlanningContent,
+  reconcileLessonSchedulePhases,
+} from "../app/lesson-schedule-reconciliation";
 
 function phase(overrides: Partial<LessonPhase> & Pick<LessonPhase, "id" | "time" | "title">): LessonPhase {
   return {
@@ -39,6 +42,33 @@ test("schedule reconciliation keeps planning content while taking current schedu
     text: ["Keep shoulders open"],
   }]);
   assert.deepEqual(result.replacementPhaseIdByOldId, { "schedule-safe-bars": "schedule-safe-bars" });
+});
+
+test("schedule reconciliation replaces an untouched writable scheduled shell", () => {
+  const untouched = phase({
+    id: "schedule-safe-old-bars",
+    time: "3:00 PM–3:30 PM",
+    title: "Bars",
+    mode: "MIXED",
+    text: [""],
+  });
+  const incoming = phase({
+    id: "schedule-safe-new-bars",
+    time: "3:15 PM–3:45 PM",
+    title: "Bars",
+    mode: "MIXED",
+    text: [""],
+  });
+
+  assert.equal(phaseHasCoachPlanningContent(untouched), false);
+
+  const result = reconcileLessonSchedulePhases([untouched], [incoming]);
+  assert.deepEqual(result.phases, [incoming]);
+  assert.equal(result.preservedScheduledCount, 0);
+  assert.equal(result.removedEmptyCount, 0);
+  assert.deepEqual(result.replacementPhaseIdByOldId, {
+    "schedule-safe-old-bars": "schedule-safe-new-bars",
+  });
 });
 
 test("schedule reconciliation maps a planned local shell into a matching safe shell", () => {

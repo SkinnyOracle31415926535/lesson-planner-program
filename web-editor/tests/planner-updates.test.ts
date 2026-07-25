@@ -3,6 +3,11 @@ import test from "node:test";
 import type { LessonCard, LessonPhase, ZonePanel } from "../app/lesson-data";
 import {
   generatePlannerUpdates,
+  getLessonReadinessReview,
+  isReadyBlockingPlannerUpdate,
+  plannerUpdateRevisionKey,
+  requiresReadyReview,
+  type PlannerUpdate,
   type PlannerScheduleAvailability,
 } from "../app/planner-updates";
 
@@ -128,4 +133,54 @@ test("uses caller-provided schedule advisories without calculating or reserving 
 test("gives the same local rule input stable ids and revisions", () => {
   const input = { phases: [phase({ id: "stable", eventId: "stable-event", time: "TBD", zones: [] })] };
   assert.deepEqual(generatePlannerUpdates(input), generatePlannerUpdates(input));
+});
+
+function update(rule: PlannerUpdate["rule"], id: string): PlannerUpdate {
+  return {
+    id,
+    revisionId: `${id}-revision`,
+    source: "LOCAL PLANNER RULE",
+    priority: "ATTENTION",
+    rule,
+    title: rule,
+    summary: rule,
+    phaseIds: [],
+    eventIds: [],
+  };
+}
+
+test("keeps required plan content separate from advisory schedule review", () => {
+  const updates = [
+    update("missing-phase-plan", "missing-plan"),
+    update("phase-time-overlap", "phase-overlap"),
+    update("schedule-not-ready", "not-ready"),
+    update("schedule-collision-warning", "collision"),
+    update("schedule-event-conflict", "event-conflict"),
+    update("explicit-card-safety", "safety-reminder"),
+  ];
+
+  assert.deepEqual(
+    updates.filter(isReadyBlockingPlannerUpdate).map((candidate) => candidate.rule),
+    ["missing-phase-plan", "phase-time-overlap"],
+  );
+  assert.deepEqual(
+    updates.filter(requiresReadyReview).map((candidate) => candidate.rule),
+    ["schedule-not-ready", "schedule-collision-warning", "schedule-event-conflict"],
+  );
+});
+
+test("requires a non-empty local decision for every schedule advisory before Ready", () => {
+  const blocking = update("invalid-phase-time", "invalid-time");
+  const reviewedSchedule = update("schedule-collision-warning", "reviewed-collision");
+  const pendingSchedule = update("schedule-event-conflict", "pending-conflict");
+  const review = getLessonReadinessReview(
+    [blocking, reviewedSchedule, pendingSchedule, update("explicit-phase-cue", "cue")],
+    {
+      [plannerUpdateRevisionKey(reviewedSchedule)]: "LATER",
+      [plannerUpdateRevisionKey(pendingSchedule)]: "   ",
+    },
+  );
+
+  assert.deepEqual(review.blockingPlanUpdates, [blocking]);
+  assert.deepEqual(review.pendingScheduleReviewUpdates, [pendingSchedule]);
 });
