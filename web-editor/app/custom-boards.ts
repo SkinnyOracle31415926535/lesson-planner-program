@@ -147,6 +147,20 @@ export async function saveCustomBoardPhoto(photo: StoredAreaPhoto): Promise<void
   }
 }
 
+/** Saves a validated import batch in one IndexedDB transaction. */
+export async function saveCustomBoardPhotos(photos: readonly StoredAreaPhoto[]): Promise<void> {
+  if (!photos.length) return;
+  const database = await photoDatabase();
+  try {
+    const transaction = database.transaction(PHOTO_STORE_NAME, "readwrite");
+    const store = transaction.objectStore(PHOTO_STORE_NAME);
+    photos.forEach((photo) => store.put(photo));
+    await transactionDone(transaction);
+  } finally {
+    database.close();
+  }
+}
+
 export async function loadCustomBoardPhoto(photoId: string): Promise<StoredAreaPhoto | null> {
   const database = await photoDatabase();
   try {

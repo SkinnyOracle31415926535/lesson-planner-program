@@ -55,6 +55,7 @@ import {
   renameCustomBoardEvent,
   replaceCustomBoardPhotoMetadata,
   saveCustomBoardPhoto,
+  saveCustomBoardPhotos,
   setCustomBoardPhotoScale,
   updateCustomStationSpot,
   validateCustomLabelLayout,
@@ -63,8 +64,17 @@ import {
   type CustomStationSpot,
   type NormalizedLabelBox,
   type NormalizedPoint,
+  type StoredAreaPhoto,
   type VisualLabelLayout,
 } from "./custom-boards";
+import {
+  MAX_CUSTOM_BOARD_IMPORT_AREAS,
+  createCustomBoardImportFromPhotoNames,
+  customBoardImportBoardId,
+  customBoardImportPhotoId,
+  parseCustomBoardImportJson,
+  planCustomBoardImport,
+} from "./custom-board-import";
 import {
   createIdeaMediaId,
   ideaMediaKindForFile,
@@ -171,6 +181,7 @@ import {
   listedMats,
   standaloneLessonPlanHtml,
 } from "./lesson-document";
+import { loadDefaultLessonGoals } from "./lesson-goals";
 import {
   displayLessonTimeRange,
   formatLessonTimePickerValue,
@@ -482,6 +493,24 @@ type LibraryTransferImportState =
     fileName: string;
     bundle: LibraryTransferBundleV1;
     newCount: number;
+    duplicateCount: number;
+  }
+  | {
+    kind: "error";
+    fileName: string;
+    message: string;
+  };
+
+type PreparedCustomBoardImport = {
+  board: CustomBoard;
+  photo: StoredAreaPhoto;
+};
+
+type CustomBoardImportState =
+  | {
+    kind: "ready";
+    manifestFileName?: string;
+    entries: PreparedCustomBoardImport[];
     duplicateCount: number;
   }
   | {
@@ -2097,6 +2126,7 @@ function LegacyLessonDocument({
   onSetTaskDone: (taskId: string, isDone: boolean) => void;
 }) {
   const paperRef = useRef<HTMLElement | null>(null);
+  const renderedGoals = loadDefaultLessonGoals(details.goals);
 
   function downloadLessonPlan() {
     if (!paperRef.current) return;
@@ -2125,7 +2155,7 @@ function LegacyLessonDocument({
         <h3>✧ {className.toUpperCase()} LESSON ✧</h3>
         <p className="legacy-date">{dateLabel}</p>
         <section><h4>ANNOUNCEMENTS</h4>{details.announcements.trim() ? <pre>{details.announcements}</pre> : <p>—</p>}</section>
-        <section><h4>GOALS</h4>{details.goals.trim() ? <pre>{details.goals}</pre> : <p>—</p>}</section>
+        <section><h4>GOALS</h4><pre>{renderedGoals}</pre></section>
         <section>
           <h4>PLAN</h4>
           <div className="legacy-plan-list">
@@ -2210,6 +2240,7 @@ export default function Home() {
   const editIdeaCameraInputRef = useRef<HTMLInputElement | null>(null);
   const editIdeaMediaInputRef = useRef<HTMLInputElement | null>(null);
   const libraryTransferInputRef = useRef<HTMLInputElement | null>(null);
+  const customBoardImportInputRef = useRef<HTMLInputElement | null>(null);
   const libraryStackRef = useRef<HTMLDivElement | null>(null);
   const libraryPinchRef = useRef<LibraryPinchState>({ active: false, startDistance: 0, startRowHeight: LIBRARY_ROW_HEIGHT_DEFAULT });
   const libraryPinchJustEndedRef = useRef(0);
@@ -2261,6 +2292,8 @@ export default function Home() {
   const [newCustomBoardTitle, setNewCustomBoardTitle] = useState("");
   const [newCustomBoardEventName, setNewCustomBoardEventName] = useState("");
   const [newCustomBoardFile, setNewCustomBoardFile] = useState<File | null>(null);
+  const [customBoardImport, setCustomBoardImport] = useState<CustomBoardImportState | null>(null);
+  const [isSavingCustomBoardImport, setIsSavingCustomBoardImport] = useState(false);
   const [replacingCustomBoardId, setReplacingCustomBoardId] = useState<string | null>(null);
   const [replacementCustomBoardFile, setReplacementCustomBoardFile] = useState<File | null>(null);
   const [editingArea, setEditingArea] = useState<AreaEditTarget | null>(null);
@@ -5206,6 +5239,152 @@ export default function Home() {
     setNotice(`${zone.alias.toUpperCase()} RESTORED TO STATION CHOICES · ADD IT TO A PHASE WHEN YOU NEED IT`);
   }
 
+  async function previewCustomBoardImport(files: FileList | null) {
+    if (mode !== "EDIT") return;
+    const selectedFiles = Array.from(files ?? []);
+    const selectedFileName = selectedFiles.length === 1 ? selectedFiles[0].name : "SELECTED FILES";
+    if (!selectedFiles.length) return;
+
+    const manifestFiles = selectedFiles.filter((file) => file.type === "application/json" || /\.json$/i.test(file.name));
+    const photoFiles = selectedFiles.filter((file) => !manifestFiles.includes(file));
+    const block = (message: string) => {
+      setCustomBoardImport({ kind: "error", fileName: selectedFileName, message });
+      setNotice(`PHOTO AREA IMPORT BLOCKED · ${message.toUpperCase()}`);
+    };
+
+    if (manifestFiles.length > 1) {
+      block("Choose at most one photo-area JSON file.");
+      if (customBoardImportInputRef.current) customBoardImportInputRef.current.value = "";
+      return;
+    }
+    if (!photoFiles.length) {
+      block("Choose one or more area photos with the optional JSON file.");
+      if (customBoardImportInputRef.current) customBoardImportInputRef.current.value = "";
+      return;
+    }
+    if (photoFiles.length > MAX_CUSTOM_BOARD_IMPORT_AREAS) {
+      block(`Choose no more than ${MAX_CUSTOM_BOARD_IMPORT_AREAS} photo areas at once.`);
+      if (customBoardImportInputRef.current) customBoardImportInputRef.current.value = "";
+      return;
+    }
+    const invalidPhoto = photoFiles.find((file) => !isAllowedCustomBoardPhoto(file));
+    if (invalidPhoto) {
+      block(`${invalidPhoto.name || "One selected file"} is not a supported photo under 35 MB.`);
+      if (customBoardImportInputRef.current) customBoardImportInputRef.current.value = "";
+      return;
+    }
+
+    try {
+      const manifest = manifestFiles[0];
+      const parsed = manifest
+        ? parseCustomBoardImportJson(await manifest.text(), manifest.size)
+        : { ok: true as const, value: createCustomBoardImportFromPhotoNames(photoFiles.map((file) => file.name)) };
+      if (!parsed.ok) {
+        block(parsed.error);
+        return;
+      }
+
+      const plan = planCustomBoardImport(
+        parsed.value.areas,
+        photoFiles.map((file) => file.name),
+        customBoards.map((board) => board.id),
+      );
+      if (plan.ambiguousPhotoNames.length) {
+        block(`Choose each area photo only once. Duplicate: ${plan.ambiguousPhotoNames.join(", ")}.`);
+        return;
+      }
+      if (plan.missingPhotoAreas.length) {
+        block(`Missing photo${plan.missingPhotoAreas.length === 1 ? "" : "s"}: ${plan.missingPhotoAreas.map((area) => area.photo).join(", ")}.`);
+        return;
+      }
+      if (plan.unmatchedPhotoNames.length) {
+        block(`The JSON does not describe: ${plan.unmatchedPhotoNames.join(", ")}.`);
+        return;
+      }
+
+      const photoByName = new Map(photoFiles.map((file) => [file.name.trim().toLocaleLowerCase(), file]));
+      const timestamp = new Date().toISOString();
+      const entries = await Promise.all(plan.readyAreas.map(async (area): Promise<PreparedCustomBoardImport> => {
+        const photoFile = photoByName.get(area.photo.trim().toLocaleLowerCase());
+        if (!photoFile) throw new Error(`Missing ${area.photo}`);
+        const dimensions = await readCustomPhotoDimensions(photoFile);
+        if (!dimensions.width || !dimensions.height) throw new Error(`Empty ${photoFile.name}`);
+        const boardId = customBoardImportBoardId(area.sourceId);
+        const photoId = customBoardImportPhotoId(area.sourceId);
+        const board: CustomBoard = {
+          id: boardId,
+          title: area.title,
+          ...(area.eventName ? { eventName: area.eventName } : {}),
+          photoId,
+          filename: photoFile.name || area.photo,
+          width: dimensions.width,
+          height: dimensions.height,
+          ...(area.photoScale === undefined ? {} : { photoScale: area.photoScale }),
+          spots: area.spots.map((spot) => ({ ...spot })),
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        return {
+          board,
+          photo: {
+            id: photoId,
+            blob: photoFile,
+            filename: board.filename,
+            mimeType: photoFile.type || "image/*",
+            width: dimensions.width,
+            height: dimensions.height,
+            createdAt: timestamp,
+          },
+        };
+      }));
+      setCustomBoardImport({
+        kind: "ready",
+        ...(manifest ? { manifestFileName: manifest.name } : {}),
+        entries,
+        duplicateCount: plan.duplicateAreas.length,
+      });
+      setNotice(entries.length
+        ? `${entries.length} PHOTO AREA${entries.length === 1 ? "" : "S"} READY TO IMPORT · ${plan.duplicateAreas.length} ALREADY HERE`
+        : `NO NEW PHOTO AREAS READY · ${plan.duplicateAreas.length} ALREADY HERE`);
+    } catch {
+      block("The selected photos could not be opened.");
+    } finally {
+      if (customBoardImportInputRef.current) customBoardImportInputRef.current.value = "";
+    }
+  }
+
+  async function applyCustomBoardImport() {
+    if (mode !== "EDIT" || isSavingCustomBoardImport || customBoardImport?.kind !== "ready") return;
+    if (!hasLoadedCustomBoards) {
+      setNotice("WAIT FOR THIS BROWSER'S LOCAL PHOTO AREAS TO FINISH LOADING");
+      return;
+    }
+    const existingBoardIds = new Set(customBoards.map((board) => board.id));
+    const entries = customBoardImport.entries.filter((entry) => !existingBoardIds.has(entry.board.id));
+    const newlyDuplicateCount = customBoardImport.entries.length - entries.length;
+    if (!entries.length) {
+      setCustomBoardImport(null);
+      setNotice(`NO NEW PHOTO AREAS IMPORTED · ${customBoardImport.duplicateCount + newlyDuplicateCount} ALREADY HERE · NOTHING REPLACED`);
+      return;
+    }
+
+    setIsSavingCustomBoardImport(true);
+    try {
+      await saveCustomBoardPhotos(entries.map((entry) => entry.photo));
+      setCustomBoards((boards) => {
+        const ids = new Set(boards.map((board) => board.id));
+        return [...boards, ...entries.filter((entry) => !ids.has(entry.board.id)).map((entry) => entry.board)];
+      });
+      setCustomBoardImport(null);
+      setIsAddingCustomBoard(false);
+      setNotice(`${entries.length} PHOTO AREA${entries.length === 1 ? "" : "S"} IMPORTED · ${customBoardImport.duplicateCount + newlyDuplicateCount} DUPLICATE${customBoardImport.duplicateCount + newlyDuplicateCount === 1 ? "" : "S"} SKIPPED · NOTHING REPLACED`);
+    } catch {
+      setNotice("PHOTO AREA IMPORT COULD NOT SAVE · YOUR EXISTING AREAS WERE NOT CHANGED");
+    } finally {
+      setIsSavingCustomBoardImport(false);
+    }
+  }
+
   async function saveNewCustomBoard() {
     if (mode !== "EDIT") return;
     const originPlanId = activeLessonPlanIdRef.current;
@@ -6956,9 +7135,18 @@ export default function Home() {
               <label>ANNOUNCEMENTS
                 <textarea value={lessonDocumentDetails.announcements} onChange={(event) => updateLessonDocumentDetail("announcements", event.currentTarget.value)} placeholder="e.g. Warm up with your assigned group, then meet at floor." maxLength={1000} rows={3} />
               </label>
-              <label>GOALS
-                <textarea value={lessonDocumentDetails.goals} onChange={(event) => updateLessonDocumentDetail("goals", event.currentTarget.value)} placeholder="e.g. Keep shapes tight and land with control." maxLength={1000} rows={3} />
-              </label>
+              <div className="lesson-goals-field">
+                <div className="lesson-goals-heading">
+                  <label htmlFor="lesson-goals">GOALS</label>
+                  <button
+                    type="button"
+                    disabled={isPastActivePlan || Boolean(lessonDocumentDetails.goals.trim())}
+                    onClick={() => updateLessonDocumentDetail("goals", loadDefaultLessonGoals(lessonDocumentDetails.goals))}
+                  >LOAD DEFAULT GOALS</button>
+                </div>
+                <span>Shared default for every class. It only fills an empty goals field.</span>
+                <textarea id="lesson-goals" value={lessonDocumentDetails.goals} onChange={(event) => updateLessonDocumentDetail("goals", event.currentTarget.value)} placeholder="e.g. Keep shapes tight and land with control." maxLength={1000} rows={3} />
+              </div>
               <label>REFLECTION <small>Optional note for after class.</small>
                 <textarea value={lessonDocumentDetails.reflection} onChange={(event) => updateLessonDocumentDetail("reflection", event.currentTarget.value)} placeholder="What worked? What should change next time?" maxLength={1000} rows={3} />
               </label>
@@ -7101,14 +7289,49 @@ export default function Home() {
                       <div>
                         <b>{customBoards.length ? "YOUR PHOTO AREAS" : "NO PHOTO AREAS YET"}</b>
                         <span>{customBoards.length
-                          ? "Private to this browser/device. Every saved photo area stays available above until you remove it."
-                          : "Add your first gym-area photo, then mark its station spots and use it in this lesson."}</span>
+                          ? "Private to this browser/device. Import Photos adds many at once; include one JSON file in the same selection for exact names and spots."
+                          : "Add one gym-area photo or import all of them together. An optional JSON file can set names, events, and station spots."}</span>
                       </div>
                       <div className="photo-area-actions">
                         <button type="button" onClick={() => setIsAddingCustomBoard((open) => !open)}>
                           {isAddingCustomBoard ? "CLOSE PHOTO AREA" : "+ PHOTO AREA"}
                         </button>
+                        <button type="button" onClick={() => customBoardImportInputRef.current?.click()}>IMPORT PHOTOS</button>
                       </div>
+                      <input
+                        ref={customBoardImportInputRef}
+                        className="new-idea-file-input"
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif,.json,application/json"
+                        multiple
+                        hidden
+                        aria-hidden="true"
+                        tabIndex={-1}
+                        onChange={(event) => { void previewCustomBoardImport(event.currentTarget.files); }}
+                      />
+                    </div>
+                  ) : null}
+                  {mode === "EDIT" && customBoardImport ? (
+                    <div className={`photo-area-import-preview ${customBoardImport.kind}`}>
+                      <strong>{customBoardImport.kind === "ready" ? "PHOTO AREA IMPORT PREVIEW" : "PHOTO AREA IMPORT BLOCKED"}</strong>
+                      {customBoardImport.kind === "ready" ? (
+                        <>
+                          <span>{customBoardImport.manifestFileName ? `JSON: ${customBoardImport.manifestFileName}` : "PHOTO FILENAMES WILL NAME THE AREAS"}</span>
+                          <p><b>{customBoardImport.entries.length} NEW</b> · {customBoardImport.duplicateCount} ALREADY HERE · NOTHING REPLACED</p>
+                          <div>
+                            <button type="button" disabled={!customBoardImport.entries.length || isSavingCustomBoardImport} onClick={() => { void applyCustomBoardImport(); }}>
+                              {isSavingCustomBoardImport ? "IMPORTING…" : customBoardImport.entries.length ? `IMPORT ${customBoardImport.entries.length} AREA${customBoardImport.entries.length === 1 ? "" : "S"}` : "NOTHING NEW"}
+                            </button>
+                            <button type="button" disabled={isSavingCustomBoardImport} onClick={() => setCustomBoardImport(null)}>CANCEL</button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <span>{customBoardImport.fileName}</span>
+                          <p>{customBoardImport.message}</p>
+                          <button type="button" onClick={() => setCustomBoardImport(null)}>CLOSE</button>
+                        </>
+                      )}
                     </div>
                   ) : null}
                   {mode === "EDIT" && hiddenAreaEntries.length ? (
