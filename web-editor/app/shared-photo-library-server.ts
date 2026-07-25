@@ -5,7 +5,6 @@ type SharedPhotoLibraryRuntime = {
   DB?: D1Database;
   PHOTO_AREA_IMAGES?: R2Bucket;
   SHARED_LIBRARY_OWNER_EMAIL?: string;
-  SHARED_LIBRARY_INITIAL_SEED_TOKEN?: string;
 };
 
 function runtime(): SharedPhotoLibraryRuntime {
@@ -33,11 +32,4 @@ export function isSharedPhotoLibraryOwner(user: Pick<ChatGPTUser, "email">): boo
 export function hasSameOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
   return Boolean(origin) && origin === new URL(request.url).origin;
-}
-
-/** Used only while the known initial photo catalog is being securely seeded. */
-export function hasInitialSharedPhotoLibrarySeedAuthorization(request: Request): boolean {
-  const expected = runtime().SHARED_LIBRARY_INITIAL_SEED_TOKEN;
-  const supplied = request.headers.get("x-shared-library-seed");
-  return Boolean(expected) && supplied === expected;
 }
