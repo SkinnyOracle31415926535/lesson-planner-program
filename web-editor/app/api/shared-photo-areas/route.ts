@@ -103,7 +103,7 @@ function rowToPublicArea(row: StoredPhotoArea, request: Request): SharedPhotoLib
 }
 
 async function existingSourceIds(areas: readonly CustomBoardImportArea[]): Promise<Set<string>> {
-  const database = sharedPhotoLibraryDatabase();
+  const database = await sharedPhotoLibraryDatabase();
   const placeholders = areas.map(() => "?").join(", ");
   const result = await database
     .prepare(`SELECT source_id FROM shared_photo_areas WHERE source_id IN (${placeholders})`)
@@ -119,7 +119,7 @@ export async function OPTIONS() {
 /** Public manifest consumed by the GitHub Pages planner on every device. */
 export async function GET(request: Request) {
   try {
-    const database = sharedPhotoLibraryDatabase();
+    const database = await sharedPhotoLibraryDatabase();
     const result = await database
       .prepare(`SELECT source_id, board_id, photo_id, title, event_name, filename, mime_type, width, height, photo_scale, spots_json, created_at, updated_at
         FROM shared_photo_areas ORDER BY title COLLATE NOCASE, source_id`)
@@ -145,7 +145,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const user = await getChatGPTUser();
   if (!user) return jsonError("Sign in with ChatGPT to manage the shared photo library.", 401);
-  if (!isSharedPhotoLibraryOwner(user)) return jsonError("This signed-in account cannot manage the shared photo library.", 403);
+  if (!(await isSharedPhotoLibraryOwner(user))) return jsonError("This signed-in account cannot manage the shared photo library.", 403);
   if (!hasSameOrigin(request)) return jsonError("Shared-library updates must come from the library manager.", 403);
 
   try {
@@ -208,7 +208,7 @@ export async function POST(request: Request) {
     }
 
     const timestamp = new Date().toISOString();
-    const images = sharedPhotoLibraryImages();
+    const images = await sharedPhotoLibraryImages();
     const staged: StagedPhoto[] = [];
     for (const upload of uploads) {
       const board = sharedPhotoBoardForImport(upload.area, upload.metadata, timestamp);
@@ -224,7 +224,7 @@ export async function POST(request: Request) {
     }
 
     if (staged.length) {
-      const database = sharedPhotoLibraryDatabase();
+      const database = await sharedPhotoLibraryDatabase();
       await database.batch(staged.map((entry) => database.prepare(
         `INSERT INTO shared_photo_areas
           (source_id, board_id, photo_id, title, event_name, filename, mime_type, width, height, photo_scale, spots_json, object_key, created_at, updated_at)

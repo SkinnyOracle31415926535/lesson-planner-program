@@ -1,4 +1,3 @@
-import { env } from "cloudflare:workers";
 import type { ChatGPTUser } from "./chatgpt-auth";
 
 type SharedPhotoLibraryRuntime = {
@@ -7,24 +6,25 @@ type SharedPhotoLibraryRuntime = {
   SHARED_LIBRARY_OWNER_EMAIL?: string;
 };
 
-function runtime(): SharedPhotoLibraryRuntime {
-  return env as unknown as SharedPhotoLibraryRuntime;
+async function runtime(): Promise<SharedPhotoLibraryRuntime> {
+  const workers = await import("cloudflare:workers") as unknown as { env: SharedPhotoLibraryRuntime };
+  return workers.env;
 }
 
-export function sharedPhotoLibraryDatabase(): D1Database {
-  const database = runtime().DB;
+export async function sharedPhotoLibraryDatabase(): Promise<D1Database> {
+  const database = (await runtime()).DB;
   if (!database) throw new Error("The shared photo library database is unavailable.");
   return database;
 }
 
-export function sharedPhotoLibraryImages(): R2Bucket {
-  const images = runtime().PHOTO_AREA_IMAGES;
+export async function sharedPhotoLibraryImages(): Promise<R2Bucket> {
+  const images = (await runtime()).PHOTO_AREA_IMAGES;
   if (!images) throw new Error("The shared photo library image store is unavailable.");
   return images;
 }
 
-export function isSharedPhotoLibraryOwner(user: Pick<ChatGPTUser, "email">): boolean {
-  const configuredOwner = runtime().SHARED_LIBRARY_OWNER_EMAIL?.trim().toLocaleLowerCase();
+export async function isSharedPhotoLibraryOwner(user: Pick<ChatGPTUser, "email">): Promise<boolean> {
+  const configuredOwner = (await runtime()).SHARED_LIBRARY_OWNER_EMAIL?.trim().toLocaleLowerCase();
   return Boolean(configuredOwner) && user.email.trim().toLocaleLowerCase() === configuredOwner;
 }
 

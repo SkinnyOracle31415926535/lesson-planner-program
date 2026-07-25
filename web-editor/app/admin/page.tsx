@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function SharedPhotoLibraryAdminPage() {
   const user = await requireChatGPTUser("/admin");
 
-  if (!isSharedPhotoLibraryOwner(user)) {
+  if (!(await isSharedPhotoLibraryOwner(user))) {
     return (
       <main className="shared-library-shell">
         <section className="shared-library-window retro-window">

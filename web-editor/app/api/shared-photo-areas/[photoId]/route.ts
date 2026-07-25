@@ -28,14 +28,15 @@ export async function GET(_request: Request, context: { params: Promise<{ photoI
   if (!isSafePhotoId(photoId)) return new Response("Not found", { status: 404 });
 
   try {
-    const database = sharedPhotoLibraryDatabase();
+    const database = await sharedPhotoLibraryDatabase();
     const photo = await database
       .prepare("SELECT object_key, mime_type, filename FROM shared_photo_areas WHERE photo_id = ?")
       .bind(photoId)
       .first<StoredPhoto>();
     if (!photo) return new Response("Not found", { status: 404 });
 
-    const object = await sharedPhotoLibraryImages().get(photo.object_key);
+    const images = await sharedPhotoLibraryImages();
+    const object = await images.get(photo.object_key);
     if (!object) return new Response("Not found", { status: 404 });
     return new Response(object.body, {
       headers: {
