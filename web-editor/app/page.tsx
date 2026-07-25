@@ -76,6 +76,11 @@ import {
   planCustomBoardImport,
 } from "./custom-board-import";
 import {
+  fetchSharedPhotoLibrary,
+  mergeSharedPhotoBoards,
+  sharedPhotoLibraryManagerUrl,
+} from "./shared-photo-library";
+import {
   createIdeaMediaId,
   ideaMediaKindForFile,
   ideaMediaValidationMessage,
@@ -2283,6 +2288,9 @@ export default function Home() {
   const [visualLabelLayoutByCardId, setVisualLabelLayoutByCardId] = useState<Record<string, VisualLabelLayout>>({});
   const [customBoards, setCustomBoards] = useState<CustomBoard[]>([]);
   const [customBoardPhotoUrls, setCustomBoardPhotoUrls] = useState<Record<string, string>>({});
+  const [sharedCustomBoardPhotoUrls, setSharedCustomBoardPhotoUrls] = useState<Record<string, string>>({});
+  const [sharedPhotoAreaCount, setSharedPhotoAreaCount] = useState<number | null>(null);
+  const [sharedPhotoLibraryAdminUrl, setSharedPhotoLibraryAdminUrl] = useState<string | null>(null);
   const [hasLoadedCustomBoards, setHasLoadedCustomBoards] = useState(false);
   const [areaCatalog, setAreaCatalog] = useState<AreaCatalogPreferences>(emptyAreaCatalogPreferences);
   const [hasLoadedAreaCatalog, setHasLoadedAreaCatalog] = useState(false);
@@ -3364,6 +3372,20 @@ export default function Home() {
   }, [customBoards, hasLoadedCustomBoards]);
 
   useEffect(() => {
+    setSharedPhotoLibraryAdminUrl(sharedPhotoLibraryManagerUrl());
+    let active = true;
+    void fetchSharedPhotoLibrary().then((library) => {
+      if (!active || !library) return;
+      setSharedCustomBoardPhotoUrls(Object.fromEntries(library.areas.map((area) => [area.board.photoId, area.imageUrl])));
+      setSharedPhotoAreaCount(library.areas.length);
+      setCustomBoards((boards) => mergeSharedPhotoBoards(boards, library.areas));
+    }).catch(() => {
+      if (active) setSharedPhotoAreaCount(null);
+    });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
     try {
       const stored = window.localStorage.getItem(LOCAL_AREA_CATALOG_STORAGE_KEY);
       if (stored) {
@@ -3563,6 +3585,8 @@ export default function Home() {
     const urls: string[] = [];
     setCustomBoardPhotoUrls({});
     void Promise.all(renderingCustomBoards.map(async (board) => {
+      const sharedUrl = sharedCustomBoardPhotoUrls[board.photoId];
+      if (sharedUrl) return [board.photoId, sharedUrl] as const;
       const photo = await loadCustomBoardPhoto(board.photoId);
       if (!photo || !active) return [board.photoId, ""] as const;
       const url = URL.createObjectURL(photo.blob);
@@ -3578,7 +3602,7 @@ export default function Home() {
       active = false;
       urls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [hasLoadedCustomBoards, renderingCustomBoards]);
+  }, [hasLoadedCustomBoards, renderingCustomBoards, sharedCustomBoardPhotoUrls]);
 
   useEffect(() => {
     try {
@@ -7287,12 +7311,15 @@ export default function Home() {
                   {mode === "EDIT" ? (
                     <div className={`photo-area-picker ${customBoards.length ? "" : "empty"}`}>
                       <div>
-                        <b>{customBoards.length ? "YOUR PHOTO AREAS" : "NO PHOTO AREAS YET"}</b>
-                        <span>{customBoards.length
-                          ? "Private to this browser/device. Import Photos adds many at once; include one JSON file in the same selection for exact names and spots."
-                          : "Add one gym-area photo or import all of them together. An optional JSON file can set names, events, and station spots."}</span>
+                        <b>{sharedPhotoAreaCount !== null ? "SHARED PHOTO AREAS" : customBoards.length ? "YOUR PHOTO AREAS" : "NO PHOTO AREAS YET"}</b>
+                        <span>{sharedPhotoAreaCount !== null
+                          ? `${sharedPhotoAreaCount} shared photo area${sharedPhotoAreaCount === 1 ? "" : "s"} load automatically on every planner link. Manage Shared Library publishes changes for every device; the local add/import controls below still affect only this browser.`
+                          : customBoards.length
+                            ? "Private to this browser/device. Import Photos adds many at once; include one JSON file in the same selection for exact names and spots."
+                            : "Add one gym-area photo or import all of them together. An optional JSON file can set names, events, and station spots."}</span>
                       </div>
                       <div className="photo-area-actions">
+                        {sharedPhotoLibraryAdminUrl ? <a href={sharedPhotoLibraryAdminUrl} target="_blank" rel="noreferrer">MANAGE SHARED LIBRARY</a> : null}
                         <button type="button" onClick={() => setIsAddingCustomBoard((open) => !open)}>
                           {isAddingCustomBoard ? "CLOSE PHOTO AREA" : "+ PHOTO AREA"}
                         </button>
