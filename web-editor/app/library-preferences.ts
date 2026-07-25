@@ -60,6 +60,7 @@ export type LibraryPreferenceCollections = {
   recentIdeaIds: string[];
   archivedIdeaIds: string[];
   restoredIdeaIds: string[];
+  draftIdeaIds: string[];
   itemOverridesById: Record<string, LibraryItem>;
   removedIdeaIds: string[];
 };
@@ -87,6 +88,7 @@ export function permanentlyDeleteLibraryIdea(
       recentIdeaIds: withoutIdea(current.recentIdeaIds),
       archivedIdeaIds: withoutIdea(current.archivedIdeaIds),
       restoredIdeaIds: withoutIdea(current.restoredIdeaIds),
+      draftIdeaIds: withoutIdea(current.draftIdeaIds),
       itemOverridesById: nextOverrides,
       removedIdeaIds: withoutIdea(current.removedIdeaIds),
     },

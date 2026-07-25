@@ -300,6 +300,7 @@ const shelfCopy: Record<LibraryShelf, string> = {
   all: "Your shared skills, drills, routines, activities, and references",
   gems: "Your shared starred planning shelf",
   recent: "Your most recently placed shared ideas",
+  drafts: "Ideas you marked to keep editing before they are final",
   archive: "Your archived shared ideas — nothing is deleted",
 };
 
@@ -465,20 +466,26 @@ type ResolvedVisualAnchor = {
 };
 
 type StoredLibraryPreferences = {
-  version: 6;
+  version: 7;
   gemIds: string[];
   customCards: LibraryItem[];
   /** Source-library idea IDs ordered from most to least recently placed. */
   recentIdeaIds: string[];
   archivedIdeaIds: string[];
   restoredIdeaIds: string[];
+  /** Shared editing queue. Draft Ideas remain available in the active library. */
+  draftIdeaIds: string[];
   /** Browser-local edits to a vault-backed idea. The source fixture is never changed. */
   itemOverridesById: Record<string, LibraryItem>;
   /** Browser-local soft removals. They remain restorable from Archive. */
   removedIdeaIds: string[];
 };
 
-type StoredLibraryPreferencesV5 = Omit<StoredLibraryPreferences, "version"> & {
+type StoredLibraryPreferencesV6 = Omit<StoredLibraryPreferences, "version" | "draftIdeaIds"> & {
+  version: 6;
+};
+
+type StoredLibraryPreferencesV5 = Omit<StoredLibraryPreferences, "version" | "draftIdeaIds"> & {
   version: 5;
 };
 
@@ -1110,7 +1117,7 @@ function isLessonCard(value: unknown): value is LessonCard {
 }
 
 function isLibraryShelf(value: unknown): value is LibraryShelf {
-  return value === "all" || value === "gems" || value === "recent" || value === "archive";
+  return value === "all" || value === "gems" || value === "recent" || value === "drafts" || value === "archive";
 }
 
 function isLibraryItem(value: unknown): value is LibraryItem {
@@ -1632,6 +1639,27 @@ function storedLessonWithBoardSnapshot(
 function isStoredLibraryPreferences(value: unknown): value is StoredLibraryPreferences {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<StoredLibraryPreferences>;
+  return candidate.version === 7
+    && Array.isArray(candidate.gemIds)
+    && candidate.gemIds.every((id) => typeof id === "string")
+    && Array.isArray(candidate.customCards)
+    && candidate.customCards.every(isLibraryItem)
+    && Array.isArray(candidate.recentIdeaIds)
+    && candidate.recentIdeaIds.every((id) => typeof id === "string")
+    && Array.isArray(candidate.archivedIdeaIds)
+    && candidate.archivedIdeaIds.every((id) => typeof id === "string")
+    && Array.isArray(candidate.restoredIdeaIds)
+    && candidate.restoredIdeaIds.every((id) => typeof id === "string")
+    && Array.isArray(candidate.draftIdeaIds)
+    && candidate.draftIdeaIds.every((id) => typeof id === "string")
+    && isLibraryItemRecord(candidate.itemOverridesById)
+    && Array.isArray(candidate.removedIdeaIds)
+    && candidate.removedIdeaIds.every((id) => typeof id === "string");
+}
+
+function isStoredLibraryPreferencesV6(value: unknown): value is StoredLibraryPreferencesV6 {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<StoredLibraryPreferencesV6>;
   return candidate.version === 6
     && Array.isArray(candidate.gemIds)
     && candidate.gemIds.every((id) => typeof id === "string")
@@ -2598,6 +2626,7 @@ export default function Home() {
   const [recentIdeaIds, setRecentIdeaIds] = useState<string[]>([]);
   const [archivedIdeaIds, setArchivedIdeaIds] = useState<string[]>([]);
   const [restoredIdeaIds, setRestoredIdeaIds] = useState<string[]>([]);
+  const [draftIdeaIds, setDraftIdeaIds] = useState<string[]>([]);
   const [itemOverridesById, setItemOverridesById] = useState<Record<string, LibraryItem>>({});
   const [removedIdeaIds, setRemovedIdeaIds] = useState<string[]>([]);
   const [isAddingIdea, setIsAddingIdea] = useState(false);
@@ -2984,17 +3013,18 @@ export default function Home() {
     const stationSetups = sharedIdeaStationIds.map((id) => stationSetupsById[id]).filter((setup): setup is StationSetup => Boolean(setup));
     if (stationSetups.length !== sharedIdeaStationIds.length) return null;
     const preferences: SharedIdeaLibraryPreferences = {
-      version: 6,
+      version: 7,
       gemIds: [...gemIds],
       customCards: customLibraryCards.map(copyLibraryItem),
       recentIdeaIds: [...recentIdeaIds],
       archivedIdeaIds: [...archivedIdeaIds],
       restoredIdeaIds: [...restoredIdeaIds],
+      draftIdeaIds: [...draftIdeaIds],
       itemOverridesById: Object.fromEntries(Object.entries(itemOverridesById).map(([id, card]) => [id, copyLibraryItem(card)])),
       removedIdeaIds: [...removedIdeaIds],
     };
     return parseSharedIdeaLibraryState({ version: 1, preferences, stationSetups });
-  }, [archivedIdeaIds, customLibraryCards, gemIds, itemOverridesById, recentIdeaIds, removedIdeaIds, restoredIdeaIds, sharedIdeaStationIds, stationSetupsById]);
+  }, [archivedIdeaIds, customLibraryCards, draftIdeaIds, gemIds, itemOverridesById, recentIdeaIds, removedIdeaIds, restoredIdeaIds, sharedIdeaStationIds, stationSetupsById]);
   const sharedIdeaLibraryMediaReady = loadedIdeaMediaSignature === sharedIdeaMediaSignature;
   const sharedIdeaLibraryStationsReady = loadedIdeaStationSignature === sharedIdeaStationSignature;
   const libraryCards = useMemo(() => {
@@ -3003,6 +3033,7 @@ export default function Home() {
     const recentOrder = new Map(recentIdeaIds.map((id, index) => [id, index]));
     const archivedIdSet = new Set(archivedIdeaIds);
     const restoredIdSet = new Set(restoredIdeaIds);
+    const draftIdSet = new Set(draftIdeaIds);
     const removedIdSet = new Set(removedIdeaIds);
 
     return allLibraryItems
@@ -3010,11 +3041,13 @@ export default function Home() {
         ...card,
         starred: gemIdSet.has(card.id),
         isArchived: archivedIdSet.has(card.id) || (Boolean(card.defaultArchived) && !restoredIdSet.has(card.id)),
+        isDraft: draftIdSet.has(card.id),
         isRemoved: removedIdSet.has(card.id),
       }))
       .filter((card) => {
         if (libraryFilter === "archive") return card.isArchived || card.isRemoved;
         if (card.isArchived || card.isRemoved) return false;
+        if (libraryFilter === "drafts") return card.isDraft;
         if (libraryFilter === "gems") return card.starred;
         return libraryFilter !== "recent" || recentOrder.has(card.id);
       })
@@ -3036,7 +3069,7 @@ export default function Home() {
         if (firstRecentRank !== secondRecentRank) return firstRecentRank - secondRecentRank;
         return Number(Boolean(second.starred)) - Number(Boolean(first.starred)) || first.title.localeCompare(second.title);
       });
-  }, [allLibraryItems, archivedIdeaIds, gemIds, libraryFilter, librarySearch, recentIdeaIds, removedIdeaIds, restoredIdeaIds]);
+  }, [allLibraryItems, archivedIdeaIds, draftIdeaIds, gemIds, libraryFilter, librarySearch, recentIdeaIds, removedIdeaIds, restoredIdeaIds]);
   const unresolvedUpdateCount = useMemo(
     () => assistantUpdates.filter((update) => !updateDecisionByRevision[revisionKey(update)]).length,
     [assistantUpdates, updateDecisionByRevision],
@@ -3909,14 +3942,26 @@ export default function Home() {
           setRecentIdeaIds([...new Set(parsed.recentIdeaIds)]);
           setArchivedIdeaIds([...new Set(parsed.archivedIdeaIds)]);
           setRestoredIdeaIds([...new Set(parsed.restoredIdeaIds)]);
+          setDraftIdeaIds([...new Set(parsed.draftIdeaIds)]);
           setItemOverridesById(Object.fromEntries(Object.entries(parsed.itemOverridesById).map(([id, card]) => [id, copyLibraryItem(card)])));
           setRemovedIdeaIds([...new Set(parsed.removedIdeaIds)]);
+        } else if (isStoredLibraryPreferencesV6(parsed)) {
+          setGemIds([...new Set(parsed.gemIds)]);
+          setCustomLibraryCards(parsed.customCards.map(copyLibraryItem));
+          setRecentIdeaIds([...new Set(parsed.recentIdeaIds)]);
+          setArchivedIdeaIds([...new Set(parsed.archivedIdeaIds)]);
+          setRestoredIdeaIds([...new Set(parsed.restoredIdeaIds)]);
+          setDraftIdeaIds([]);
+          setItemOverridesById(Object.fromEntries(Object.entries(parsed.itemOverridesById).map(([id, card]) => [id, copyLibraryItem(card)])));
+          setRemovedIdeaIds([...new Set(parsed.removedIdeaIds)]);
+          setNotice("LOCAL LIBRARY RESTORED · DRAFT IDEAS ADDED");
         } else if (isStoredLibraryPreferencesV5(parsed)) {
           setGemIds([...new Set(parsed.gemIds)]);
           setCustomLibraryCards(parsed.customCards.map(copyLibraryItem));
           setRecentIdeaIds([...new Set(parsed.recentIdeaIds)]);
           setArchivedIdeaIds([...new Set(parsed.archivedIdeaIds)]);
           setRestoredIdeaIds([...new Set(parsed.restoredIdeaIds)]);
+          setDraftIdeaIds([]);
           setItemOverridesById(Object.fromEntries(Object.entries(parsed.itemOverridesById).map(([id, card]) => [id, copyLibraryItem(card)])));
           setRemovedIdeaIds([...new Set(parsed.removedIdeaIds)]);
           setNotice("LOCAL LIBRARY RESTORED · PHOTOS UPGRADED FOR PHOTO OR VIDEO ATTACHMENTS");
@@ -3926,6 +3971,7 @@ export default function Home() {
           setRecentIdeaIds([...new Set(parsed.recentIdeaIds)]);
           setArchivedIdeaIds([...new Set(parsed.archivedIdeaIds)]);
           setRestoredIdeaIds([...new Set(parsed.restoredIdeaIds)]);
+          setDraftIdeaIds([]);
           setNotice("LOCAL LIBRARY RESTORED · EDITABLE IDEAS ADDED IN THIS BROWSER");
         } else if (isStoredLibraryPreferencesV3(parsed)) {
           setGemIds([...new Set(parsed.gemIds)]);
@@ -3951,12 +3997,13 @@ export default function Home() {
   useEffect(() => {
     if (!hasLoadedLibraryPreferences) return;
     const savedPreferences: StoredLibraryPreferences = {
-      version: 6,
+      version: 7,
       gemIds,
       customCards: customLibraryCards,
       recentIdeaIds,
       archivedIdeaIds,
       restoredIdeaIds,
+      draftIdeaIds,
       itemOverridesById,
       removedIdeaIds,
     };
@@ -3968,22 +4015,25 @@ export default function Home() {
     } catch {
       setNotice("LOCAL DEMO CATALOG ACTIVE · GEM PREFERENCES CANNOT BE SAVED IN THIS BROWSER");
     }
-  }, [archivedIdeaIds, customLibraryCards, gemIds, hasLoadedLibraryPreferences, itemOverridesById, recentIdeaIds, removedIdeaIds, restoredIdeaIds]);
+  }, [archivedIdeaIds, customLibraryCards, draftIdeaIds, gemIds, hasLoadedLibraryPreferences, itemOverridesById, recentIdeaIds, removedIdeaIds, restoredIdeaIds]);
 
   useEffect(() => {
     const syncLibraryPreferences = (event: StorageEvent) => {
       if (event.key !== LOCAL_LIBRARY_STORAGE_KEY || !event.newValue || event.newValue === libraryStorageSnapshotRef.current) return;
       try {
         const parsed: unknown = JSON.parse(event.newValue);
-        if (!isStoredLibraryPreferences(parsed) && !isStoredLibraryPreferencesV5(parsed)) return;
+        const isCurrent = isStoredLibraryPreferences(parsed);
+        if (!isCurrent && !isStoredLibraryPreferencesV6(parsed) && !isStoredLibraryPreferencesV5(parsed)) return;
+        const preferences = parsed as StoredLibraryPreferences | StoredLibraryPreferencesV6 | StoredLibraryPreferencesV5;
         libraryStorageSnapshotRef.current = event.newValue;
-        setGemIds([...new Set(parsed.gemIds)]);
-        setCustomLibraryCards(parsed.customCards.map(copyLibraryItem));
-        setRecentIdeaIds([...new Set(parsed.recentIdeaIds)]);
-        setArchivedIdeaIds([...new Set(parsed.archivedIdeaIds)]);
-        setRestoredIdeaIds([...new Set(parsed.restoredIdeaIds)]);
-        setItemOverridesById(Object.fromEntries(Object.entries(parsed.itemOverridesById).map(([id, card]) => [id, copyLibraryItem(card)])));
-        setRemovedIdeaIds([...new Set(parsed.removedIdeaIds)]);
+        setGemIds([...new Set(preferences.gemIds)]);
+        setCustomLibraryCards(preferences.customCards.map(copyLibraryItem));
+        setRecentIdeaIds([...new Set(preferences.recentIdeaIds)]);
+        setArchivedIdeaIds([...new Set(preferences.archivedIdeaIds)]);
+        setRestoredIdeaIds([...new Set(preferences.restoredIdeaIds)]);
+        setDraftIdeaIds(isCurrent ? [...new Set((parsed as StoredLibraryPreferences).draftIdeaIds)] : []);
+        setItemOverridesById(Object.fromEntries(Object.entries(preferences.itemOverridesById).map(([id, card]) => [id, copyLibraryItem(card)])));
+        setRemovedIdeaIds([...new Set(preferences.removedIdeaIds)]);
         setNotice("IDEA LIBRARY UPDATED FROM THE OTHER LOCAL WINDOW");
       } catch {
         // Keep the current in-memory library when another window writes invalid data.
@@ -4141,6 +4191,7 @@ export default function Home() {
     setRecentIdeaIds([...preferences.recentIdeaIds]);
     setArchivedIdeaIds([...preferences.archivedIdeaIds]);
     setRestoredIdeaIds([...preferences.restoredIdeaIds]);
+    setDraftIdeaIds([...preferences.draftIdeaIds]);
     setItemOverridesById(Object.fromEntries(Object.entries(preferences.itemOverridesById).map(([id, card]) => [id, copyLibraryItem(card)])));
     setRemovedIdeaIds([...preferences.removedIdeaIds]);
     setStationSetupsById(Object.fromEntries(next.stationSetups.map((setup) => [setup.id, setup])));
@@ -6729,8 +6780,22 @@ export default function Home() {
       return;
     }
     setRestoredIdeaIds((ids) => ids.filter((id) => id !== card.id));
+    setDraftIdeaIds((ids) => ids.filter((id) => id !== card.id));
     setArchivedIdeaIds((ids) => [...new Set([...ids, card.id])]);
-    setNotice(`${card.title.toUpperCase()} MOVED TO ARCHIVE · NOTHING WAS DELETED`);
+    setNotice(`${card.title.toUpperCase()} MOVED TO ARCHIVE · NOTHING WAS DELETED · SYNCING TO THE PUBLIC IDEA LIBRARY`);
+  }
+
+  function toggleDraft(card: LibraryItem) {
+    if (draftIdeaIds.includes(card.id)) {
+      setDraftIdeaIds((ids) => ids.filter((id) => id !== card.id));
+      setNotice(`${card.title.toUpperCase()} MARKED COMPLETE · REMOVED FROM DRAFTS · SYNCING TO THE PUBLIC IDEA LIBRARY`);
+      return;
+    }
+    setArchivedIdeaIds((ids) => ids.filter((id) => id !== card.id));
+    setRemovedIdeaIds((ids) => ids.filter((id) => id !== card.id));
+    if (card.defaultArchived) setRestoredIdeaIds((ids) => [...new Set([...ids, card.id])]);
+    setDraftIdeaIds((ids) => [...new Set([...ids, card.id])]);
+    setNotice(`${card.title.toUpperCase()} MARKED AS DRAFT · KEEP EDITING IT FROM DRAFTS · SYNCING TO THE PUBLIC IDEA LIBRARY`);
   }
 
   function startLibraryEdit(card: LibraryItem) {
@@ -6884,6 +6949,7 @@ export default function Home() {
     if (!removeCandidate) return;
     const title = removeCandidate.title;
     cancelPendingPlacementForLibraryIdea(removeCandidate.id);
+    setDraftIdeaIds((ids) => ids.filter((id) => id !== removeCandidate.id));
     setRemovedIdeaIds((ids) => [...new Set([...ids, removeCandidate.id])]);
     setRemoveCandidate(null);
     setNotice(`${title.toUpperCase()} HIDDEN FROM ACTIVE LIBRARY · RESTORE IT FROM ARCHIVE · SOURCE UNTOUCHED`);
@@ -6900,6 +6966,7 @@ export default function Home() {
         recentIdeaIds,
         archivedIdeaIds,
         restoredIdeaIds,
+        draftIdeaIds,
         itemOverridesById,
         removedIdeaIds,
       }, removeCandidate);
@@ -6914,6 +6981,7 @@ export default function Home() {
       setRecentIdeaIds(deletion.next.recentIdeaIds);
       setArchivedIdeaIds(deletion.next.archivedIdeaIds);
       setRestoredIdeaIds(deletion.next.restoredIdeaIds);
+      setDraftIdeaIds(deletion.next.draftIdeaIds);
       setItemOverridesById(deletion.next.itemOverridesById);
       setRemovedIdeaIds(deletion.next.removedIdeaIds);
       const title = removeCandidate.title;
@@ -7529,8 +7597,8 @@ export default function Home() {
         </div>
       </div>
       <div className="library-placement-strip">
-        <b>{isLibraryWindow ? "VIEW · EDIT · FAVORITE · ARCHIVE · RESTORE" : "PLACE → THEN TAP A HIGHLIGHTED STATION"}</b>
-        <span>{isLibraryWindow ? "Use the shelves and search to organize ideas. Changes save locally and appear in the planner window." : "Pinch this list out for details, or in to compact it. One finger still scrolls; normal size shows five ideas."}</span>
+        <b>{isLibraryWindow ? "VIEW · EDIT · DRAFT · FAVORITE · ARCHIVE · RESTORE" : "PLACE → THEN TAP A HIGHLIGHTED STATION"}</b>
+        <span>{isLibraryWindow ? "Use Drafts for Ideas you still want to edit. Changes sync publicly in the planner window." : "Pinch this list out for details, or in to compact it. One finger still scrolls; normal size shows five ideas."}</span>
       </div>
       <button className="new-idea-trigger" onClick={() => setIsAddingIdea((open) => !open)}>{isAddingIdea ? "CLOSE NEW IDEA" : "+ NEW IDEA"}</button>
       {newIdeaForm}
@@ -7586,8 +7654,8 @@ export default function Home() {
           aria-label="Search local library by title, tag, skill, event, or variant"
         />
       </label>
-      <div className="library-filter" aria-label="Local library shelf filter">
-        {(["all", "gems", "recent", "archive"] as const).map((filter) => (
+      <div className="library-filter" aria-label="Shared Idea Library shelf filter">
+        {(["all", "gems", "recent", "drafts", "archive"] as const).map((filter) => (
           <button
             key={filter}
             className={libraryFilter === filter ? "selected" : ""}
@@ -7634,6 +7702,8 @@ export default function Home() {
         {libraryCards.length ? libraryCards.map((card) => {
           const state = card.isRemoved
             ? "HIDDEN IN LIBRARY"
+            : card.isDraft
+              ? "DRAFT · NEEDS EDITS"
             : recentIdeaIds.includes(card.id)
               ? "RECENTLY PLACED"
               : card.defaultArchived && card.sourceType === "lesson_plan_activity"
@@ -7713,7 +7783,7 @@ export default function Home() {
         <>
           <nav className="library-workspace-nav" aria-label="Idea Library window controls">
             <button type="button" onClick={returnToPlanner}>← BACK TO PLANNER</button>
-            <span>STAR IDEAS FOR GEMS · ARCHIVE IDEAS TO HIDE THEM · EDITS SYNC PUBLICLY</span>
+            <span>MARK IDEAS AS DRAFTS TO KEEP EDITING · ARCHIVE IDEAS TO HIDE THEM · EDITS SYNC PUBLICLY</span>
           </nav>
           <section className="library-workspace-body">
             {ideaLibraryPanel}
@@ -9192,12 +9262,13 @@ export default function Home() {
                     <div className="idea-detail-actions">
                   <button type="button" onClick={() => startLibraryEdit(detailCard)}>EDIT THIS IDEA</button>
                       {detailCard.stationSetupId ? <button type="button" onClick={() => void openSavedStationMaker(detailCard)}>EDIT STATION</button> : null}
+                      <button type="button" onClick={() => toggleDraft(detailCard)}>{draftIdeaIds.includes(detailCard.id) ? "MARK COMPLETE" : "MARK AS DRAFT"}</button>
                       <button
                         type="button"
                         className="detail-remove"
                         onClick={() => requestLibraryRemoval(detailCard)}
                       >
-                        REMOVE FROM ACTIVE LIBRARY
+                        ARCHIVE / DELETE
                       </button>
                     </div>
                   ) : null}
@@ -9329,10 +9400,13 @@ export default function Home() {
           >
             <div className="window-title">ARCHIVE OR DELETE IDEA <button type="button" disabled={isDeletingIdea} onClick={() => setRemoveCandidate(null)} aria-label="Cancel removal">×</button></div>
             <div className="idea-detail-body">
-              <p><strong>{removeCandidate.title}</strong> can be moved to Archive or permanently deleted from this browser’s Idea Library.</p>
+              <p><strong>{removeCandidate.title}</strong> can be moved to Archive or permanently deleted from this shared Idea Library.</p>
               <p>Permanent deletion also removes its local attachment and cannot be undone. Copies already placed in current or past lessons stay unchanged.</p>
               <div className="idea-editor-actions">
                 <button type="button" disabled={isDeletingIdea} onClick={() => setRemoveCandidate(null)}>KEEP IT</button>
+                <button type="button" disabled={isDeletingIdea} onClick={() => { toggleDraft(removeCandidate); setRemoveCandidate(null); }}>
+                  {draftIdeaIds.includes(removeCandidate.id) ? "MARK COMPLETE" : "MARK AS DRAFT"}
+                </button>
                 <button type="button" disabled={isDeletingIdea} onClick={confirmLibraryRemoval}>MOVE TO ARCHIVE</button>
                 <button type="button" disabled={isDeletingIdea} className="detail-remove" onClick={() => { void confirmPermanentLibraryDeletion(); }}>
                   {isDeletingIdea ? "DELETING…" : "DELETE PERMANENTLY"}

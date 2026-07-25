@@ -43,6 +43,7 @@ test("permanent deletion clears every library reference and returns attached med
     recentIdeaIds: [deleted.id, kept.id],
     archivedIdeaIds: [deleted.id],
     restoredIdeaIds: [deleted.id],
+    draftIdeaIds: [deleted.id, kept.id],
     itemOverridesById: { [deleted.id]: deleted, [kept.id]: kept },
     removedIdeaIds: [deleted.id],
   }, deleted);
@@ -54,6 +55,7 @@ test("permanent deletion clears every library reference and returns attached med
   assert.deepEqual(result.next.recentIdeaIds, [kept.id]);
   assert.deepEqual(result.next.archivedIdeaIds, []);
   assert.deepEqual(result.next.restoredIdeaIds, []);
+  assert.deepEqual(result.next.draftIdeaIds, [kept.id]);
   assert.deepEqual(result.next.itemOverridesById, { [kept.id]: kept });
   assert.deepEqual(result.next.removedIdeaIds, []);
 });
@@ -66,6 +68,7 @@ test("legacy photo metadata is also returned for cleanup", () => {
     recentIdeaIds: [],
     archivedIdeaIds: [],
     restoredIdeaIds: [],
+    draftIdeaIds: [],
     itemOverridesById: {},
     removedIdeaIds: [],
   }, deleted);

@@ -1,5 +1,5 @@
 export type CardKind = "SKILL" | "DRILL" | "ROUTINE" | "ACTIVITY" | "REFERENCE";
-export type LibraryShelf = "all" | "gems" | "recent" | "archive";
+export type LibraryShelf = "all" | "gems" | "recent" | "drafts" | "archive";
 export type OperationTaskKind = "RECURRING" | "TEMPORARY";
 
 export type LessonCard = {

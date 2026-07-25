@@ -11,7 +11,7 @@ import { PUBLISHED_SHARED_PHOTO_LIBRARY_ORIGIN } from "./shared-photo-library";
 /** Versioned, deliberately public state for the cross-device Idea Library. */
 export const SHARED_IDEA_LIBRARY_API_VERSION = 1 as const;
 export const SHARED_IDEA_LIBRARY_STATE_VERSION = 1 as const;
-export const SHARED_IDEA_LIBRARY_PREFERENCES_VERSION = 6 as const;
+export const SHARED_IDEA_LIBRARY_PREFERENCES_VERSION = 7 as const;
 export const SHARED_IDEA_LIBRARY_MAX_BYTES = 5 * 1024 * 1024;
 export const SHARED_IDEA_IMAGE_MAX_BYTES = 35 * 1024 * 1024;
 export const SHARED_IDEA_VIDEO_MAX_BYTES = 100 * 1024 * 1024;
@@ -23,8 +23,14 @@ export type SharedIdeaLibraryPreferences = {
   recentIdeaIds: string[];
   archivedIdeaIds: string[];
   restoredIdeaIds: string[];
+  /** Active editing queue. Drafts remain usable in All Ideas. */
+  draftIdeaIds: string[];
   itemOverridesById: Record<string, LibraryItem>;
   removedIdeaIds: string[];
+};
+
+type SharedIdeaLibraryPreferencesV6 = Omit<SharedIdeaLibraryPreferences, "version" | "draftIdeaIds"> & {
+  version: 6;
 };
 
 export type SharedIdeaLibraryState = {
@@ -198,12 +204,15 @@ export function isSharedIdeaLibraryItem(value: unknown): value is LibraryItem {
   return !(hasMedia || hasLegacyPhoto) || !hasStation;
 }
 
-function isSharedIdeaLibraryPreferences(value: unknown): value is SharedIdeaLibraryPreferences {
-  if (!isRecord(value) || !hasOnlyKeys(value, [
+function isSharedIdeaLibraryPreferences(value: unknown): value is SharedIdeaLibraryPreferences | SharedIdeaLibraryPreferencesV6 {
+  if (!isRecord(value)) return false;
+  const baseKeys = [
     "version", "gemIds", "customCards", "recentIdeaIds", "archivedIdeaIds", "restoredIdeaIds", "itemOverridesById", "removedIdeaIds",
-  ])) return false;
-  if (value.version !== SHARED_IDEA_LIBRARY_PREFERENCES_VERSION
-    || !isTextList(value.gemIds, 10_000, 200)
+  ] as const;
+  const isCurrent = value.version === SHARED_IDEA_LIBRARY_PREFERENCES_VERSION;
+  if ((isCurrent && !hasOnlyKeys(value, [...baseKeys, "draftIdeaIds"]))
+    || (!isCurrent && (value.version !== 6 || !hasOnlyKeys(value, baseKeys)))) return false;
+  if (!isTextList(value.gemIds, 10_000, 200)
     || !Array.isArray(value.customCards) || value.customCards.length > 10_000 || !value.customCards.every(isSharedIdeaLibraryItem)
     || !isTextList(value.recentIdeaIds, 10_000, 200)
     || !isTextList(value.archivedIdeaIds, 10_000, 200)
@@ -211,7 +220,12 @@ function isSharedIdeaLibraryPreferences(value: unknown): value is SharedIdeaLibr
     || !isTextList(value.removedIdeaIds, 10_000, 200)
     || !isRecord(value.itemOverridesById)
     || Object.keys(value.itemOverridesById).length > 10_000) return false;
-  return Object.entries(value.itemOverridesById).every(([id, card]) => isIdentifier(id, true) && isSharedIdeaLibraryItem(card));
+  if (!Object.entries(value.itemOverridesById).every(([id, card]) => isIdentifier(id, true) && isSharedIdeaLibraryItem(card))) return false;
+  if (!isCurrent) return true;
+  if (!isTextList(value.draftIdeaIds, 10_000, 200)) return false;
+  const archived = new Set(value.archivedIdeaIds);
+  const removed = new Set(value.removedIdeaIds);
+  return !value.draftIdeaIds.some((id) => archived.has(id) || removed.has(id));
 }
 
 function isStationObject(value: unknown): value is StationObject {
@@ -274,6 +288,7 @@ export function copySharedIdeaLibraryState(state: SharedIdeaLibraryState): Share
       recentIdeaIds: [...state.preferences.recentIdeaIds],
       archivedIdeaIds: [...state.preferences.archivedIdeaIds],
       restoredIdeaIds: [...state.preferences.restoredIdeaIds],
+      draftIdeaIds: [...state.preferences.draftIdeaIds],
       itemOverridesById: Object.fromEntries(Object.entries(state.preferences.itemOverridesById).map(([id, card]) => [id, copyLibraryItem(card)])),
       removedIdeaIds: [...state.preferences.removedIdeaIds],
     },
@@ -292,7 +307,22 @@ export function parseSharedIdeaLibraryState(value: unknown): SharedIdeaLibrarySt
   const cards = [...value.preferences.customCards, ...Object.values(value.preferences.itemOverridesById)];
   const referencedStations = new Set(cards.flatMap((card) => card.stationSetupId ? [card.stationSetupId] : []));
   if (stationIds.some((id) => !referencedStations.has(id)) || [...referencedStations].some((id) => !stationIds.includes(id))) return null;
-  return copySharedIdeaLibraryState(value as SharedIdeaLibraryState);
+  const preferences = value.preferences;
+  return copySharedIdeaLibraryState({
+    version: SHARED_IDEA_LIBRARY_STATE_VERSION,
+    preferences: {
+      version: SHARED_IDEA_LIBRARY_PREFERENCES_VERSION,
+      gemIds: [...preferences.gemIds],
+      customCards: preferences.customCards.map(copyLibraryItem),
+      recentIdeaIds: [...preferences.recentIdeaIds],
+      archivedIdeaIds: [...preferences.archivedIdeaIds],
+      restoredIdeaIds: [...preferences.restoredIdeaIds],
+      draftIdeaIds: preferences.version === SHARED_IDEA_LIBRARY_PREFERENCES_VERSION ? [...preferences.draftIdeaIds] : [],
+      itemOverridesById: Object.fromEntries(Object.entries(preferences.itemOverridesById).map(([id, card]) => [id, copyLibraryItem(card)])),
+      removedIdeaIds: [...preferences.removedIdeaIds],
+    },
+    stationSetups: value.stationSetups.map(copyStationSetup),
+  });
 }
 
 export function isSharedIdeaLibraryEmpty(state: SharedIdeaLibraryState): boolean {
@@ -302,6 +332,7 @@ export function isSharedIdeaLibraryEmpty(state: SharedIdeaLibraryState): boolean
     && preferences.recentIdeaIds.length === 0
     && preferences.archivedIdeaIds.length === 0
     && preferences.restoredIdeaIds.length === 0
+    && preferences.draftIdeaIds.length === 0
     && Object.keys(preferences.itemOverridesById).length === 0
     && preferences.removedIdeaIds.length === 0
     && state.stationSetups.length === 0;

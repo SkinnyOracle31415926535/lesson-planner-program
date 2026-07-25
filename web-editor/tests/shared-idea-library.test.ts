@@ -60,12 +60,13 @@ function state() {
   return {
     version: 1,
     preferences: {
-      version: 6,
+      version: 7,
       gemIds: [card.id],
       customCards: [card],
       recentIdeaIds: [card.id],
       archivedIdeaIds: [],
       restoredIdeaIds: [],
+      draftIdeaIds: [],
       itemOverridesById: {},
       removedIdeaIds: [],
     },
@@ -82,8 +83,20 @@ test("public Idea Library state keeps preferences and referenced pixel stations 
 
   const copied = copySharedIdeaLibraryState(parsed!);
   copied.preferences.customCards[0]!.tags.push("changed-only-in-copy");
+  copied.preferences.draftIdeaIds.push("changed-only-in-copy");
   assert.deepEqual(parsed?.preferences.customCards[0]?.tags, ["handstand"]);
+  assert.deepEqual(parsed?.preferences.draftIdeaIds, []);
   assert.match(sharedIdeaLibraryFingerprint(parsed!) ?? "", /^\d+:/);
+});
+
+test("legacy public Idea Library preferences upgrade to an empty Drafts shelf", () => {
+  const legacy = state();
+  legacy.preferences.version = 6;
+  delete (legacy.preferences as { draftIdeaIds?: string[] }).draftIdeaIds;
+
+  const parsed = parseSharedIdeaLibraryState(legacy);
+  assert.equal(parsed?.preferences.version, 7);
+  assert.deepEqual(parsed?.preferences.draftIdeaIds, []);
 });
 
 test("public Idea Library parser rejects unbounded or orphaned public records", () => {
@@ -93,6 +106,10 @@ test("public Idea Library parser rejects unbounded or orphaned public records", 
     ...state(),
     preferences: { ...state().preferences, customCards: [{ ...idea("__proto__") }] },
   }), null);
+  assert.equal(parseSharedIdeaLibraryState({
+    ...state(),
+    preferences: { ...state().preferences, draftIdeaIds: ["idea-handstand"], archivedIdeaIds: ["idea-handstand"] },
+  }), null);
 });
 
 test("workspace and write envelopes require one exact, versioned shape", () => {
@@ -100,6 +117,7 @@ test("workspace and write envelopes require one exact, versioned shape", () => {
   assert.equal(parseSharedIdeaLibraryManifest({ version: 1, revision: 0, updatedAt: null })?.revision, 0);
   assert.equal(parseSharedIdeaLibraryManifest({ version: 1, revision: 0, updatedAt: "2026-07-25T00:00:00.000Z" }), null);
   assert.deepEqual(parseSharedIdeaLibraryWrite({ version: 1, value: payload })?.preferences.gemIds, ["idea-handstand"]);
+  assert.equal(parseSharedIdeaLibraryWrite({ version: 1, value: payload })?.preferences.version, 7);
   assert.equal(parseSharedIdeaLibraryWrite({ version: 1, value: payload, extra: true }), null);
   assert.equal(parseSharedIdeaLibraryWorkspace({
     version: 1,
@@ -120,12 +138,13 @@ test("media references include hidden overrides and use the canonical public ser
   const parsed = parseSharedIdeaLibraryState({
     version: 1,
     preferences: {
-      version: 6,
+      version: 7,
       gemIds: [],
       customCards: [mediaCard],
       recentIdeaIds: [],
       archivedIdeaIds: [],
       restoredIdeaIds: [],
+      draftIdeaIds: [],
       itemOverridesById: { "idea-media-override": mediaCard },
       removedIdeaIds: [],
     },
