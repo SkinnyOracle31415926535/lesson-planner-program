@@ -47,6 +47,39 @@ export type PlannerUpdate = {
   eventIds: string[];
 };
 
+/**
+ * These rules mean the lesson itself is incomplete or internally
+ * contradictory. A stored inbox decision records review, but does not make a
+ * required plan item complete, so these continue to block Ready.
+ */
+export const READY_BLOCKING_PLANNER_UPDATE_RULES = [
+  "invalid-phase-time",
+  "phase-time-overlap",
+  "phase-time-gap",
+  "event-time-overlap",
+  "event-time-gap",
+  "missing-phase-title",
+  "missing-phase-plan",
+] as const satisfies readonly PlannerUpdateRule[];
+
+/**
+ * Imported schedule availability is advisory: it is never auto-resolved or
+ * treated as a reservation. Before Ready, the coach must explicitly record a
+ * decision for these schedule-related advisories.
+ */
+export const READY_REVIEW_PLANNER_UPDATE_RULES = [
+  "schedule-not-ready",
+  "schedule-collision-warning",
+  "schedule-event-conflict",
+] as const satisfies readonly PlannerUpdateRule[];
+
+export type LessonReadinessReview = Readonly<{
+  /** Required lesson-plan issues that cannot be waived by an inbox decision. */
+  blockingPlanUpdates: PlannerUpdate[];
+  /** Advisory schedule updates with no explicit local decision yet. */
+  pendingScheduleReviewUpdates: PlannerUpdate[];
+}>;
+
 /** A caller-supplied advisory conflict; it never makes or changes a reservation. */
 export type PlannerScheduleEventConflict = Readonly<{
   eventId: string;
@@ -87,6 +120,39 @@ type EventWindow = {
 };
 
 const SOURCE = "LOCAL PLANNER RULE" as const;
+
+/** A stable key for storing a local review decision for one update revision. */
+export function plannerUpdateRevisionKey(update: Pick<PlannerUpdate, "id" | "revisionId">): string {
+  return `${update.id}:${update.revisionId}`;
+}
+
+/** True when the update describes required lesson content that blocks Ready. */
+export function isReadyBlockingPlannerUpdate(update: Pick<PlannerUpdate, "rule">): boolean {
+  return (READY_BLOCKING_PLANNER_UPDATE_RULES as readonly PlannerUpdateRule[]).includes(update.rule);
+}
+
+/** True when an imported-schedule advisory needs an explicit local decision before Ready. */
+export function requiresReadyReview(update: Pick<PlannerUpdate, "rule">): boolean {
+  return (READY_REVIEW_PLANNER_UPDATE_RULES as readonly PlannerUpdateRule[]).includes(update.rule);
+}
+
+/**
+ * Separates non-waivable lesson-plan blockers from advisory schedule cards
+ * that still need the coach's explicit review. This is intentionally pure:
+ * it only reads caller-owned updates and local decision values.
+ */
+export function getLessonReadinessReview(
+  updates: readonly PlannerUpdate[],
+  decisionByRevision: Readonly<Record<string, string | undefined>>,
+): LessonReadinessReview {
+  return {
+    blockingPlanUpdates: updates.filter(isReadyBlockingPlannerUpdate),
+    pendingScheduleReviewUpdates: updates.filter((update) => {
+      if (!requiresReadyReview(update)) return false;
+      return !decisionByRevision[plannerUpdateRevisionKey(update)]?.trim();
+    }),
+  };
+}
 
 const priorityRank: Record<PlannerUpdatePriority, number> = {
   URGENT: 0,

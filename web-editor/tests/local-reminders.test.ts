@@ -10,6 +10,7 @@ import {
   resolveLocalReminders,
   serializeLocalReminderStorage,
   setLocalReminderComplete,
+  updateLocalReminderTemplate,
   type LocalReminderLesson,
 } from "../app/local-reminders";
 
@@ -90,6 +91,34 @@ test("storage serialization is detached and rejects unsupported reminder records
   });
   assert.equal(parseLocalReminderStorage(unsafe).ok, false);
   assert.equal(parseLocalReminderStorage("{nope").ok, false);
+});
+
+test("editing a reminder keeps its stable identity and completion history", () => {
+  const template = makeTemplate({
+    title: "Check bar mats",
+    cadence: "recurring",
+    scope: { kind: "classes", classIds: ["class-level-3"] },
+    startDate: "2026-07-01",
+  }, "reminder-editable");
+  const completed = setLocalReminderComplete(localReminderStorage([template]), lesson(), template.id, true, { now: timestamp });
+
+  const updated = updateLocalReminderTemplate(completed, template.id, {
+    title: "Check bar mats before warmup",
+    detail: "Look for gaps and loose straps.",
+    cadence: "recurring",
+    scope: { kind: "classes", classIds: ["class-level-3"] },
+    startDate: "2026-07-01",
+    endDate: null,
+    rollForwardUntilCompleted: false,
+    active: true,
+  }, { now: "2026-07-25T12:00:00.000Z" });
+
+  assert.equal(updated.templates[0].id, template.id);
+  assert.equal(updated.templates[0].createdAt, timestamp);
+  assert.equal(updated.templates[0].updatedAt, "2026-07-25T12:00:00.000Z");
+  assert.equal(updated.templates[0].title, "Check bar mats before warmup");
+  assert.deepEqual(updated.occurrences, completed.occurrences);
+  assert.equal(updated.occurrences[0].state, "completed");
 });
 
 test("recurring reminders honor all, class, lesson, phase, and date scopes with per-plan completion", () => {

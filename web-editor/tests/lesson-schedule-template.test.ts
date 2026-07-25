@@ -45,7 +45,7 @@ function safeDay(
   return { status, nonOpenBlocks };
 }
 
-test("safe non-Open blocks take priority, sort by time, and create empty phase shells", () => {
+test("safe non-Open blocks take priority, sort by time, and create immediately writable phase shells", () => {
   const result = createLessonScheduleTemplate({
     lessonDate: "2026-07-20",
     selectedClass: localClass([{ id: "local-floor", day: "Monday", start: "3:30 PM", end: "4:00 PM", event: "Floor" }]),
@@ -81,10 +81,11 @@ test("safe non-Open blocks take priority, sort by time, and create empty phase s
       time: "4:00 PM–4:30 PM",
     },
   ]);
-  assert.ok(result.phases.every((phase) => phase.mode === "VISUAL"
+  assert.ok(result.phases.every((phase) => phase.mode === "MIXED"
     && phase.zones.length === 0
     && phase.parkedZones?.length === 0
-    && phase.text.length === 0
+    && phase.text.length === 1
+    && phase.text[0] === ""
     && phase.textCards?.length === 0));
 });
 
@@ -107,6 +108,7 @@ test("matching local class blocks are the fallback when no usable safe blocks ar
     ["schedule-local-early", "Level 3 Boys", "Floor", "3:00 PM–3:30 PM"],
     ["schedule-local-late", "Level 3 Boys", "Bars", "4:00 PM–4:30 PM"],
   ]);
+  assert.ok(result.phases.every((phase) => phase.mode === "MIXED" && phase.text[0] === ""));
 });
 
 test("returns a UI-useful empty status when a class or matching schedule is unavailable", () => {
