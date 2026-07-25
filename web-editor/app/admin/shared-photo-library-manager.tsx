@@ -100,17 +100,26 @@ export function SharedPhotoLibraryManager() {
     setIsPublishing(true);
     try {
       const metadata = await Promise.all(selection.photos.map(imageDimensions));
-      if (!sharedPhotoMetadataByName(metadata)) throw new Error("The selected image filenames are not unique.");
-      const body = new FormData();
-      body.set("manifest", selection.manifest);
-      body.set("metadata", JSON.stringify(metadata));
-      selection.photos.forEach((photo) => body.append("photos", photo));
-      const response = await fetch("/api/shared-photo-areas", { method: "POST", body });
-      const result = await response.json() as SharedPhotoLibraryUploadResult | { error?: string };
-      if (!response.ok || !("added" in result)) {
-        throw new Error("error" in result && result.error ? result.error : "The shared photo library could not be updated.");
+      const metadataByName = sharedPhotoMetadataByName(metadata);
+      if (!metadataByName) throw new Error("The selected image filenames are not unique.");
+      let added = 0;
+      let skipped = 0;
+      for (const photo of selection.photos) {
+        const fileMetadata = metadataByName.get(photo.name.trim().toLocaleLowerCase());
+        if (!fileMetadata) throw new Error(`The dimensions for ${photo.name} are unavailable.`);
+        const body = new FormData();
+        body.set("manifest", selection.manifest);
+        body.set("metadata", JSON.stringify([fileMetadata]));
+        body.append("photos", photo);
+        const response = await fetch("/api/shared-photo-areas", { method: "POST", body });
+        const result = await response.json() as SharedPhotoLibraryUploadResult | { error?: string };
+        if (!response.ok || !("added" in result)) {
+          throw new Error("error" in result && result.error ? result.error : "The shared photo library could not be updated.");
+        }
+        added += result.added;
+        skipped += result.skipped;
       }
-      setMessage(`${result.added} shared area${result.added === 1 ? "" : "s"} published · ${result.skipped} already in the library · every planner link will load them automatically.`);
+      setMessage(`${added} shared area${added === 1 ? "" : "s"} published · ${skipped} already in the library · every planner link will load them automatically.`);
       setSelection(null);
       if (inputRef.current) inputRef.current.value = "";
     } catch (error) {

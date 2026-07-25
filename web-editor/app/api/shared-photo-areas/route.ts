@@ -199,8 +199,9 @@ export async function POST(request: Request) {
       return jsonError("The image metadata does not match the selected photos.", 400);
     }
 
+    const selectedAreas = parsed.value.areas.filter((area) => photoByName.has(normalizedSharedPhotoName(area.photo)));
     const existing = await existingSourceIds(parsed.value.areas);
-    const additions = parsed.value.areas.filter((area) => !existing.has(area.sourceId));
+    const additions = selectedAreas.filter((area) => !existing.has(area.sourceId));
     const uploads: UploadedPhoto[] = [];
     for (const area of additions) {
       const name = normalizedSharedPhotoName(area.photo);
@@ -252,8 +253,8 @@ export async function POST(request: Request) {
 
     return Response.json({
       added: staged.length,
-      skipped: parsed.value.areas.length - staged.length,
-      total: parsed.value.areas.length,
+      skipped: selectedAreas.length - staged.length,
+      total: selectedAreas.length,
       updatedAt: timestamp,
     });
   } catch {
