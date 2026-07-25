@@ -13,6 +13,7 @@ import {
   type SharedPhotoUploadMetadata,
 } from "../../shared-photo-library";
 import {
+  hasInitialSharedPhotoLibrarySeedAuthorization,
   hasSameOrigin,
   isSharedPhotoLibraryOwner,
   sharedPhotoLibraryDatabase,
@@ -143,10 +144,13 @@ export async function GET(request: Request) {
 
 /** Owner-only append import. Existing source IDs are deliberately never replaced. */
 export async function POST(request: Request) {
-  const user = await getChatGPTUser();
-  if (!user) return jsonError("Sign in with ChatGPT to manage the shared photo library.", 401);
-  if (!isSharedPhotoLibraryOwner(user)) return jsonError("This signed-in account cannot manage the shared photo library.", 403);
-  if (!hasSameOrigin(request)) return jsonError("Shared-library updates must come from the library manager.", 403);
+  const isInitialSeed = hasInitialSharedPhotoLibrarySeedAuthorization(request);
+  if (!isInitialSeed) {
+    const user = await getChatGPTUser();
+    if (!user) return jsonError("Sign in with ChatGPT to manage the shared photo library.", 401);
+    if (!isSharedPhotoLibraryOwner(user)) return jsonError("This signed-in account cannot manage the shared photo library.", 403);
+    if (!hasSameOrigin(request)) return jsonError("Shared-library updates must come from the library manager.", 403);
+  }
 
   try {
     const form = await request.formData();

@@ -14,7 +14,7 @@ export const MAX_SHARED_PHOTO_BYTES = 35 * 1024 * 1024;
 export const MAX_SHARED_PHOTO_BATCH_BYTES = 100 * 1024 * 1024;
 
 /** Filled in after the shared Sites service receives its first public URL. */
-export const PUBLISHED_SHARED_PHOTO_LIBRARY_ORIGIN = "";
+export const PUBLISHED_SHARED_PHOTO_LIBRARY_ORIGIN = "https://lesson-planner-photo-library.ryan-666-mp3.chatgpt.site";
 
 const SOURCE_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,119}$/;
 const SAFE_IMAGE_EXTENSION = /\.(?:jpe?g|png|webp|heic|heif)$/i;
