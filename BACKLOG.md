@@ -17,10 +17,11 @@
 - Request: I want to add that i want to make a feature where i can talk through chat gpt directly to my lesson planner program when invoking a skill and it like automatically makes the lesson plan for me do u understand me\
 - Plan: 2026-07-25 — Add a trusted skill-to-planner draft contract with a visible preview and explicit Apply step; never put an API key in the browser or silently overwrite an existing lesson.
 
-### BL-0010 — PLAN READY
+### BL-0010 — DONE
 - Captured: 2026-07-25 12:43 America/Los_Angeles
 - Request: default goal should be the one on my level 3 lesson plans
 - Plan: 2026-07-25 — Add one editable general class-goal list, selectable per-class defaults, and bullet the selected goals on new lessons; seed Level 3 with its two current standard goals and preserve existing lesson goals.
+- Notes: 2026-07-26 — Shipped in lesson-planner-program PR #9. Boys Level 3 and Sample Level 3 start new lessons with the two existing standard goals; the shared checklist supports add, edit, select, and per-class defaults, while explicit Apply appends bullets without replacing existing lesson text. Pages and live phone QA passed.
 
 ### BL-0011 — PLAN READY
 - Captured: 2026-07-25 12:46 America/Los_Angeles
