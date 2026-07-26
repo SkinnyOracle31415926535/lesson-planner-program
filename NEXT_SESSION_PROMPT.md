@@ -1,8 +1,12 @@
 # Copy/Paste Prompt for a New Mac or Codex Session
 
 ```text
-Continue the Lesson Planner Program from:
-/Users/ryansadler/Documents/LESSON PLANNER PROGRAM
+Continue the Lesson Planner Program from the canonical GitHub checkout:
+/Users/ryansadler/Developer/Live Pages/lesson-planner-program
+
+Before working in a shell, resolve the root and stay inside it:
+PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+cd "$PROJECT_ROOT"
 
 Before doing any work, read in this order:
 1. README.md
@@ -27,8 +31,8 @@ Important constraints: native SwiftUI iPad app + private Mac browser editor; 90s
 
 ## Moving to a new Mac
 
-1. Wait for iCloud to show this folder fully synced.
-2. On the new Mac, confirm the folder is present at `~/Documents/LESSON PLANNER PROGRAM` and open `README.md`.
-3. Do not transfer `.env`, API keys, signing certificates, or service-role credentials through this folder. Recreate secure local configuration separately.
-4. Once code begins, use a private Git remote in addition to iCloud. iCloud is a convenient transport layer, not reliable source-control history.
+1. Clone the private GitHub repository at `/Users/ryansadler/Developer/Live Pages/lesson-planner-program` and open `README.md` from that clone.
+2. Run `PROJECT_ROOT="$(git rev-parse --show-toplevel)"` from the clone before using project commands.
+3. Do not transfer `.env`, API keys, signing certificates, or service-role credentials through the repository. Recreate secure local configuration separately.
+4. iCloud can retain archives and non-code documents, but do not use it as a code workspace or source-control transport.
 5. Give a new Codex session the prompt above. It will have the complete context even without access to this conversation.

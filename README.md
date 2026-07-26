@@ -40,12 +40,21 @@ Start here on any new computer or Codex session:
 
 ## Project boundary
 
-Keep new app code, documentation, generated previews, local configuration, and future assets inside this folder:
+GitHub is the source of truth. Work from the canonical persistent clone:
 
-`/Users/ryansadler/Documents/LESSON PLANNER PROGRAM`
+`/Users/ryansadler/Developer/Live Pages/lesson-planner-program`
+
+At the start of a shell session, resolve the checkout instead of assuming a fixed path:
+
+```bash
+PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+cd "$PROJECT_ROOT"
+```
+
+Keep new app code, documentation, generated previews, local configuration, and future assets inside `$PROJECT_ROOT`. Do not use an iCloud/Documents folder as a code workspace or Git worktree.
 
 Do **not** modify the existing gymnastics vault or its current automation during the build unless a documented bridge/cutover step explicitly calls for it. During the pilot, app exports go to a separate preview location.
 
 ## Transfer and versioning
 
-iCloud remains a convenient handoff medium between Macs. The folder is also tracked as the private `SkinnyOracle31415926535/lesson-planner-program` root monorepo; use small descriptive commits and keep the Markdown decision history beside both apps.
+The private `SkinnyOracle31415926535/lesson-planner-program` root monorepo is the durable handoff between Macs. Clone or fetch it at the canonical Developer location, use small descriptive commits, and keep the Markdown decision history beside both apps. iCloud may hold archived copies or non-code documents, but it is not a source-control workspace.

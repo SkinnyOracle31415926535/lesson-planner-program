@@ -6,9 +6,11 @@ The existing source of historical lessons and automation is:
 
 `/Users/ryansadler/Library/Mobile Documents/com~apple~CloudDocs/gymnastics_vault-main`
 
-The new app is built and documented only in:
+The new app is built and documented only in the canonical GitHub checkout:
 
-`/Users/ryansadler/Documents/LESSON PLANNER PROGRAM`
+`/Users/ryansadler/Developer/Live Pages/lesson-planner-program`
+
+For commands, resolve that checkout with `PROJECT_ROOT="$(git rev-parse --show-toplevel)"` and use paths relative to it. iCloud/Documents is not a code workspace.
 
 The bridge is read-only against the vault during development and the two-week pilot. It must not rewrite existing lesson plans, Freeform boards, automation files, or schedule data.
 
@@ -137,9 +139,7 @@ The survey carries only a SHA-256 revision, collection/field-shape counts, and h
 ### Pilot
 
 - Leave the current generator and its launch-agent schedule untouched.
-- App exports write only under:
-
-  `/Users/ryansadler/Documents/LESSON PLANNER PROGRAM/app-preview/`
+- App exports write only under `$PROJECT_ROOT/app-preview/`.
 
 - Run both systems across all current classes for two weeks.
 - Compare schedule blocks, announcements, tasks, outputs, readiness, and media availability. Fix bridge/template defects before cutover.

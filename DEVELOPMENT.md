@@ -7,15 +7,25 @@
 - Do not put student names, identifiable media, raw email bodies, API keys, signing credentials, or a public media URL in fixtures, source control, or the Mac editor.
 - The browser editor is local-only until private device enrollment and backend access controls exist.
 
+## Canonical checkout
+
+GitHub is the code source of truth. Start command-line work from the canonical Developer clone and resolve its root rather than using an iCloud/Documents path:
+
+```bash
+PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+cd "$PROJECT_ROOT"
+```
+
 ## Source-control note
 
 The project uses the private `SkinnyOracle31415926535/lesson-planner-program` root monorepo because the contracts and bridge are shared by both clients. The former nested Git metadata was preserved outside the project before the root repository was initialized.
 
 ## Mac editor
 
-From `web-editor/`:
+From the project root:
 
 ```bash
+cd "$PROJECT_ROOT/web-editor"
 npm install
 npm run dev
 npm run build
@@ -70,11 +80,11 @@ python3 bridge/drill_catalog_exporter.py \
   --out fixtures/drill-catalog.json
 
 python3 bridge/schedule_day_resolver.py \
-  --project-root '/Users/ryansadler/Documents/LESSON PLANNER PROGRAM' \
-  --summary '/Users/ryansadler/Documents/LESSON PLANNER PROGRAM/fixtures/vault-summary.json' \
+  --project-root "$PROJECT_ROOT" \
+  --summary fixtures/vault-summary.json \
   --date 2026-07-17 \
   --group B3 \
-  --out '/Users/ryansadler/Documents/LESSON PLANNER PROGRAM/fixtures/schedule-day.demo.json'
+  --out fixtures/schedule-day.demo.json
 ```
 
 The day resolver needs an intentional `--manual-week-choice Odd` or `Even` for a fifth-or-later calendar week. It is intentionally advisory and never reserves a schedule opening.
@@ -83,9 +93,9 @@ To generate the non-authoritative owner-review mapping queue from the safe summa
 
 ```bash
 python3 bridge/zone_mapping_candidates.py \
-  --project-root '/Users/ryansadler/Documents/LESSON PLANNER PROGRAM' \
-  --summary '/Users/ryansadler/Documents/LESSON PLANNER PROGRAM/fixtures/vault-summary.json' \
-  --out '/Users/ryansadler/Documents/LESSON PLANNER PROGRAM/fixtures/zone-mapping-candidates.json'
+  --project-root "$PROJECT_ROOT" \
+  --summary fixtures/vault-summary.json \
+  --out fixtures/zone-mapping-candidates.json
 ```
 
 Every generated zone candidate is deliberately marked as requiring owner confirmation. Do not treat the fixture as finalized gym-layout configuration.

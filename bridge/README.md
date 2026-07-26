@@ -2,6 +2,13 @@
 
 `vault_importer.py` makes a deterministic, sanitized development fixture from the existing gymnastics vault. It is deliberately not an exporter and it does not replace the existing lesson-plan automation. The two downstream tools in this folder build safe development handoffs from that fixture or the drill library without changing either source system.
 
+Run bridge commands from the canonical GitHub checkout, not an iCloud/Documents copy:
+
+```sh
+PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+cd "$PROJECT_ROOT"
+```
+
 ## Safety boundary
 
 - `--vault-root` is always required.
@@ -45,11 +52,11 @@ The existing fixture contains 31 parent drills and 106 variants. It remains deve
 
 ```sh
 python3 bridge/schedule_day_resolver.py \
-  --project-root "/Users/ryansadler/Documents/LESSON PLANNER PROGRAM" \
-  --summary "/Users/ryansadler/Documents/LESSON PLANNER PROGRAM/fixtures/vault-summary.json" \
+  --project-root "$PROJECT_ROOT" \
+  --summary fixtures/vault-summary.json \
   --date 2026-07-17 \
   --group B3 \
-  --out "/Users/ryansadler/Documents/LESSON PLANNER PROGRAM/fixtures/schedule-day.demo.json"
+  --out fixtures/schedule-day.demo.json
 ```
 
 It returns rotation blocks, schedule-defined `open` blocks as separate optional openings, and warmup/conditioning blocks separately. If the date falls in a fifth-or-later calendar week, it emits no plan until `--manual-week-choice Odd` or `Even` is supplied intentionally.
@@ -60,9 +67,9 @@ This safe helper reads only the sanitized summary inside the project. It does no
 
 ```sh
 python3 bridge/zone_mapping_candidates.py \
-  --project-root "/Users/ryansadler/Documents/LESSON PLANNER PROGRAM" \
-  --summary "/Users/ryansadler/Documents/LESSON PLANNER PROGRAM/fixtures/vault-summary.json" \
-  --out "/Users/ryansadler/Documents/LESSON PLANNER PROGRAM/fixtures/zone-mapping-candidates.json"
+  --project-root "$PROJECT_ROOT" \
+  --summary fixtures/vault-summary.json \
+  --out fixtures/zone-mapping-candidates.json
 ```
 
 The current fixture proposes 31 candidates. It recognizes the schedule vocabulary for `PB/HB`, `SR/PH`, and `TR/TT`, but still marks those combined areas as potentially disconnected and owner-review-only. Unknown equipment stays unresolved instead of being guessed into a visual zone.
