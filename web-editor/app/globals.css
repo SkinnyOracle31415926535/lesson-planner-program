@@ -353,6 +353,12 @@ button { cursor: pointer; touch-action:manipulation; -webkit-tap-highlight-color
 .new-idea-form .new-idea-media-actions button { background:var(--yellow); color:var(--navy); }
 .new-idea-form .new-idea-media-actions .media-clear { grid-column:1/-1; background:#e5e5e5; color:#850000; }
 .new-idea-form > .new-idea-actions { display:flex; gap:5px; }
+.idea-level-picker { margin:0; padding:6px; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:5px; border:1px dotted #49637b; background:#edf8ff; }
+.idea-level-picker legend { padding:0 3px; color:var(--navy); font:900 8px ui-monospace,monospace; }
+.idea-level-picker label { display:flex; align-items:center; justify-content:center; gap:4px; min-height:28px; border:1px solid #8497a8; background:var(--white); }
+.idea-level-picker input { width:16px !important; height:16px; margin:0; accent-color:var(--green); }
+.new-idea-form > .idea-level-picker { display:grid; }
+.idea-editor-grid .idea-level-picker.wide { grid-column:1/-1; }
 .new-idea-form button:disabled { cursor:not-allowed; background:#c8c8c8 !important; color:#777 !important; }
 .view-idea-capture { display:grid; gap:7px; }
 .view-new-idea-button { width:100%; min-height:38px; background:var(--yellow); border:2px outset var(--window); box-shadow:3px 3px 0 var(--pink); color:var(--navy); font:900 11px ui-monospace,monospace; letter-spacing:.04em; }

@@ -1,6 +1,8 @@
 export type CardKind = "SKILL" | "DRILL" | "ROUTINE" | "ACTIVITY" | "REFERENCE";
 export type LibraryShelf = "all" | "gems" | "recent" | "drafts" | "archive";
 export type OperationTaskKind = "RECURRING" | "TEMPORARY";
+export const IDEA_LEVELS = [3, 4, 5, 6, 7, 8, 9, 10] as const;
+export type IdeaLevel = (typeof IDEA_LEVELS)[number];
 
 export type LessonCard = {
   id: string;
@@ -13,6 +15,8 @@ export type LessonCard = {
   safety?: string;
   /** Explicit equipment/mat setup entered by the coach; never inferred from source prose. */
   mats?: string[];
+  /** Explicit Level 3–10 applicability selected by the coach. Legacy cards stay unchecked. */
+  levels?: IdeaLevel[];
   /** A card copied from the shelf into this one local lesson. */
   lessonLocal?: boolean;
   sourceIdeaId?: string;

@@ -55,6 +55,7 @@ const IDEA_KEYS = [
   "instructions",
   "kind",
   "mats",
+  "levels",
   "safety",
   "skills",
   "sourceRefs",
@@ -85,6 +86,13 @@ function isTextList(value: unknown, maxItems = 500): value is string[] {
     && value.every((entry) => isText(entry));
 }
 
+function isIdeaLevelList(value: unknown): value is LibraryItem["levels"] {
+  return Array.isArray(value)
+    && value.every((level) => Number.isInteger(level) && level >= 3 && level <= 10)
+    && new Set(value).size === value.length
+    && value.every((level, index) => index === 0 || value[index - 1] < level);
+}
+
 function isLibraryVariant(value: unknown): value is LibraryVariant {
   if (!isRecord(value) || !hasOnlyKeys(value, VARIANT_KEYS)) return false;
   return isText(value.id, 200)
@@ -110,6 +118,7 @@ function isLibraryTransferIdea(value: unknown): value is LibraryTransferIdea {
     && (value.accent === "cyan" || value.accent === "green" || value.accent === "yellow" || value.accent === "pink")
     && (value.safety === undefined || isText(value.safety))
     && (value.mats === undefined || isTextList(value.mats))
+    && (value.levels === undefined || isIdeaLevelList(value.levels))
     && isTextList(value.events)
     && isTextList(value.skills)
     && isTextList(value.goals)
@@ -134,6 +143,7 @@ function portableLibraryIdea(idea: LibraryItem): LibraryTransferIdea {
     accent: idea.accent,
     ...(idea.safety === undefined ? {} : { safety: idea.safety }),
     ...(idea.mats === undefined ? {} : { mats: [...idea.mats] }),
+    ...(idea.levels === undefined ? {} : { levels: [...idea.levels] }),
     events: [...idea.events],
     skills: [...idea.skills],
     goals: [...idea.goals],
@@ -157,6 +167,7 @@ function detachedLibraryItem(idea: LibraryItem): LibraryItem {
     ...idea,
     tags: [...idea.tags],
     ...(idea.mats === undefined ? {} : { mats: [...idea.mats] }),
+    ...(idea.levels === undefined ? {} : { levels: [...idea.levels] }),
     events: [...idea.events],
     skills: [...idea.skills],
     goals: [...idea.goals],
