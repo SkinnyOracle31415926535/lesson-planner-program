@@ -51,7 +51,17 @@ test("loading a shared workspace replaces planner records without touching devic
     classes: { version: 1, activeClassId: null, classes: [] },
     rotationSchedule: { version: 1, bundle: null, scheduleGroupByClassId: {}, manualWeekByDate: {} },
     lessonIndex: { version: 2, plans: [nextPlan] },
-    operations: { version: 2, taskDoneByPlanId: {}, attendanceByPlanId: {}, updateDecisionByRevision: {} },
+    operations: {
+      version: 3,
+      taskDoneByPlanId: {},
+      attendanceByPlanId: {},
+      updateDecisionByRevision: {},
+      goalPreferences: {
+        version: 1,
+        generalGoals: [],
+        defaultGoalIdsByClassId: {},
+      },
+    },
     lessonsByPlanId: { [nextPlan.id]: { version: 8, next: true } },
   });
 
