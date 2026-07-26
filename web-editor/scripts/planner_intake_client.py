@@ -19,6 +19,7 @@ API_PATH = "/api/shared-planner-state"
 MAX_STDIN_BYTES = 256 * 1024
 ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$")
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+GOAL_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{2,79}$")
 PROJECT_KEYS = {
     "lesson-planner",
     "vault-command-center",
@@ -253,19 +254,32 @@ def operations_document(workspace: dict[str, Any]) -> dict[str, Any]:
     if len(matches) != 1 or not is_record(matches[0].get("value")):
         raise IntakeError("The Planner operations document is missing.")
     operations = matches[0]["value"]
-    intake = operations.get("plannerIntake")
-    if (
-        operations.get("version") != 4
-        or not is_record(intake)
-        or intake.get("version") != 1
-        or not isinstance(intake.get("lessonDrafts"), list)
-        or not isinstance(intake.get("announcementSuggestions"), list)
-        or not isinstance(intake.get("backlogCaptures"), list)
-        or not is_record(intake.get("decisionById"))
-    ):
+    if operations.get("version") != 4:
         raise IntakeError(
             "The Planner version 4 intake setup is not online yet."
         )
+    if (
+        set(operations) != {
+            "version",
+            "taskDoneByPlanId",
+            "attendanceByPlanId",
+            "updateDecisionByRevision",
+            "goalPreferences",
+            "plannerIntake",
+        }
+        or not valid_nested_record(
+            operations.get("taskDoneByPlanId"),
+            lambda entry: isinstance(entry, bool),
+        )
+        or not valid_nested_record(
+            operations.get("attendanceByPlanId"),
+            lambda entry: entry in ATTENDANCE_STATUSES,
+        )
+        or not valid_update_decisions(operations.get("updateDecisionByRevision"))
+        or not valid_goal_preferences(operations.get("goalPreferences"))
+    ):
+        raise IntakeError("The Planner operations document did not pass strict validation.")
+    validate_planner_intake(operations.get("plannerIntake"))
     return matches[0]
 
 
@@ -273,14 +287,31 @@ def valid_nested_record(
     value: object,
     entry_validator,
 ) -> bool:
-    return is_record(value) and all(
-        is_record(entries) and all(entry_validator(entry) for entry in entries.values())
-        for entries in value.values()
+    return (
+        is_record(value)
+        and len(value) <= 1_000
+        and all(
+            valid_id(record_id)
+            and is_record(entries)
+            and len(entries) <= 1_000
+            and all(
+                valid_id(entry_id) and entry_validator(entry)
+                for entry_id, entry in entries.items()
+            )
+            for record_id, entries in value.items()
+        )
     )
 
 
 def valid_update_decisions(value: object) -> bool:
-    return is_record(value) and all(entry in UPDATE_DECISIONS for entry in value.values())
+    return (
+        is_record(value)
+        and len(value) <= 2_000
+        and all(
+            valid_id(revision_key) and entry in UPDATE_DECISIONS
+            for revision_key, entry in value.items()
+        )
+    )
 
 
 def valid_goal_preferences(value: object) -> bool:
@@ -297,7 +328,10 @@ def valid_goal_preferences(value: object) -> bool:
     if any(
         not is_record(goal)
         or set(goal) != {"id", "text"}
-        or not valid_id(goal.get("id"))
+        or not (
+            isinstance(goal.get("id"), str)
+            and bool(GOAL_ID_PATTERN.fullmatch(goal["id"]))
+        )
         or not valid_single_line_text(goal.get("text"), 200)
         for goal in goals
     ):
@@ -307,12 +341,64 @@ def valid_goal_preferences(value: object) -> bool:
     if len(known) != len(goal_ids):
         return False
     return all(
-        valid_single_line_text(class_id, 100)
+        isinstance(class_id, str)
+        and class_id.strip() == class_id
+        and 0 < len(class_id) <= 100
         and isinstance(ids, list)
+        and all(isinstance(item_id, str) and item_id in known for item_id in ids)
         and len(ids) == len(set(ids))
-        and all(item_id in known for item_id in ids)
         for class_id, ids in value["defaultGoalIdsByClassId"].items()
     )
+
+
+def validate_planner_intake(value: object) -> dict[str, Any]:
+    if (
+        not is_record(value)
+        or set(value) != {
+            "version",
+            "lessonDrafts",
+            "announcementSuggestions",
+            "backlogCaptures",
+            "decisionById",
+        }
+        or value.get("version") != 1
+        or not isinstance(value.get("lessonDrafts"), list)
+        or len(value["lessonDrafts"]) > 200
+        or not isinstance(value.get("announcementSuggestions"), list)
+        or len(value["announcementSuggestions"]) > 200
+        or not isinstance(value.get("backlogCaptures"), list)
+        or len(value["backlogCaptures"]) > 200
+        or not is_record(value.get("decisionById"))
+        or len(value["decisionById"]) > 600
+    ):
+        raise IntakeError("The Planner intake queue did not pass strict validation.")
+    lesson_drafts = [validate_draft(item) for item in value["lessonDrafts"]]
+    announcements = [
+        validate_announcement(item) for item in value["announcementSuggestions"]
+    ]
+    backlog_captures = [
+        validate_backlog_capture(item) for item in value["backlogCaptures"]
+    ]
+    all_items = [*lesson_drafts, *announcements, *backlog_captures]
+    item_ids = [item["id"] for item in all_items]
+    decisions = value["decisionById"]
+    if (
+        len(set(item_ids)) != len(item_ids)
+        or any(
+            not valid_id(item_id)
+            or decision not in {"applied", "dismissed"}
+            or item_id not in item_ids
+            for item_id, decision in decisions.items()
+        )
+    ):
+        raise IntakeError("The Planner intake queue did not pass strict validation.")
+    return {
+        "version": 1,
+        "lessonDrafts": lesson_drafts,
+        "announcementSuggestions": announcements,
+        "backlogCaptures": backlog_captures,
+        "decisionById": copy.deepcopy(decisions),
+    }
 
 
 def seeded_goal_preferences() -> dict[str, Any]:
@@ -394,15 +480,73 @@ def all_intake_ids(intake: dict[str, Any]) -> set[str]:
     }
 
 
+def normalized_class_name(value: str) -> str:
+    without_suffix = re.sub(r"\s+LESSON\s*$", "", value.strip(), flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", without_suffix).casefold()
+
+
+def verify_draft_target(workspace: dict[str, Any], draft: dict[str, Any]) -> None:
+    target = draft["target"]
+    possible_targets = list_targets(workspace, target["lessonDate"])
+    matches = [
+        candidate
+        for candidate in possible_targets
+        if (
+            candidate["classId"] == target["classId"]
+            and (
+                target["classId"] is not None
+                or normalized_class_name(candidate["className"])
+                == normalized_class_name(target["className"])
+            )
+        )
+    ]
+    if len(matches) != 1:
+        raise IntakeError(
+            "The lesson draft does not match one exact current Planner target."
+        )
+    phase_by_id = {phase["phaseId"]: phase for phase in matches[0]["phases"]}
+    if len(phase_by_id) != len(matches[0]["phases"]):
+        raise IntakeError("The Planner target has duplicate phase identities.")
+    for proposed in draft["phases"]:
+        current = phase_by_id.get(proposed["phaseId"])
+        if (
+            current is None
+            or current["title"] != proposed["title"]
+            or current["time"] != proposed["time"]
+        ):
+            raise IntakeError(
+                "The lesson draft does not match the current Planner phase identity."
+            )
+
+
 def enqueue(workspace: dict[str, Any], item: dict[str, Any]) -> bool:
     operations = operations_document(workspace)["value"]
     intake = operations["plannerIntake"]
-    if item["id"] in all_intake_ids(intake):
-        return False
-    key = "lessonDrafts" if item["kind"] == "lesson-draft" else "announcementSuggestions"
+    if item.get("kind") == "lesson-draft":
+        validated_item = validate_draft(item)
+        key = "lessonDrafts"
+    elif item.get("kind") == "announcement":
+        validated_item = validate_announcement(item)
+        key = "announcementSuggestions"
+    else:
+        raise IntakeError("Only lesson drafts and announcements can be enqueued here.")
+    existing = [
+        candidate
+        for queue_key in ("lessonDrafts", "announcementSuggestions", "backlogCaptures")
+        for candidate in intake[queue_key]
+        if candidate["id"] == validated_item["id"]
+    ]
+    if existing:
+        if existing[0] == validated_item:
+            return False
+        raise IntakeError(
+            "That Planner intake ID already exists with a different payload."
+        )
+    if validated_item["kind"] == "lesson-draft":
+        verify_draft_target(workspace, validated_item)
     if len(intake[key]) >= 200:
         raise IntakeError("The Planner intake queue is full.")
-    intake[key].append(item)
+    intake[key].append(validated_item)
     return True
 
 
@@ -470,7 +614,9 @@ def list_targets(workspace: dict[str, Any], lesson_date: str | None = None) -> l
                 "lessonId": plan["id"],
                 "lessonDate": plan["date"],
                 "classId": plan.get("classId"),
-                "className": re.sub(r"\s+LESSON$", "", plan["title"], flags=re.IGNORECASE),
+                "className": re.sub(
+                    r"\s+LESSON\s*$", "", plan["title"], flags=re.IGNORECASE
+                ).strip(),
                 "phases": safe_phases,
             }
         )
@@ -490,6 +636,7 @@ def mark_backlog(
 
 
 def workspace_write_body(workspace: dict[str, Any]) -> bytes:
+    operations_document(workspace)
     documents = []
     for document in workspace["documents"]:
         if (

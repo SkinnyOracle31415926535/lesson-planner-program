@@ -95,14 +95,49 @@ BACKLOG = {
 }
 
 
+def add_draft_target(state, *, class_id="class-level-3", title="Level 3 Lesson"):
+    state["documents"][1]["value"]["plans"].append({
+        "id": "lesson-level-3-2026-07-27",
+        "date": "2026-07-27",
+        "classId": class_id,
+        "title": title,
+    })
+    state["documents"].append({
+        "version": 1,
+        "kind": "lesson",
+        "id": "lesson-level-3-2026-07-27",
+        "documentVersion": 1,
+        "revision": 12,
+        "updatedAt": "2026-07-25T12:00:00.000Z",
+        "value": {
+            "version": 8,
+            "phases": [{
+                "id": "phase-floor",
+                "title": "FLOOR",
+                "time": "3:30–4:00",
+                "text": ["private current plan"],
+            }],
+        },
+    })
+
+
 class PlannerIntakeClientTests(unittest.TestCase):
     def test_draft_validation_and_deduplicated_enqueue(self):
         state = workspace()
+        add_draft_target(state)
         item = client.validate_draft(copy.deepcopy(DRAFT))
         self.assertTrue(client.enqueue(state, item))
         self.assertFalse(client.enqueue(state, item))
         intake = client.operations_document(state)["value"]["plannerIntake"]
         self.assertEqual([DRAFT["id"]], [entry["id"] for entry in intake["lessonDrafts"]])
+        collision = copy.deepcopy(DRAFT)
+        collision["source"] = "A DIFFERENT SOURCE"
+        with self.assertRaisesRegex(client.IntakeError, "different payload"):
+            client.enqueue(state, collision)
+        malformed_retry = copy.deepcopy(DRAFT)
+        malformed_retry["source"] = "safe source\nhidden payload"
+        with self.assertRaises(client.IntakeError):
+            client.enqueue(state, malformed_retry)
 
     def test_draft_validation_rejects_unknown_or_mismatched_fields(self):
         unsafe = {**DRAFT, "apiKey": "never"}
@@ -131,6 +166,80 @@ class PlannerIntakeClientTests(unittest.TestCase):
         injected = {**BACKLOG, "request": "first line\ninjected line"}
         with self.assertRaises(client.IntakeError):
             client.validate_backlog_capture(injected)
+
+    def test_enqueue_requires_one_exact_current_target_and_phase_identity(self):
+        missing = workspace()
+        with self.assertRaisesRegex(client.IntakeError, "exact current Planner target"):
+            client.enqueue(missing, copy.deepcopy(DRAFT))
+
+        null_target = workspace()
+        add_draft_target(null_target, class_id=None, title="  LEVEL   3 LESSON  ")
+        null_draft = copy.deepcopy(DRAFT)
+        null_draft["target"]["classId"] = None
+        self.assertTrue(client.enqueue(null_target, null_draft))
+
+        wrong_name = workspace()
+        add_draft_target(wrong_name, class_id=None, title="Level 4 Lesson")
+        with self.assertRaisesRegex(client.IntakeError, "exact current Planner target"):
+            client.enqueue(wrong_name, null_draft)
+
+        stale_phase = workspace()
+        add_draft_target(stale_phase)
+        stale_draft = copy.deepcopy(DRAFT)
+        stale_draft["phases"][0]["time"] = "4:00–4:30"
+        with self.assertRaisesRegex(client.IntakeError, "phase identity"):
+            client.enqueue(stale_phase, stale_draft)
+
+    def test_every_noop_and_write_requires_a_fully_valid_v4_operations_record(self):
+        malformed_queue = workspace()
+        add_draft_target(malformed_queue)
+        malformed_queue["documents"][0]["value"]["plannerIntake"]["lessonDrafts"] = [
+            {**DRAFT, "unsupported": True}
+        ]
+        before = copy.deepcopy(malformed_queue)
+        with self.assertRaisesRegex(client.IntakeError, "unsupported shape"):
+            client.enqueue(malformed_queue, copy.deepcopy(DRAFT))
+        self.assertEqual(before, malformed_queue)
+
+        dangling_decision = workspace()
+        dangling_decision["documents"][0]["value"]["plannerIntake"]["decisionById"] = {
+            "missing-item": "applied"
+        }
+        with self.assertRaisesRegex(client.IntakeError, "strict validation"):
+            client.workspace_write_body(dangling_decision)
+
+        extra_operations_field = workspace()
+        extra_operations_field["documents"][0]["value"]["unexpected"] = "unsafe"
+        with self.assertRaisesRegex(client.IntakeError, "strict validation"):
+            client.workspace_write_body(extra_operations_field)
+
+        invalid_nested_key = workspace()
+        invalid_nested_key["documents"][0]["value"]["taskDoneByPlanId"] = {
+            "lesson one": {"task-one": True}
+        }
+        with self.assertRaisesRegex(client.IntakeError, "strict validation"):
+            client.workspace_write_body(invalid_nested_key)
+
+        oversized_nested_record = workspace()
+        oversized_nested_record["documents"][0]["value"]["taskDoneByPlanId"] = {
+            f"lesson-{index}": {} for index in range(1_001)
+        }
+        with self.assertRaisesRegex(client.IntakeError, "strict validation"):
+            client.workspace_write_body(oversized_nested_record)
+
+        whitespace_class_id = workspace()
+        whitespace_class_id["documents"][0]["value"]["goalPreferences"][
+            "defaultGoalIdsByClassId"
+        ] = {" class-level-3": []}
+        with self.assertRaisesRegex(client.IntakeError, "strict validation"):
+            client.workspace_write_body(whitespace_class_id)
+
+        non_string_goal_id = workspace()
+        non_string_goal_id["documents"][0]["value"]["goalPreferences"][
+            "defaultGoalIdsByClassId"
+        ] = {"class-level-3": [["not", "an", "id"]]}
+        with self.assertRaisesRegex(client.IntakeError, "strict validation"):
+            client.workspace_write_body(non_string_goal_id)
 
     def test_workspace_write_preserves_every_document_and_drops_server_metadata(self):
         body = json.loads(client.workspace_write_body(workspace()))

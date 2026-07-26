@@ -78,6 +78,12 @@ test("planner intake accepts strict unique items and preserves detached copies",
   parsed.lessonDrafts[0]!.phases[0]!.text!.push("copy only");
   assert.deepEqual(intake.lessonDrafts[0]!.phases[0]!.text, ["Roundoff shapes"]);
   assert.equal(addPlannerIntakeItem(intake, draft)?.lessonDrafts.length, 1);
+  assert.equal(addPlannerIntakeItem(intake, { ...draft, source: "A DIFFERENT SOURCE" }), null);
+  assert.equal(addPlannerIntakeItem(intake, { ...announcement, id: draft.id }), null);
+  assert.equal(addPlannerIntakeItem(intake, {
+    ...draft,
+    source: "safe source\nhidden payload",
+  }), null);
 });
 
 test("planner intake rejects malformed, duplicate, or unbounded records", () => {
@@ -119,6 +125,18 @@ test("lesson draft matching requires the exact class, date, phase ID, title, and
   assert.deepEqual(lessonDraftCompatibility(draft, target, phases), { status: "ready" });
   assert.equal(lessonDraftCompatibility(draft, { ...target, lessonDate: "2026-07-28" }, phases).status, "target-mismatch");
   assert.equal(lessonDraftCompatibility(draft, target, [{ ...phases[0], time: "4:00–4:30" }]).status, "phase-mismatch");
+
+  const nullClassDraft = { ...draft, target: { ...target, classId: null } };
+  assert.equal(lessonDraftCompatibility(
+    nullClassDraft,
+    { ...target, classId: null, className: "  LEVEL   3 LESSON " },
+    phases,
+  ).status, "ready");
+  assert.equal(lessonDraftCompatibility(
+    nullClassDraft,
+    { ...target, classId: null, className: "Level 4" },
+    phases,
+  ).status, "target-mismatch");
 });
 
 test("announcement suggestions require an exact class and effective date", () => {
@@ -128,6 +146,14 @@ test("announcement suggestions require an exact class and effective date", () =>
   assert.equal(appendAnnouncement("", announcement.text), "Bring grips.");
   assert.equal(appendAnnouncement("Bring grips.", announcement.text), "Bring grips.");
   assert.equal(appendAnnouncement("Meet at floor.", announcement.text), "Meet at floor.\nBring grips.");
+  assert.equal(
+    appendAnnouncement("Meet at floor.\n\n  Keep the old spacing.  \n", announcement.text),
+    "Meet at floor.\n\n  Keep the old spacing.  \nBring grips.",
+  );
+  assert.equal(
+    appendAnnouncement("Meet at floor.\r\n\r\nKeep the old spacing.", announcement.text),
+    "Meet at floor.\r\n\r\nKeep the old spacing.\r\nBring grips.",
+  );
 });
 
 test("reflection parsing captures only text after explicit same-line backlog markers", () => {

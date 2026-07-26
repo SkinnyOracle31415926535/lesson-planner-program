@@ -214,6 +214,23 @@ function isDecisionRecord(value: unknown): value is Record<string, PlannerIntake
     ));
 }
 
+function jsonValuesEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left)
+      && Array.isArray(right)
+      && left.length === right.length
+      && left.every((entry, index) => jsonValuesEqual(entry, right[index]));
+  }
+  if (!isRecord(left) || !isRecord(right)) return false;
+  const leftKeys = Object.keys(left).sort();
+  const rightKeys = Object.keys(right).sort();
+  return leftKeys.length === rightKeys.length
+    && leftKeys.every((key, index) => (
+      key === rightKeys[index] && jsonValuesEqual(left[key], right[key])
+    ));
+}
+
 function detachedIntake(intake: PlannerIntake): PlannerIntake {
   return {
     version: PLANNER_INTAKE_VERSION,
@@ -269,26 +286,48 @@ export function parsePlannerIntake(value: unknown): PlannerIntake | null {
   return detachedIntake(value as PlannerIntake);
 }
 
+function parsePlannerIntakeItem(
+  value: unknown,
+): PlannerLessonDraft | PlannerAnnouncementSuggestion | PlannerBacklogCapture | null {
+  if (!isRecord(value)) return null;
+  const candidate = emptyPlannerIntake();
+  if (value.kind === "lesson-draft") candidate.lessonDrafts = [value as PlannerLessonDraft];
+  else if (value.kind === "announcement") {
+    candidate.announcementSuggestions = [value as PlannerAnnouncementSuggestion];
+  } else if (value.kind === "backlog-capture") {
+    candidate.backlogCaptures = [value as PlannerBacklogCapture];
+  } else return null;
+  const parsed = parsePlannerIntake(candidate);
+  if (!parsed) return null;
+  return parsed.lessonDrafts[0]
+    ?? parsed.announcementSuggestions[0]
+    ?? parsed.backlogCaptures[0]
+    ?? null;
+}
+
 export function addPlannerIntakeItem(
   intake: PlannerIntake,
   item: PlannerLessonDraft | PlannerAnnouncementSuggestion | PlannerBacklogCapture,
 ): PlannerIntake | null {
   const parsed = parsePlannerIntake(intake);
-  if (!parsed || !isIdentifier(item.id)) return null;
-  const existingIds = new Set([
-    ...parsed.lessonDrafts.map((candidate) => candidate.id),
-    ...parsed.announcementSuggestions.map((candidate) => candidate.id),
-    ...parsed.backlogCaptures.map((candidate) => candidate.id),
-  ]);
-  if (existingIds.has(item.id)) return parsed;
+  const parsedItem = parsePlannerIntakeItem(item);
+  if (!parsed || !parsedItem) return null;
+  const existingItem = [
+    ...parsed.lessonDrafts,
+    ...parsed.announcementSuggestions,
+    ...parsed.backlogCaptures,
+  ].find((candidate) => candidate.id === parsedItem.id);
+  if (existingItem) return jsonValuesEqual(existingItem, parsedItem) ? parsed : null;
   const candidate: PlannerIntake = {
     ...parsed,
-    lessonDrafts: item.kind === "lesson-draft" ? [...parsed.lessonDrafts, item] : parsed.lessonDrafts,
-    announcementSuggestions: item.kind === "announcement"
-      ? [...parsed.announcementSuggestions, item]
+    lessonDrafts: parsedItem.kind === "lesson-draft"
+      ? [...parsed.lessonDrafts, parsedItem]
+      : parsed.lessonDrafts,
+    announcementSuggestions: parsedItem.kind === "announcement"
+      ? [...parsed.announcementSuggestions, parsedItem]
       : parsed.announcementSuggestions,
-    backlogCaptures: item.kind === "backlog-capture"
-      ? [...parsed.backlogCaptures, item]
+    backlogCaptures: parsedItem.kind === "backlog-capture"
+      ? [...parsed.backlogCaptures, parsedItem]
       : parsed.backlogCaptures,
   };
   return parsePlannerIntake(candidate);
@@ -328,7 +367,16 @@ export function lessonDraftCompatibility(
   target: PlannerDraftTarget,
   phases: ReadonlyArray<Pick<PlannerDraftPhase, "phaseId" | "title" | "time">>,
 ): PlannerDraftCompatibility {
-  if (draft.target.lessonDate !== target.lessonDate || draft.target.classId !== target.classId) {
+  const normalizedClassName = (value: string) => value
+    .trim()
+    .replace(/\s+LESSON$/i, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase();
+  const classMatches = draft.target.classId === target.classId
+    && (draft.target.classId !== null
+      || normalizedClassName(draft.target.className) === normalizedClassName(target.className));
+  if (draft.target.lessonDate !== target.lessonDate || !classMatches) {
     return {
       status: "target-mismatch",
       message: `This draft is for ${draft.target.className} on ${draft.target.lessonDate}.`,
@@ -360,7 +408,10 @@ export function announcementApplies(
 export function appendAnnouncement(current: string, suggestion: string): string {
   const normalizedSuggestion = suggestion.trim();
   if (!normalizedSuggestion) return current;
-  const lines = current.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const lines = current.split(/\r\n|\n|\r/).map((line) => line.trim()).filter(Boolean);
   if (lines.includes(normalizedSuggestion)) return current;
-  return [...lines, normalizedSuggestion].join("\n");
+  if (!current) return normalizedSuggestion;
+  const newline = current.includes("\r\n") ? "\r\n" : current.includes("\r") ? "\r" : "\n";
+  const separator = current.endsWith("\n") || current.endsWith("\r") ? "" : newline;
+  return `${current}${separator}${normalizedSuggestion}`;
 }
