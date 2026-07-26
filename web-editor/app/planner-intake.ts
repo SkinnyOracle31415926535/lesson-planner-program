@@ -362,17 +362,20 @@ export function extractBacklogMarkers(reflection: string): string[] {
   return [...new Set(requests)];
 }
 
-export function lessonDraftCompatibility(
-  draft: PlannerLessonDraft,
-  target: PlannerDraftTarget,
-  phases: ReadonlyArray<Pick<PlannerDraftPhase, "phaseId" | "title" | "time">>,
-): PlannerDraftCompatibility {
-  const normalizedClassName = (value: string) => value
+function normalizedClassName(value: string): string {
+  return value
     .trim()
     .replace(/\s+LESSON$/i, "")
     .trim()
     .replace(/\s+/g, " ")
     .toLocaleLowerCase();
+}
+
+export function lessonDraftCompatibility(
+  draft: PlannerLessonDraft,
+  target: PlannerDraftTarget,
+  phases: ReadonlyArray<Pick<PlannerDraftPhase, "phaseId" | "title" | "time">>,
+): PlannerDraftCompatibility {
   const classMatches = draft.target.classId === target.classId
     && (draft.target.classId !== null
       || normalizedClassName(draft.target.className) === normalizedClassName(target.className));
@@ -398,11 +401,23 @@ export function lessonDraftCompatibility(
 export function announcementApplies(
   suggestion: PlannerAnnouncementSuggestion,
   classId: string | null,
+  className: string,
   lessonDate: string,
 ): boolean {
   return suggestion.classId === classId
+    && normalizedClassName(suggestion.className) === normalizedClassName(className)
     && suggestion.effectiveStart <= lessonDate
     && lessonDate <= suggestion.effectiveEnd;
+}
+
+export function announcementTargetExists(
+  suggestion: PlannerAnnouncementSuggestion,
+  classes: ReadonlyArray<{ id: string; name: string }>,
+): boolean {
+  return classes.some((localClass) => (
+    localClass.id === suggestion.classId
+    && normalizedClassName(localClass.name) === normalizedClassName(suggestion.className)
+  ));
 }
 
 export function appendAnnouncement(current: string, suggestion: string): string {

@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   addPlannerIntakeItem,
   announcementApplies,
+  announcementTargetExists,
   appendAnnouncement,
   decidePlannerIntakeItem,
   emptyPlannerIntake,
@@ -140,9 +141,20 @@ test("lesson draft matching requires the exact class, date, phase ID, title, and
 });
 
 test("announcement suggestions require an exact class and effective date", () => {
-  assert.equal(announcementApplies(announcement, "class-level-3", "2026-07-27"), true);
-  assert.equal(announcementApplies(announcement, "class-level-4", "2026-07-27"), false);
-  assert.equal(announcementApplies(announcement, "class-level-3", "2026-08-03"), false);
+  assert.equal(announcementApplies(announcement, "class-level-3", "  LEVEL   3 LESSON ", "2026-07-27"), true);
+  assert.equal(announcementApplies(announcement, "class-level-4", "Level 3", "2026-07-27"), false);
+  assert.equal(announcementApplies(announcement, "class-level-3", "Level 4", "2026-07-27"), false);
+  assert.equal(announcementApplies(announcement, "class-level-3", "Level 3", "2026-08-03"), false);
+  assert.equal(announcementTargetExists(announcement, [
+    { id: "class-level-3", name: "  LEVEL   3 LESSON " },
+    { id: "class-level-4", name: "Level 4" },
+  ]), true);
+  assert.equal(announcementTargetExists(announcement, [
+    { id: "class-level-3", name: "Level 4" },
+  ]), false);
+  assert.equal(announcementTargetExists(announcement, [
+    { id: "class-level-4", name: "Level 3" },
+  ]), false);
   assert.equal(appendAnnouncement("", announcement.text), "Bring grips.");
   assert.equal(appendAnnouncement("Bring grips.", announcement.text), "Bring grips.");
   assert.equal(appendAnnouncement("Meet at floor.", announcement.text), "Meet at floor.\nBring grips.");

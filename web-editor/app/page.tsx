@@ -152,12 +152,12 @@ import {
   PLANNER_INTAKE_PROJECTS,
   addPlannerIntakeItem,
   announcementApplies,
+  announcementTargetExists,
   appendAnnouncement,
   decidePlannerIntakeItem,
   emptyPlannerIntake,
   extractBacklogMarkers,
   lessonDraftCompatibility,
-  parsePlannerIntake,
   type PlannerAnnouncementSuggestion,
   type PlannerBacklogCapture,
   type PlannerIntake,
@@ -165,6 +165,7 @@ import {
   type PlannerIntakeProjectKey,
   type PlannerLessonDraft,
 } from "./planner-intake";
+import { parsePlannerOperationsV4 } from "./planner-operations";
 import {
   addLocalStationBoardSpot,
   effectiveStationBoardSpots,
@@ -1830,17 +1831,6 @@ function isUpdateDecisionRecord(value: unknown): value is Record<string, UpdateD
     && Object.values(value).every(isUpdateDecision);
 }
 
-function isStoredOperations(value: unknown): value is StoredOperations {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Partial<StoredOperations>;
-  return candidate.version === 4
-    && isBooleanRecordByPlan(candidate.taskDoneByPlanId)
-    && isAttendanceRecordByPlan(candidate.attendanceByPlanId)
-    && isUpdateDecisionRecord(candidate.updateDecisionByRevision)
-    && isLessonGoalPreferences(candidate.goalPreferences)
-    && parsePlannerIntake(candidate.plannerIntake) !== null;
-}
-
 function isStoredOperationsV3(value: unknown): value is StoredOperationsV3 {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<StoredOperationsV3>;
@@ -1869,7 +1859,8 @@ function isStoredOperationsV1(value: unknown): value is StoredOperationsV1 {
 }
 
 function normalizeSharedPlannerOperations(value: unknown, index: LessonPlanIndex): StoredOperations | null {
-  if (isStoredOperations(value)) return { ...value, plannerIntake: parsePlannerIntake(value.plannerIntake)! };
+  const storedV4 = parsePlannerOperationsV4(value);
+  if (storedV4) return storedV4;
   if (isStoredOperationsV3(value)) {
     return {
       version: 4,
@@ -2879,9 +2870,25 @@ export default function Home() {
   const pendingAnnouncementSuggestions = useMemo(
     () => plannerIntake.announcementSuggestions.filter((suggestion) => (
       !plannerIntake.decisionById[suggestion.id]
-      && announcementApplies(suggestion, activeLessonPlan.classId, activeLessonPlan.date)
+      && (
+        announcementApplies(
+          suggestion,
+          activeLessonPlan.classId,
+          activePlanClassName,
+          activeLessonPlan.date,
+        )
+        || (hasLoadedLocalClasses
+          && !announcementTargetExists(suggestion, classStorage.classes))
+      )
     )),
-    [activeLessonPlan.classId, activeLessonPlan.date, plannerIntake],
+    [
+      activeLessonPlan.classId,
+      activeLessonPlan.date,
+      activePlanClassName,
+      classStorage.classes,
+      hasLoadedLocalClasses,
+      plannerIntake,
+    ],
   );
   const reflectionBacklogRequests = useMemo(
     () => extractBacklogMarkers(lessonDocumentDetails.reflection),
@@ -4692,14 +4699,15 @@ export default function Home() {
       const stored = window.localStorage.getItem(LOCAL_OPERATIONS_STORAGE_KEY);
       if (stored) {
         const parsed: unknown = JSON.parse(stored);
-        if (isStoredOperations(parsed)) {
-          setOperationTaskDoneByPlanId(parsed.taskDoneByPlanId);
-          setViewAttendanceByPlanId(parsed.attendanceByPlanId);
-          const savedAttendance = parsed.attendanceByPlanId[activeLessonPlanIdRef.current];
+        const storedV4 = parsePlannerOperationsV4(parsed);
+        if (storedV4) {
+          setOperationTaskDoneByPlanId(storedV4.taskDoneByPlanId);
+          setViewAttendanceByPlanId(storedV4.attendanceByPlanId);
+          const savedAttendance = storedV4.attendanceByPlanId[activeLessonPlanIdRef.current];
           if (savedAttendance) setAttendanceById((current) => ({ ...current, ...savedAttendance }));
-          setUpdateDecisionByRevision(parsed.updateDecisionByRevision);
-          setGoalPreferences(parsed.goalPreferences);
-          setPlannerIntake(parsePlannerIntake(parsed.plannerIntake) ?? emptyPlannerIntake());
+          setUpdateDecisionByRevision(storedV4.updateDecisionByRevision);
+          setGoalPreferences(storedV4.goalPreferences);
+          setPlannerIntake(storedV4.plannerIntake);
           setNotice("BROWSER OPERATIONS CACHE RESTORED · CONNECTING TO THE PUBLIC WORKSPACE");
         } else if (isStoredOperationsV3(parsed)) {
           setOperationTaskDoneByPlanId(parsed.taskDoneByPlanId);
@@ -7008,8 +7016,13 @@ export default function Home() {
 
   function applyPlannerAnnouncement(suggestion: PlannerAnnouncementSuggestion) {
     if (mode !== "EDIT" || activePlanIsReadOnly()) return;
-    if (!announcementApplies(suggestion, activeLessonPlan.classId, activeLessonPlan.date)) {
-      setNotice("ANNOUNCEMENT BLOCKED · ITS EXACT CLASS OR EFFECTIVE DATE DOES NOT MATCH THIS LESSON");
+    if (!announcementApplies(
+      suggestion,
+      activeLessonPlan.classId,
+      activePlanClassName,
+      activeLessonPlan.date,
+    )) {
+      setNotice("ANNOUNCEMENT BLOCKED · ITS EXACT CLASS, CLASS NAME, OR EFFECTIVE DATE DOES NOT MATCH THIS LESSON");
       return;
     }
     const next = appendAnnouncement(lessonDocumentDetails.announcements, suggestion.text);
@@ -9485,7 +9498,7 @@ export default function Home() {
             <section className="planner-intake-panel" aria-label="Codex Planner intake">
               <div className="planner-intake-heading">
                 <div><b>CODEX INTAKE</b><span>STRICT CONTRACT · PREVIEW + APPLY</span></div>
-                <strong>{pendingLessonDrafts.length + pendingAnnouncementSuggestions.length} READY</strong>
+                <strong>{pendingLessonDrafts.length + pendingAnnouncementSuggestions.length} PENDING</strong>
               </div>
               <p className="planner-intake-note">A skill or sanitized crawl can place a keyless suggestion here. Exact class/date checks run again in this browser. Nothing changes until you tap Apply.</p>
               {pendingLessonDrafts.map((draft) => {
@@ -9516,18 +9529,27 @@ export default function Home() {
                   </article>
                 );
               })}
-              {pendingAnnouncementSuggestions.map((suggestion) => (
-                <article key={suggestion.id} className="planner-intake-card announcement">
-                  <div className="planner-intake-card-meta"><span>CLASS ANNOUNCEMENT · {suggestion.source}</span><time>{suggestion.effectiveStart}–{suggestion.effectiveEnd}</time></div>
-                  <strong>{suggestion.className}</strong>
-                  <p>{suggestion.text}</p>
-                  <small>SOURCE: {suggestion.sourceRef}</small>
-                  {mode === "EDIT" && !isPastActivePlan ? <div className="planner-intake-actions">
-                    <button type="button" onClick={() => decideIntakeItem(suggestion.id, "dismissed")}>DISMISS</button>
-                    <button type="button" onClick={() => applyPlannerAnnouncement(suggestion)}>APPLY ANNOUNCEMENT</button>
-                  </div> : null}
-                </article>
-              ))}
+              {pendingAnnouncementSuggestions.map((suggestion) => {
+                const applies = announcementApplies(
+                  suggestion,
+                  activeLessonPlan.classId,
+                  activePlanClassName,
+                  activeLessonPlan.date,
+                );
+                return (
+                  <article key={suggestion.id} className={`planner-intake-card announcement ${applies ? "ready" : "target-mismatch"}`}>
+                    <div className="planner-intake-card-meta"><span>CLASS ANNOUNCEMENT · {suggestion.source}</span><time>{suggestion.effectiveStart}–{suggestion.effectiveEnd}</time></div>
+                    <strong>{suggestion.className}</strong>
+                    <p>{suggestion.text}</p>
+                    <small>SOURCE: {suggestion.sourceRef}</small>
+                    {!applies ? <p className="planner-intake-blocked">This announcement’s saved class identity no longer exists. Dismiss it if that target is stale.</p> : null}
+                    {mode === "EDIT" && !isPastActivePlan ? <div className="planner-intake-actions">
+                      <button type="button" onClick={() => decideIntakeItem(suggestion.id, "dismissed")}>DISMISS</button>
+                      <button type="button" disabled={!applies} onClick={() => applyPlannerAnnouncement(suggestion)}>APPLY ANNOUNCEMENT</button>
+                    </div> : null}
+                  </article>
+                );
+              })}
               {!pendingLessonDrafts.length && !pendingAnnouncementSuggestions.length ? <p className="planner-intake-empty">NO MATCHING CODEX DRAFTS OR CLASS ANNOUNCEMENTS.</p> : null}
             </section>
             <section className="reminder-manager" aria-label="Your local reminders">

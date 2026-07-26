@@ -80,6 +80,20 @@ DRAFT = {
 }
 
 
+ANNOUNCEMENT = {
+    "id": "announcement-level-3-grips",
+    "kind": "announcement",
+    "createdAt": "2026-07-25T12:00:00.000Z",
+    "source": "SANITIZED CODEX CRAWL",
+    "sourceRef": "weekly-notes:2026-07-25",
+    "classId": "class-level-3",
+    "className": "Level 3",
+    "effectiveStart": "2026-07-27",
+    "effectiveEnd": "2026-08-02",
+    "text": "Bring grips.",
+}
+
+
 BACKLOG = {
     "id": "backlog-level-3-2026-07-27-1",
     "kind": "backlog-capture",
@@ -117,6 +131,22 @@ def add_draft_target(state, *, class_id="class-level-3", title="Level 3 Lesson")
                 "time": "3:30–4:00",
                 "text": ["private current plan"],
             }],
+        },
+    })
+
+
+def add_classes_document(state, classes=None):
+    state["documents"].append({
+        "version": 1,
+        "kind": "classes",
+        "id": "default",
+        "documentVersion": 1,
+        "revision": 12,
+        "updatedAt": "2026-07-25T12:00:00.000Z",
+        "value": {
+            "version": 1,
+            "activeClassId": "class-level-3",
+            "classes": classes or [{"id": "class-level-3", "name": "Level 3"}],
         },
     })
 
@@ -189,6 +219,31 @@ class PlannerIntakeClientTests(unittest.TestCase):
         stale_draft["phases"][0]["time"] = "4:00–4:30"
         with self.assertRaisesRegex(client.IntakeError, "phase identity"):
             client.enqueue(stale_phase, stale_draft)
+
+    def test_announcement_enqueue_requires_one_exact_current_class_identity(self):
+        state = workspace()
+        add_classes_document(state)
+        normalized = {**ANNOUNCEMENT, "className": "  LEVEL   3 LESSON "}
+        self.assertTrue(client.enqueue(state, normalized))
+        self.assertFalse(client.enqueue(state, normalized))
+
+        wrong_name = workspace()
+        add_classes_document(wrong_name)
+        with self.assertRaisesRegex(client.IntakeError, "exact current Planner class"):
+            client.enqueue(wrong_name, {**ANNOUNCEMENT, "className": "Level 4"})
+
+        missing_class = workspace()
+        add_classes_document(missing_class)
+        with self.assertRaisesRegex(client.IntakeError, "exact current Planner class"):
+            client.enqueue(missing_class, {**ANNOUNCEMENT, "classId": "class-missing"})
+
+        duplicate_class = workspace()
+        add_classes_document(duplicate_class, [
+            {"id": "class-level-3", "name": "Level 3"},
+            {"id": "class-level-3", "name": "Level 3"},
+        ])
+        with self.assertRaisesRegex(client.IntakeError, "duplicate class identities"):
+            client.enqueue(duplicate_class, copy.deepcopy(ANNOUNCEMENT))
 
     def test_every_noop_and_write_requires_a_fully_valid_v4_operations_record(self):
         malformed_queue = workspace()
@@ -319,6 +374,31 @@ class PlannerIntakeClientTests(unittest.TestCase):
         self.assertEqual(
             ["goal-level-3-behavior", "goal-level-3-concentration"],
             operations["goalPreferences"]["defaultGoalIdsByClassId"]["class-boys-level-3"],
+        )
+        self.assertFalse(client.migrate_intake(state))
+
+    def test_version_three_operations_migrate_without_replacing_goal_preferences(self):
+        state = workspace()
+        goal_preferences = {
+            "version": 1,
+            "generalGoals": [{"id": "goal-custom", "text": "Keep tight shapes"}],
+            "defaultGoalIdsByClassId": {"class-level-3": ["goal-custom"]},
+        }
+        state["documents"][0]["value"] = {
+            "version": 3,
+            "taskDoneByPlanId": {"lesson-one": {"task-one": True}},
+            "attendanceByPlanId": {"lesson-one": {"athlete-one": "late"}},
+            "updateDecisionByRevision": {"update-one:revision-one": "IMPORTANT"},
+            "goalPreferences": copy.deepcopy(goal_preferences),
+        }
+        self.assertTrue(client.migrate_intake(state))
+        operations = client.operations_document(state)["value"]
+        self.assertEqual(goal_preferences, operations["goalPreferences"])
+        self.assertEqual({"lesson-one": {"task-one": True}}, operations["taskDoneByPlanId"])
+        self.assertEqual({"lesson-one": {"athlete-one": "late"}}, operations["attendanceByPlanId"])
+        self.assertEqual(
+            {"update-one:revision-one": "IMPORTANT"},
+            operations["updateDecisionByRevision"],
         )
         self.assertFalse(client.migrate_intake(state))
 

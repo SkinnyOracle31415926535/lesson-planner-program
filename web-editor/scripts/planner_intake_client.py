@@ -519,6 +519,49 @@ def verify_draft_target(workspace: dict[str, Any], draft: dict[str, Any]) -> Non
             )
 
 
+def verify_announcement_target(
+    workspace: dict[str, Any],
+    announcement: dict[str, Any],
+) -> None:
+    class_documents = [
+        document
+        for document in workspace["documents"]
+        if is_record(document)
+        and document.get("kind") == "classes"
+        and document.get("id") == "default"
+    ]
+    if len(class_documents) != 1 or not is_record(class_documents[0].get("value")):
+        raise IntakeError("The Planner classes document is unavailable.")
+    storage = class_documents[0]["value"]
+    classes = storage.get("classes")
+    if storage.get("version") != 1 or not isinstance(classes, list) or len(classes) > 200:
+        raise IntakeError("The Planner classes document is invalid.")
+    identities: list[tuple[str, str]] = []
+    for local_class in classes:
+        if (
+            not is_record(local_class)
+            or not valid_id(local_class.get("id"))
+            or not valid_single_line_text(local_class.get("name"), 200)
+        ):
+            raise IntakeError("The Planner classes document is invalid.")
+        identities.append((local_class["id"], local_class["name"]))
+    if len({class_id for class_id, _name in identities}) != len(identities):
+        raise IntakeError("The Planner classes document has duplicate class identities.")
+    matches = [
+        class_name
+        for class_id, class_name in identities
+        if class_id == announcement["classId"]
+    ]
+    if (
+        len(matches) != 1
+        or normalized_class_name(matches[0])
+        != normalized_class_name(announcement["className"])
+    ):
+        raise IntakeError(
+            "The announcement does not match one exact current Planner class."
+        )
+
+
 def enqueue(workspace: dict[str, Any], item: dict[str, Any]) -> bool:
     operations = operations_document(workspace)["value"]
     intake = operations["plannerIntake"]
@@ -544,6 +587,8 @@ def enqueue(workspace: dict[str, Any], item: dict[str, Any]) -> bool:
         )
     if validated_item["kind"] == "lesson-draft":
         verify_draft_target(workspace, validated_item)
+    else:
+        verify_announcement_target(workspace, validated_item)
     if len(intake[key]) >= 200:
         raise IntakeError("The Planner intake queue is full.")
     intake[key].append(validated_item)
