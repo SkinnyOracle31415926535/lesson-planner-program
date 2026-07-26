@@ -23,10 +23,11 @@
 - Plan: 2026-07-25 — Add one editable general class-goal list, selectable per-class defaults, and bullet the selected goals on new lessons; seed Level 3 with its two current standard goals and preserve existing lesson goals.
 - Notes: 2026-07-26 — Shipped in lesson-planner-program PR #9. Boys Level 3 and Sample Level 3 start new lessons with the two existing standard goals; the shared checklist supports add, edit, select, and per-class defaults, while explicit Apply appends bullets without replacing existing lesson text. Pages and live phone QA passed.
 
-### BL-0011 — PLAN READY
+### BL-0011 — DONE
 - Captured: 2026-07-25 12:46 America/Los_Angeles
 - Request: it should keep track of odd and even weeks. for example next week is an even week
 - Plan: 2026-07-25 — Anchor July 27–August 2, 2026 as Even, alternate by Monday-based week, and allow an explicit post-break Odd/Even re-anchor that governs following weeks until another override.
+- Notes: 2026-07-26 — Shipped in lesson-planner-program PR #12. The shared rotation schedule now uses a continuous Monday-based Odd/Even cycle anchored to July 27–August 2 as Even, supports later shared re-anchors, safely migrates v1 storage to v2, and no longer asks for fifth-week confirmation when the cycle resolves it. All 146 tests, Pages deployment, and live phone, iPad, and desktop checks passed.
 
 ### BL-0012 — DONE
 - Captured: 2026-07-25 12:47 America/Los_Angeles
