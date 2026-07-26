@@ -1,5 +1,6 @@
 import { emptyLocalClassStorage } from "./local-classes";
 import { emptySafeScheduleStorage } from "./local-schedule";
+import { emptyLessonGoalPreferences } from "./lesson-goals";
 
 export const LOCAL_LESSON_STORAGE_KEY = "gym-lesson-planner-local-l3-2026-07-20-v1";
 export const LOCAL_LESSON_PLAN_INDEX_STORAGE_KEY = "gym-lesson-planner-local-plan-index-v1";
@@ -8,10 +9,11 @@ export const LOCAL_CLASS_STORAGE_KEY = "gym-lesson-planner-local-classes-v1";
 export const LOCAL_SAFE_SCHEDULE_STORAGE_KEY = "gym-lesson-planner-local-full-schedule-v1";
 
 export const emptyPlannerOperationsStorage = () => ({
-  version: 2 as const,
+  version: 3 as const,
   taskDoneByPlanId: {},
   attendanceByPlanId: {},
   updateDecisionByRevision: {},
+  goalPreferences: emptyLessonGoalPreferences(),
 });
 
 export function lessonPlanStorageKey(planId: string): string {

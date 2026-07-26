@@ -222,7 +222,19 @@ import {
   listedMats,
   standaloneLessonPlanHtml,
 } from "./lesson-document";
-import { loadDefaultLessonGoals } from "./lesson-goals";
+import { GoalManagerDialog } from "./goal-manager";
+import {
+  addGeneralClassGoal,
+  appendSelectedGoals,
+  classDefaultGoalIds,
+  classDefaultGoalText,
+  emptyLessonGoalPreferences,
+  isLessonGoalPreferences,
+  removeGeneralClassGoal,
+  setClassDefaultGoalIds,
+  updateGeneralClassGoal,
+  type LessonGoalPreferences,
+} from "./lesson-goals";
 import {
   displayLessonTimeRange,
   formatLessonTimePickerValue,
@@ -594,10 +606,18 @@ type UpdateDecision = "IMPORTANT" | "LATER" | "REJECTED";
 type PlannerTaskDisplay = Pick<DemoOperationTask, "id" | "title" | "kind" | "detail" | "rollForwardCopy">;
 
 type StoredOperations = {
-  version: 2;
+  version: 3;
   taskDoneByPlanId: Record<string, Record<string, boolean>>;
   attendanceByPlanId: Record<string, Record<string, AttendanceStatus>>;
   /** Keys are immutable demo update id + revision id pairs. */
+  updateDecisionByRevision: Record<string, UpdateDecision>;
+  goalPreferences: LessonGoalPreferences;
+};
+
+type StoredOperationsV2 = {
+  version: 2;
+  taskDoneByPlanId: Record<string, Record<string, boolean>>;
+  attendanceByPlanId: Record<string, Record<string, AttendanceStatus>>;
   updateDecisionByRevision: Record<string, UpdateDecision>;
 };
 
@@ -1088,14 +1108,14 @@ function isLessonDocumentDetails(value: unknown): value is LessonDocumentDetails
     && typeof details.reflection === "string";
 }
 
-function makeBlankStoredLesson(classId: string | null = null): StoredLesson {
+function makeBlankStoredLesson(classId: string | null = null, goals = ""): StoredLesson {
   return {
     version: 8,
     phases: makeInitialLesson(),
     todoDone: false,
     isReady: false,
     safetyAcknowledged: false,
-    documentDetails: emptyLessonDocumentDetails(),
+    documentDetails: { ...emptyLessonDocumentDetails(), goals },
     classId,
     attendanceById: makeDefaultAttendance(),
     visualAnchorByCardId: {},
@@ -1770,6 +1790,16 @@ function isUpdateDecisionRecord(value: unknown): value is Record<string, UpdateD
 function isStoredOperations(value: unknown): value is StoredOperations {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<StoredOperations>;
+  return candidate.version === 3
+    && isBooleanRecordByPlan(candidate.taskDoneByPlanId)
+    && isAttendanceRecordByPlan(candidate.attendanceByPlanId)
+    && isUpdateDecisionRecord(candidate.updateDecisionByRevision)
+    && isLessonGoalPreferences(candidate.goalPreferences);
+}
+
+function isStoredOperationsV2(value: unknown): value is StoredOperationsV2 {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<StoredOperationsV2>;
   return candidate.version === 2
     && isBooleanRecordByPlan(candidate.taskDoneByPlanId)
     && isAttendanceRecordByPlan(candidate.attendanceByPlanId)
@@ -1786,12 +1816,22 @@ function isStoredOperationsV1(value: unknown): value is StoredOperationsV1 {
 
 function normalizeSharedPlannerOperations(value: unknown, index: LessonPlanIndex): StoredOperations | null {
   if (isStoredOperations(value)) return value;
+  if (isStoredOperationsV2(value)) {
+    return {
+      version: 3,
+      taskDoneByPlanId: { ...value.taskDoneByPlanId },
+      attendanceByPlanId: { ...value.attendanceByPlanId },
+      updateDecisionByRevision: { ...value.updateDecisionByRevision },
+      goalPreferences: emptyLessonGoalPreferences(),
+    };
+  }
   if (!isStoredOperationsV1(value)) return null;
   return {
-    version: 2,
+    version: 3,
     taskDoneByPlanId: { [index.activePlanId]: { ...value.taskDoneById } },
     attendanceByPlanId: {},
     updateDecisionByRevision: { ...value.updateDecisionByRevision },
+    goalPreferences: emptyLessonGoalPreferences(),
   };
 }
 
@@ -2397,7 +2437,7 @@ function LegacyLessonDocument({
   onSetTaskDone: (taskId: string, isDone: boolean) => void;
 }) {
   const paperRef = useRef<HTMLElement | null>(null);
-  const renderedGoals = loadDefaultLessonGoals(details.goals);
+  const renderedGoals = details.goals.trim();
 
   function downloadLessonPlan() {
     if (!paperRef.current) return;
@@ -2426,7 +2466,7 @@ function LegacyLessonDocument({
         <h3>✧ {className.toUpperCase()} LESSON ✧</h3>
         <p className="legacy-date">{dateLabel}</p>
         <section><h4>ANNOUNCEMENTS</h4>{details.announcements.trim() ? <pre>{details.announcements}</pre> : <p>—</p>}</section>
-        <section><h4>GOALS</h4><pre>{renderedGoals}</pre></section>
+        <section><h4>GOALS</h4>{renderedGoals ? <pre>{renderedGoals}</pre> : <p>—</p>}</section>
         <section>
           <h4>PLAN</h4>
           <div className="legacy-plan-list">
@@ -2650,7 +2690,11 @@ export default function Home() {
   const [operationTaskDoneByPlanId, setOperationTaskDoneByPlanId] = useState<Record<string, Record<string, boolean>>>({});
   const [viewAttendanceByPlanId, setViewAttendanceByPlanId] = useState<Record<string, Record<string, AttendanceStatus>>>({});
   const [updateDecisionByRevision, setUpdateDecisionByRevision] = useState<Record<string, UpdateDecision>>({});
+  const [goalPreferences, setGoalPreferences] = useState<LessonGoalPreferences>(emptyLessonGoalPreferences);
   const [hasLoadedOperations, setHasLoadedOperations] = useState(false);
+  const [isGoalManagerOpen, setIsGoalManagerOpen] = useState(false);
+  const [selectedGeneralGoalIds, setSelectedGeneralGoalIds] = useState<string[]>([]);
+  const [newGeneralGoalText, setNewGeneralGoalText] = useState("");
   const [reminderStorage, setReminderStorage] = useState<LocalReminderStorage>(emptyLocalReminderStorage);
   const [hasLoadedReminders, setHasLoadedReminders] = useState(false);
   const [isReminderFormOpen, setIsReminderFormOpen] = useState(false);
@@ -2755,6 +2799,8 @@ export default function Home() {
     ?? (hasMissingActiveClass
       ? activeLessonPlan.title.replace(/\s+LESSON$/i, "").trim() || "REMOVED LOCAL CLASS"
       : "SAMPLE LEVEL 3");
+  const activeClassDefaultGoalIds = classDefaultGoalIds(goalPreferences, activeLessonPlan.classId);
+  const activeClassDefaultGoalText = classDefaultGoalText(goalPreferences, activeLessonPlan.classId);
   const attendanceRoster = useMemo(
     () => activeLocalClass?.students ?? (hasMissingActiveClass ? [] : attendance),
     [activeLocalClass, hasMissingActiveClass],
@@ -3240,7 +3286,7 @@ export default function Home() {
   }
 
   function makeBlankStoredLessonForCurrentBoards(classId = activeClassId): StoredLesson {
-    const blankLesson = makeBlankStoredLesson(classId);
+    const blankLesson = makeBlankStoredLesson(classId, classDefaultGoalText(goalPreferences, classId));
     return {
       ...blankLesson,
       boardSnapshot: createLessonBoardSnapshot(blankLesson.phases, customBoards, stationBoardOverrides),
@@ -3298,7 +3344,7 @@ export default function Home() {
     const phases = template.phases.length
       ? template.phases
       : [makeUnscheduledLessonPhase(selectedClass?.name ?? "SAMPLE LEVEL 3")];
-    const blankLesson = makeBlankStoredLesson(classId);
+    const blankLesson = makeBlankStoredLesson(classId, classDefaultGoalText(goalPreferences, classId));
     return {
       ...blankLesson,
       phases,
@@ -3381,6 +3427,9 @@ export default function Home() {
     setAreaNoteDraft("");
     setRemovingArea(null);
     setIsClassManagerOpen(false);
+    setIsGoalManagerOpen(false);
+    setSelectedGeneralGoalIds([]);
+    setNewGeneralGoalText("");
     setRemoveClassCandidate(null);
     setOpenAreaSelectionByKey({});
     setDetailCard(null);
@@ -4517,10 +4566,20 @@ export default function Home() {
           const savedAttendance = parsed.attendanceByPlanId[activeLessonPlanIdRef.current];
           if (savedAttendance) setAttendanceById((current) => ({ ...current, ...savedAttendance }));
           setUpdateDecisionByRevision(parsed.updateDecisionByRevision);
+          setGoalPreferences(parsed.goalPreferences);
+          setNotice("BROWSER OPERATIONS CACHE RESTORED · CONNECTING TO THE PUBLIC WORKSPACE");
+        } else if (isStoredOperationsV2(parsed)) {
+          setOperationTaskDoneByPlanId(parsed.taskDoneByPlanId);
+          setViewAttendanceByPlanId(parsed.attendanceByPlanId);
+          const savedAttendance = parsed.attendanceByPlanId[activeLessonPlanIdRef.current];
+          if (savedAttendance) setAttendanceById((current) => ({ ...current, ...savedAttendance }));
+          setUpdateDecisionByRevision(parsed.updateDecisionByRevision);
+          setGoalPreferences(emptyLessonGoalPreferences());
           setNotice("BROWSER OPERATIONS CACHE RESTORED · CONNECTING TO THE PUBLIC WORKSPACE");
         } else if (isStoredOperationsV1(parsed)) {
           setOperationTaskDoneByPlanId({ [activeLessonPlanIdRef.current]: parsed.taskDoneById });
           setUpdateDecisionByRevision(parsed.updateDecisionByRevision);
+          setGoalPreferences(emptyLessonGoalPreferences());
           setNotice("BROWSER OPERATIONS CACHE RESTORED · CONNECTING TO THE PUBLIC WORKSPACE");
         }
       }
@@ -4534,17 +4593,18 @@ export default function Home() {
   useEffect(() => {
     if (!hasLoadedOperations) return;
     const savedOperations: StoredOperations = {
-      version: 2,
+      version: 3,
       taskDoneByPlanId: operationTaskDoneByPlanId,
       attendanceByPlanId: viewAttendanceByPlanId,
       updateDecisionByRevision,
+      goalPreferences,
     };
     try {
       window.localStorage.setItem(LOCAL_OPERATIONS_STORAGE_KEY, JSON.stringify(savedOperations));
     } catch {
       setNotice("LOCAL DEMO OPERATIONS ACTIVE · BROWSER STORAGE IS UNAVAILABLE");
     }
-  }, [hasLoadedOperations, operationTaskDoneByPlanId, updateDecisionByRevision, viewAttendanceByPlanId]);
+  }, [goalPreferences, hasLoadedOperations, operationTaskDoneByPlanId, updateDecisionByRevision, viewAttendanceByPlanId]);
 
   const rememberSharedPlannerWorkspace = useCallback((workspace: SharedPlannerWorkspace, fingerprint: string) => {
     const known = { revision: workspace.revision, fingerprint };
@@ -6762,6 +6822,69 @@ export default function Home() {
     setLessonDocumentDetails((current) => ({ ...current, [field]: value }));
   }
 
+  function openGoalManager() {
+    setSelectedGeneralGoalIds(activeClassDefaultGoalIds);
+    setNewGeneralGoalText("");
+    setIsGoalManagerOpen(true);
+  }
+
+  function addGeneralGoal() {
+    const text = newGeneralGoalText.trim();
+    if (!text) return;
+    const goalId = `goal-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    setGoalPreferences((current) => addGeneralClassGoal(current, { id: goalId, text }));
+    setSelectedGeneralGoalIds((current) => [...new Set([...current, goalId])]);
+    setNewGeneralGoalText("");
+    setNotice("GENERAL CLASS GOAL ADDED + SELECTED · SYNCING WITH THE PUBLIC WORKSPACE");
+  }
+
+  function toggleGeneralGoal(goalId: string, selected: boolean) {
+    setSelectedGeneralGoalIds((current) => selected
+      ? [...new Set([...current, goalId])]
+      : current.filter((id) => id !== goalId));
+  }
+
+  function editGeneralGoal(goalId: string, text: string) {
+    setGoalPreferences((current) => updateGeneralClassGoal(current, goalId, text));
+  }
+
+  function removeGeneralGoal(goalId: string) {
+    const goal = goalPreferences.generalGoals.find((candidate) => candidate.id === goalId);
+    if (!goal || !window.confirm(`Remove “${goal.text || "this blank goal"}” from the shared general-goal list and every class default?`)) return;
+    setGoalPreferences((current) => removeGeneralClassGoal(current, goalId));
+    setSelectedGeneralGoalIds((current) => current.filter((id) => id !== goalId));
+    setNotice("GENERAL CLASS GOAL REMOVED · CLASS DEFAULT LISTS UPDATED");
+  }
+
+  function applySelectedGoalsToLesson() {
+    if (activePlanIsReadOnly()) return;
+    const nextGoals = appendSelectedGoals(
+      lessonDocumentDetails.goals,
+      goalPreferences,
+      selectedGeneralGoalIds,
+    );
+    if (nextGoals === lessonDocumentDetails.goals) {
+      setNotice("THOSE GOALS ARE ALREADY IN THIS LESSON");
+      return;
+    }
+    updateLessonDocumentDetail("goals", nextGoals);
+    setIsGoalManagerOpen(false);
+    setNotice("SELECTED GENERAL GOALS ADDED AS BULLETS · EXISTING LESSON TEXT KEPT");
+  }
+
+  function saveSelectedGoalsAsClassDefaults() {
+    if (isPastActivePlan || (activeLessonPlan.classId && !activeLocalClass)) {
+      setNotice("OPEN A CURRENT CLASS OR THE SAMPLE LEVEL 3 TYPE BEFORE CHANGING ITS DEFAULT GOALS");
+      return;
+    }
+    setGoalPreferences((current) => setClassDefaultGoalIds(
+      current,
+      activeLessonPlan.classId,
+      selectedGeneralGoalIds,
+    ));
+    setNotice(`${activePlanClassName.toUpperCase()} DEFAULT GOALS SAVED · NEW LESSONS WILL START WITH THIS SELECTION`);
+  }
+
   function toggleGem(cardId: string) {
     const card = allLibraryItems.find((item) => item.id === cardId);
     const willBeGem = !gemIds.includes(cardId);
@@ -8168,13 +8291,18 @@ export default function Home() {
               <div className="lesson-goals-field">
                 <div className="lesson-goals-heading">
                   <label htmlFor="lesson-goals">GOALS</label>
-                  <button
-                    type="button"
-                    disabled={isPastActivePlan || Boolean(lessonDocumentDetails.goals.trim())}
-                    onClick={() => updateLessonDocumentDetail("goals", loadDefaultLessonGoals(lessonDocumentDetails.goals))}
-                  >LOAD DEFAULT GOALS</button>
+                  <div className="lesson-goals-actions">
+                    <button
+                      type="button"
+                      disabled={isPastActivePlan || Boolean(lessonDocumentDetails.goals.trim()) || !activeClassDefaultGoalText}
+                      onClick={() => updateLessonDocumentDetail("goals", activeClassDefaultGoalText)}
+                    >LOAD CLASS DEFAULTS</button>
+                    <button type="button" disabled={isPastActivePlan} onClick={openGoalManager}>CHOOSE / EDIT GOALS</button>
+                  </div>
                 </div>
-                <span>Shared default for every class. It only fills an empty goals field.</span>
+                <span>{activeClassDefaultGoalIds.length
+                  ? `${activeClassDefaultGoalIds.length} saved default goal${activeClassDefaultGoalIds.length === 1 ? "" : "s"} for ${activePlanClassName}. Loading only fills an empty field.`
+                  : `No defaults saved for ${activePlanClassName}. Choose goals to add bullets or save class defaults.`}</span>
                 <textarea id="lesson-goals" value={lessonDocumentDetails.goals} onChange={(event) => updateLessonDocumentDetail("goals", event.currentTarget.value)} placeholder="e.g. Keep shapes tight and land with control." maxLength={1000} rows={3} />
               </div>
               <label>REFLECTION <small>Optional note for after class.</small>
@@ -9211,6 +9339,27 @@ export default function Home() {
       <footer className="statusbar"><span>☑ LOCAL FIRST</span><span>MEDIA: MOCK STATUS ONLY</span><span>LAST EDIT: JUST NOW</span><span>LEGACY AUTOMATION: UNTOUCHED</span></footer>
       </>
       )}
+
+      {isGoalManagerOpen ? (
+        <GoalManagerDialog
+          goals={goalPreferences.generalGoals}
+          selectedGoalIds={selectedGeneralGoalIds}
+          classLabel={activePlanClassName}
+          canSaveClassDefaults={!isPastActivePlan && (!activeLessonPlan.classId || Boolean(activeLocalClass))}
+          newGoalText={newGeneralGoalText}
+          onNewGoalTextChange={setNewGeneralGoalText}
+          onAddGoal={addGeneralGoal}
+          onToggleGoal={toggleGeneralGoal}
+          onUpdateGoal={editGeneralGoal}
+          onRemoveGoal={removeGeneralGoal}
+          onApplyToLesson={applySelectedGoalsToLesson}
+          onSaveClassDefaults={saveSelectedGoalsAsClassDefaults}
+          onClose={() => {
+            setIsGoalManagerOpen(false);
+            setNewGeneralGoalText("");
+          }}
+        />
+      ) : null}
 
       {stationMakerSetup && stationMakerTarget ? <StationMakerDialog setup={stationMakerSetup} onSave={(setup) => void saveStationMaker(setup)} onCancel={() => { setStationMakerSetup(null); setStationMakerTarget(null); }} /> : null}
 
