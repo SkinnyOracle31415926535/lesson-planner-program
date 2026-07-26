@@ -22,6 +22,7 @@ function idea(id: string): LibraryItem {
     title: "Handstand Shapes",
     description: "Build a long, tight body shape.",
     tags: ["handstand"],
+    levels: [3, 5, 10],
     accent: "cyan",
     events: ["floor"],
     skills: ["handstand"],
@@ -85,6 +86,7 @@ test("public Idea Library state keeps preferences and referenced pixel stations 
   copied.preferences.customCards[0]!.tags.push("changed-only-in-copy");
   copied.preferences.draftIdeaIds.push("changed-only-in-copy");
   assert.deepEqual(parsed?.preferences.customCards[0]?.tags, ["handstand"]);
+  assert.deepEqual(parsed?.preferences.customCards[0]?.levels, [3, 5, 10]);
   assert.deepEqual(parsed?.preferences.draftIdeaIds, []);
   assert.match(sharedIdeaLibraryFingerprint(parsed!) ?? "", /^\d+:/);
 });
@@ -109,6 +111,10 @@ test("public Idea Library parser rejects unbounded or orphaned public records", 
   assert.equal(parseSharedIdeaLibraryState({
     ...state(),
     preferences: { ...state().preferences, draftIdeaIds: ["idea-handstand"], archivedIdeaIds: ["idea-handstand"] },
+  }), null);
+  assert.equal(parseSharedIdeaLibraryState({
+    ...state(),
+    preferences: { ...state().preferences, customCards: [{ ...idea("bad-levels"), levels: [5, 3] }] },
   }), null);
 });
 

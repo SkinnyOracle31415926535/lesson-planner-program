@@ -118,6 +118,13 @@ function isFiniteNumber(value: unknown, minimum: number, maximum: number): value
   return typeof value === "number" && Number.isFinite(value) && value >= minimum && value <= maximum;
 }
 
+function isIdeaLevelList(value: unknown): value is LibraryItem["levels"] {
+  return Array.isArray(value)
+    && value.every((level) => isFiniteInteger(level, 3, 10))
+    && new Set(value).size === value.length
+    && value.every((level, index) => index === 0 || value[index - 1] < level);
+}
+
 function isTextList(value: unknown, maxItems = 500, maxLength = 20_000): value is string[] {
   return Array.isArray(value)
     && value.length <= maxItems
@@ -144,6 +151,7 @@ function isSupportedMediaMime(kind: "image" | "video", value: unknown): value is
 
 const LIBRARY_ITEM_KEYS = [
   "id", "kind", "title", "description", "tags", "accent", "starred", "safety", "mats", "lessonLocal", "sourceIdeaId", "selectedVariantId",
+  "levels",
   "events", "skills", "goals", "instructions", "coachingCues", "variants", "sourceRefs", "sourceStatus", "sourceType", "defaultArchived",
   "mediaId", "mediaKind", "mediaFilename", "mediaMimeType", "mediaWidth", "mediaHeight", "mediaDurationSeconds",
   "stationSetupId", "stationPreviewKind", "photoId", "photoFilename", "photoWidth", "photoHeight",
@@ -172,6 +180,7 @@ export function isSharedIdeaLibraryItem(value: unknown): value is LibraryItem {
   if (value.starred !== undefined && typeof value.starred !== "boolean") return false;
   if (value.safety !== undefined && !isText(value.safety)) return false;
   if (!isOptionalTextList(value.mats)) return false;
+  if (value.levels !== undefined && !isIdeaLevelList(value.levels)) return false;
   if (value.lessonLocal !== undefined && typeof value.lessonLocal !== "boolean") return false;
   if (value.sourceIdeaId !== undefined && !isIdentifier(value.sourceIdeaId, true)) return false;
   if (value.selectedVariantId !== undefined && !isIdentifier(value.selectedVariantId, true)) return false;
@@ -259,6 +268,7 @@ function copyLibraryItem(item: LibraryItem): LibraryItem {
     ...item,
     tags: [...item.tags],
     ...(item.mats === undefined ? {} : { mats: [...item.mats] }),
+    ...(item.levels === undefined ? {} : { levels: [...item.levels] }),
     events: [...item.events],
     skills: [...item.skills],
     goals: [...item.goals],

@@ -19,6 +19,7 @@ function idea(id: string, title = id): LibraryItem {
     tags: ["floor"],
     accent: "pink",
     mats: ["panel mat"],
+    levels: [3, 5, 10],
     events: ["Floor"],
     skills: [title],
     goals: [],
@@ -57,6 +58,7 @@ test("library exports are versioned, detached, and omit browser-local attachment
   assert.equal("mediaId" in bundle.ideas[0], false);
   assert.equal("mediaKind" in bundle.ideas[0], false);
   assert.equal("stationSetupId" in bundle.ideas[0], false);
+  assert.deepEqual(bundle.ideas[0].levels, [3, 5, 10]);
 
   source.tags.push("changed-after-export");
   assert.deepEqual(bundle.ideas[0].tags, ["floor"]);
@@ -77,6 +79,10 @@ test("library import rejects malformed, oversized, and attachment-bearing files"
 
   const unknown = { ...withPhotos, roster: ["No"] };
   assert.equal(parseLibraryTransferJson(JSON.stringify(unknown)).ok, false);
+
+  const unsortedLevels = createLibraryTransferBundle([idea("bad-level-order")]);
+  unsortedLevels.ideas[0]!.levels = [5, 3];
+  assert.equal(parseLibraryTransferJson(JSON.stringify(unsortedLevels)).ok, false);
 });
 
 test("library merge adds only unseen IDs and never overwrites existing ideas", () => {

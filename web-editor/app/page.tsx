@@ -28,6 +28,8 @@ import {
   type AttendanceStatus,
   type DemoOperationTask,
   type LessonCard,
+  IDEA_LEVELS,
+  type IdeaLevel,
   type LessonPhase,
   type LibraryItem,
   type LibraryShelf,
@@ -540,6 +542,7 @@ type LibraryEditDraft = {
   goals: string;
   instructions: string;
   coachingCues: string;
+  levels: IdeaLevel[];
 };
 
 type LibraryTransferImportState =
@@ -667,7 +670,12 @@ const updateDecisionOptions: Array<{ value: UpdateDecision; label: string }> = [
 ];
 
 function copyCard(card: LessonCard): LessonCard {
-  return { ...card, tags: [...card.tags], mats: card.mats ? [...card.mats] : undefined };
+  return {
+    ...card,
+    tags: [...card.tags],
+    mats: card.mats ? [...card.mats] : undefined,
+    levels: card.levels ? [...card.levels] : undefined,
+  };
 }
 
 function copyLibraryItem(card: LibraryItem): LibraryItem {
@@ -715,6 +723,7 @@ function libraryEditDraftFor(card: LibraryItem): LibraryEditDraft {
     goals: editableList(card.goals),
     instructions: editableList(card.instructions),
     coachingCues: editableList(card.coachingCues),
+    levels: [...(card.levels ?? [])],
   };
 }
 
@@ -1133,6 +1142,10 @@ function isLessonCard(value: unknown): value is LessonCard {
     && typeof card.description === "string"
     && Array.isArray(card.tags)
     && (card.mats === undefined || (Array.isArray(card.mats) && card.mats.every((mat) => typeof mat === "string")))
+    && (card.levels === undefined || (Array.isArray(card.levels)
+      && card.levels.every((level) => IDEA_LEVELS.includes(level as IdeaLevel))
+      && new Set(card.levels).size === card.levels.length
+      && card.levels.every((level, index) => index === 0 || card.levels![index - 1]! < level)))
     && typeof card.accent === "string";
 }
 
@@ -2675,6 +2688,7 @@ export default function Home() {
   const [newIdeaKind, setNewIdeaKind] = useState<LessonCard["kind"]>("DRILL");
   const [newIdeaTags, setNewIdeaTags] = useState("");
   const [newIdeaMats, setNewIdeaMats] = useState("");
+  const [newIdeaLevels, setNewIdeaLevels] = useState<IdeaLevel[]>([]);
   const [newIdeaMediaFile, setNewIdeaMediaFile] = useState<File | null>(null);
   const [newIdeaStationSetup, setNewIdeaStationSetup] = useState<StationSetup | null>(null);
   const [stationSetupsById, setStationSetupsById] = useState<Record<string, StationSetup>>({});
@@ -7023,6 +7037,7 @@ export default function Home() {
         goals: parseEditableList(libraryEditDraft.goals),
         instructions: parseEditableList(libraryEditDraft.instructions),
         coachingCues: parseEditableList(libraryEditDraft.coachingCues),
+        levels: [...libraryEditDraft.levels],
       };
       if (removeEditingStation && editingLibraryItem.stationSetupId) {
         delete edited.stationSetupId;
@@ -7544,6 +7559,7 @@ export default function Home() {
     setNewIdeaDescription("");
     setNewIdeaTags("");
     setNewIdeaMats("");
+    setNewIdeaLevels([]);
     setNewIdeaMediaFile(null);
     setNewIdeaStationSetup(null);
     if (newIdeaCameraInputRef.current) newIdeaCameraInputRef.current.value = "";
@@ -7625,6 +7641,7 @@ export default function Home() {
           tags: tags.length ? tags : [newIdeaKind.toLowerCase(), "local"],
           accent: newIdeaKind === "SKILL" ? "pink" : newIdeaKind === "ACTIVITY" ? "green" : newIdeaKind === "REFERENCE" ? "yellow" : "cyan",
           mats: parseEditableList(newIdeaMats),
+          levels: [...newIdeaLevels],
         }),
         ...mediaMetadata,
         ...(newIdeaStationSetup ? { stationSetupId: newIdeaStationSetup.id, stationPreviewKind: "pixel-station" as const } : {}),
@@ -7676,6 +7693,24 @@ export default function Home() {
       </label>
       <label>RULES / COACHING NOTE<textarea value={newIdeaDescription} onChange={(event) => setNewIdeaDescription(event.target.value)} placeholder="What should you remember or explain?" maxLength={280} /></label>
       <label>MATS NEEDED <small>one per line or comma</small><textarea value={newIdeaMats} onChange={(event) => setNewIdeaMats(event.target.value)} placeholder="panel mat, 8-inch mat" maxLength={220} /></label>
+      <fieldset className="idea-level-picker">
+        <legend>LEVELS <small>check every level this applies to</small></legend>
+        {IDEA_LEVELS.map((level) => (
+          <label key={level}>
+            <input
+              type="checkbox"
+              checked={newIdeaLevels.includes(level)}
+              onChange={(event) => {
+                const checked = event.currentTarget.checked;
+                setNewIdeaLevels((current) => checked
+                  ? [...current, level].sort((first, second) => first - second)
+                  : current.filter((candidate) => candidate !== level));
+              }}
+            />
+            {level}
+          </label>
+        ))}
+      </fieldset>
       <label>TAGS<input value={newIdeaTags} onChange={(event) => setNewIdeaTags(event.target.value)} placeholder="floor, L3, warmup" maxLength={120} /></label>
       <div className="new-idea-media-actions">
         <b>REFERENCE PHOTO OR VIDEO <small>optional · one public attachment · syncs with this Idea Library</small></b>
@@ -7845,6 +7880,7 @@ export default function Home() {
                   ? "SHARED IDEA"
                   : card.sourceStatus.toUpperCase();
           const tags = card.tags.slice(0, 2).join(" · ");
+          const levels = card.levels?.length ? `L${card.levels.join(" · L")}` : "";
           const extraDetail = card.safety ? `⚠ ${card.safety}` : card.skills.slice(0, 3).join(" · ");
           const isUnavailable = Boolean(card.isRemoved || card.isArchived);
           const stationSetup = card.stationSetupId ? stationSetupsById[card.stationSetupId] : null;
@@ -7856,7 +7892,7 @@ export default function Home() {
               <div className="library-item-copy">
                 <div className="library-item-kicker"><span>{card.kind}</span><span>{card.variants.length} VARIANT{card.variants.length === 1 ? "" : "S"}</span></div>
                 <strong title={card.title}>{card.title}</strong>
-                <span className="library-item-state" title={tags ? `${state} · ${tags}` : state}>{state}{tags ? ` · ${tags}` : ""}</span>
+                <span className="library-item-state" title={[state, levels, tags].filter(Boolean).join(" · ")}>{[state, levels, tags].filter(Boolean).join(" · ")}</span>
                 <p className="library-item-description">{card.description}</p>
                 {extraDetail ? <span className="library-item-extra">{card.safety ? extraDetail : `SKILLS · ${extraDetail}`}</span> : null}
               </div>
@@ -9390,6 +9426,7 @@ export default function Home() {
                     {detailCard.instructions.length ? <div><b>INSTRUCTIONS</b><ul>{detailCard.instructions.map((instruction) => <li key={instruction}>{instruction}</li>)}</ul></div> : null}
                     {detailCard.coachingCues.length ? <div><b>COACHING CUES</b><ul>{detailCard.coachingCues.map((cue) => <li key={cue}>{cue}</li>)}</ul></div> : null}
                     {listedMats(detailCard.mats).length ? <p><b>MATS NEEDED:</b> {listedMats(detailCard.mats).join(" · ")}</p> : null}
+                    <p><b>LEVELS:</b> {detailCard.levels?.length ? detailCard.levels.join(" · ") : "NONE SELECTED"}</p>
                     {detailCard.events.length || detailCard.skills.length ? <p><b>EVENTS / SKILLS:</b> {[...detailCard.events, ...detailCard.skills].join(" · ")}</p> : null}
                   </section>
                   {detailCard.variants.length && (isLibraryWindow || mode === "EDIT") ? (
@@ -9474,6 +9511,24 @@ export default function Home() {
                 </label>
                 <label className="wide">SHORT DESCRIPTION<textarea value={libraryEditDraft.description} onChange={(event) => updateLibraryEditDraft("description", event.target.value)} maxLength={500} /></label>
                 <label className="wide">MATS NEEDED <small>one per line or comma</small><textarea value={libraryEditDraft.mats} onChange={(event) => updateLibraryEditDraft("mats", event.target.value)} placeholder="panel mat, 8-inch mat, wedge" /></label>
+                <fieldset className="idea-level-picker wide">
+                  <legend>LEVELS <small>check every level this applies to</small></legend>
+                  {IDEA_LEVELS.map((level) => (
+                    <label key={level}>
+                      <input
+                        type="checkbox"
+                        checked={libraryEditDraft.levels.includes(level)}
+                        onChange={(event) => {
+                          const checked = event.currentTarget.checked;
+                          updateLibraryEditDraft("levels", checked
+                            ? [...libraryEditDraft.levels, level].sort((first, second) => first - second)
+                            : libraryEditDraft.levels.filter((candidate) => candidate !== level));
+                        }}
+                      />
+                      {level}
+                    </label>
+                  ))}
+                </fieldset>
                 <label>TAGS <small>one per line or comma</small><textarea value={libraryEditDraft.tags} onChange={(event) => updateLibraryEditDraft("tags", event.target.value)} /></label>
                 <label>EVENTS <small>one per line or comma</small><textarea value={libraryEditDraft.events} onChange={(event) => updateLibraryEditDraft("events", event.target.value)} /></label>
                 <label className="wide">SKILLS <small>one per line or comma</small><textarea value={libraryEditDraft.skills} onChange={(event) => updateLibraryEditDraft("skills", event.target.value)} /></label>
