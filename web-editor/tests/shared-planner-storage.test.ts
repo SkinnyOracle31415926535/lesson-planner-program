@@ -58,7 +58,7 @@ test("loading a shared workspace replaces planner records without touching devic
     },
     lessonIndex: { version: 2, plans: [nextPlan] },
     operations: {
-      version: 3,
+      version: 4,
       taskDoneByPlanId: {},
       attendanceByPlanId: {},
       updateDecisionByRevision: {},
@@ -66,6 +66,13 @@ test("loading a shared workspace replaces planner records without touching devic
         version: 1,
         generalGoals: [],
         defaultGoalIdsByClassId: {},
+      },
+      plannerIntake: {
+        version: 1,
+        lessonDrafts: [],
+        announcementSuggestions: [],
+        backlogCaptures: [],
+        decisionById: {},
       },
     },
     lessonsByPlanId: { [nextPlan.id]: { version: 8, next: true } },

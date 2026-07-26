@@ -149,6 +149,23 @@ import {
   type LibraryTransferBundleV1,
 } from "./library-transfer";
 import {
+  PLANNER_INTAKE_PROJECTS,
+  addPlannerIntakeItem,
+  announcementApplies,
+  appendAnnouncement,
+  decidePlannerIntakeItem,
+  emptyPlannerIntake,
+  extractBacklogMarkers,
+  lessonDraftCompatibility,
+  parsePlannerIntake,
+  type PlannerAnnouncementSuggestion,
+  type PlannerBacklogCapture,
+  type PlannerIntake,
+  type PlannerIntakeDecision,
+  type PlannerIntakeProjectKey,
+  type PlannerLessonDraft,
+} from "./planner-intake";
+import {
   addLocalStationBoardSpot,
   effectiveStationBoardSpots,
   isStationBoardOverrideStorage,
@@ -617,12 +634,17 @@ type UpdateDecision = "IMPORTANT" | "LATER" | "REJECTED";
 type PlannerTaskDisplay = Pick<DemoOperationTask, "id" | "title" | "kind" | "detail" | "rollForwardCopy">;
 
 type StoredOperations = {
-  version: 3;
+  version: 4;
   taskDoneByPlanId: Record<string, Record<string, boolean>>;
   attendanceByPlanId: Record<string, Record<string, AttendanceStatus>>;
   /** Keys are immutable demo update id + revision id pairs. */
   updateDecisionByRevision: Record<string, UpdateDecision>;
   goalPreferences: LessonGoalPreferences;
+  plannerIntake: PlannerIntake;
+};
+
+type StoredOperationsV3 = Omit<StoredOperations, "version" | "plannerIntake"> & {
+  version: 3;
 };
 
 type StoredOperationsV2 = {
@@ -1811,6 +1833,17 @@ function isUpdateDecisionRecord(value: unknown): value is Record<string, UpdateD
 function isStoredOperations(value: unknown): value is StoredOperations {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<StoredOperations>;
+  return candidate.version === 4
+    && isBooleanRecordByPlan(candidate.taskDoneByPlanId)
+    && isAttendanceRecordByPlan(candidate.attendanceByPlanId)
+    && isUpdateDecisionRecord(candidate.updateDecisionByRevision)
+    && isLessonGoalPreferences(candidate.goalPreferences)
+    && parsePlannerIntake(candidate.plannerIntake) !== null;
+}
+
+function isStoredOperationsV3(value: unknown): value is StoredOperationsV3 {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<StoredOperationsV3>;
   return candidate.version === 3
     && isBooleanRecordByPlan(candidate.taskDoneByPlanId)
     && isAttendanceRecordByPlan(candidate.attendanceByPlanId)
@@ -1836,23 +1869,35 @@ function isStoredOperationsV1(value: unknown): value is StoredOperationsV1 {
 }
 
 function normalizeSharedPlannerOperations(value: unknown, index: LessonPlanIndex): StoredOperations | null {
-  if (isStoredOperations(value)) return value;
+  if (isStoredOperations(value)) return { ...value, plannerIntake: parsePlannerIntake(value.plannerIntake)! };
+  if (isStoredOperationsV3(value)) {
+    return {
+      version: 4,
+      taskDoneByPlanId: { ...value.taskDoneByPlanId },
+      attendanceByPlanId: { ...value.attendanceByPlanId },
+      updateDecisionByRevision: { ...value.updateDecisionByRevision },
+      goalPreferences: value.goalPreferences,
+      plannerIntake: emptyPlannerIntake(),
+    };
+  }
   if (isStoredOperationsV2(value)) {
     return {
-      version: 3,
+      version: 4,
       taskDoneByPlanId: { ...value.taskDoneByPlanId },
       attendanceByPlanId: { ...value.attendanceByPlanId },
       updateDecisionByRevision: { ...value.updateDecisionByRevision },
       goalPreferences: emptyLessonGoalPreferences(),
+      plannerIntake: emptyPlannerIntake(),
     };
   }
   if (!isStoredOperationsV1(value)) return null;
   return {
-    version: 3,
+    version: 4,
     taskDoneByPlanId: { [index.activePlanId]: { ...value.taskDoneById } },
     attendanceByPlanId: {},
     updateDecisionByRevision: { ...value.updateDecisionByRevision },
     goalPreferences: emptyLessonGoalPreferences(),
+    plannerIntake: emptyPlannerIntake(),
   };
 }
 
@@ -2717,6 +2762,8 @@ export default function Home() {
   const [viewAttendanceByPlanId, setViewAttendanceByPlanId] = useState<Record<string, Record<string, AttendanceStatus>>>({});
   const [updateDecisionByRevision, setUpdateDecisionByRevision] = useState<Record<string, UpdateDecision>>({});
   const [goalPreferences, setGoalPreferences] = useState<LessonGoalPreferences>(emptyLessonGoalPreferences);
+  const [plannerIntake, setPlannerIntake] = useState<PlannerIntake>(emptyPlannerIntake);
+  const [reflectionBacklogProject, setReflectionBacklogProject] = useState<PlannerIntakeProjectKey>("lesson-planner");
   const [hasLoadedOperations, setHasLoadedOperations] = useState(false);
   const [isGoalManagerOpen, setIsGoalManagerOpen] = useState(false);
   const [selectedGeneralGoalIds, setSelectedGeneralGoalIds] = useState<string[]>([]);
@@ -2825,6 +2872,30 @@ export default function Home() {
     ?? (hasMissingActiveClass
       ? activeLessonPlan.title.replace(/\s+LESSON$/i, "").trim() || "REMOVED LOCAL CLASS"
       : "SAMPLE LEVEL 3");
+  const pendingLessonDrafts = useMemo(
+    () => plannerIntake.lessonDrafts.filter((draft) => !plannerIntake.decisionById[draft.id]),
+    [plannerIntake],
+  );
+  const pendingAnnouncementSuggestions = useMemo(
+    () => plannerIntake.announcementSuggestions.filter((suggestion) => (
+      !plannerIntake.decisionById[suggestion.id]
+      && announcementApplies(suggestion, activeLessonPlan.classId, activeLessonPlan.date)
+    )),
+    [activeLessonPlan.classId, activeLessonPlan.date, plannerIntake],
+  );
+  const reflectionBacklogRequests = useMemo(
+    () => extractBacklogMarkers(lessonDocumentDetails.reflection),
+    [lessonDocumentDetails.reflection],
+  );
+  const queuedReflectionBacklogRequests = useMemo(
+    () => new Set(plannerIntake.backlogCaptures
+      .filter((capture) => (
+        capture.source.lessonId === activeLessonPlan.id
+        && !plannerIntake.decisionById[capture.id]
+      ))
+      .map((capture) => capture.request)),
+    [activeLessonPlan.id, plannerIntake],
+  );
   const activeClassDefaultGoalIds = classDefaultGoalIds(goalPreferences, activeLessonPlan.classId);
   const activeClassDefaultGoalText = classDefaultGoalText(goalPreferences, activeLessonPlan.classId);
   const attendanceRoster = useMemo(
@@ -4628,7 +4699,17 @@ export default function Home() {
           if (savedAttendance) setAttendanceById((current) => ({ ...current, ...savedAttendance }));
           setUpdateDecisionByRevision(parsed.updateDecisionByRevision);
           setGoalPreferences(parsed.goalPreferences);
+          setPlannerIntake(parsePlannerIntake(parsed.plannerIntake) ?? emptyPlannerIntake());
           setNotice("BROWSER OPERATIONS CACHE RESTORED · CONNECTING TO THE PUBLIC WORKSPACE");
+        } else if (isStoredOperationsV3(parsed)) {
+          setOperationTaskDoneByPlanId(parsed.taskDoneByPlanId);
+          setViewAttendanceByPlanId(parsed.attendanceByPlanId);
+          const savedAttendance = parsed.attendanceByPlanId[activeLessonPlanIdRef.current];
+          if (savedAttendance) setAttendanceById((current) => ({ ...current, ...savedAttendance }));
+          setUpdateDecisionByRevision(parsed.updateDecisionByRevision);
+          setGoalPreferences(parsed.goalPreferences);
+          setPlannerIntake(emptyPlannerIntake());
+          setNotice("BROWSER OPERATIONS CACHE UPGRADED · CONNECTING TO THE PUBLIC WORKSPACE");
         } else if (isStoredOperationsV2(parsed)) {
           setOperationTaskDoneByPlanId(parsed.taskDoneByPlanId);
           setViewAttendanceByPlanId(parsed.attendanceByPlanId);
@@ -4636,11 +4717,13 @@ export default function Home() {
           if (savedAttendance) setAttendanceById((current) => ({ ...current, ...savedAttendance }));
           setUpdateDecisionByRevision(parsed.updateDecisionByRevision);
           setGoalPreferences(emptyLessonGoalPreferences());
+          setPlannerIntake(emptyPlannerIntake());
           setNotice("BROWSER OPERATIONS CACHE RESTORED · CONNECTING TO THE PUBLIC WORKSPACE");
         } else if (isStoredOperationsV1(parsed)) {
           setOperationTaskDoneByPlanId({ [activeLessonPlanIdRef.current]: parsed.taskDoneById });
           setUpdateDecisionByRevision(parsed.updateDecisionByRevision);
           setGoalPreferences(emptyLessonGoalPreferences());
+          setPlannerIntake(emptyPlannerIntake());
           setNotice("BROWSER OPERATIONS CACHE RESTORED · CONNECTING TO THE PUBLIC WORKSPACE");
         }
       }
@@ -4654,18 +4737,19 @@ export default function Home() {
   useEffect(() => {
     if (!hasLoadedOperations) return;
     const savedOperations: StoredOperations = {
-      version: 3,
+      version: 4,
       taskDoneByPlanId: operationTaskDoneByPlanId,
       attendanceByPlanId: viewAttendanceByPlanId,
       updateDecisionByRevision,
       goalPreferences,
+      plannerIntake,
     };
     try {
       window.localStorage.setItem(LOCAL_OPERATIONS_STORAGE_KEY, JSON.stringify(savedOperations));
     } catch {
       setNotice("LOCAL DEMO OPERATIONS ACTIVE · BROWSER STORAGE IS UNAVAILABLE");
     }
-  }, [goalPreferences, hasLoadedOperations, operationTaskDoneByPlanId, updateDecisionByRevision, viewAttendanceByPlanId]);
+  }, [goalPreferences, hasLoadedOperations, operationTaskDoneByPlanId, plannerIntake, updateDecisionByRevision, viewAttendanceByPlanId]);
 
   const rememberSharedPlannerWorkspace = useCallback((workspace: SharedPlannerWorkspace, fingerprint: string) => {
     const known = { revision: workspace.revision, fingerprint };
@@ -6883,6 +6967,85 @@ export default function Home() {
     setLessonDocumentDetails((current) => ({ ...current, [field]: value }));
   }
 
+  function decideIntakeItem(id: string, decision: PlannerIntakeDecision) {
+    setPlannerIntake((current) => decidePlannerIntakeItem(current, id, decision) ?? current);
+  }
+
+  function applyPlannerLessonDraft(draft: PlannerLessonDraft) {
+    if (mode !== "EDIT" || activePlanIsReadOnly()) return;
+    const compatibility = lessonDraftCompatibility(
+      draft,
+      {
+        lessonDate: activeLessonPlan.date,
+        classId: activeLessonPlan.classId,
+        className: activePlanClassName,
+      },
+      lessonPhases.map((phase) => ({ phaseId: phase.id, title: phase.title, time: phase.time })),
+    );
+    if (compatibility.status !== "ready") {
+      setNotice(`CODEX DRAFT BLOCKED · ${compatibility.message.toUpperCase()}`);
+      return;
+    }
+    setLessonDocumentDetails((current) => ({
+      ...current,
+      ...(draft.details.announcements === undefined ? {} : { announcements: draft.details.announcements }),
+      ...(draft.details.goals === undefined ? {} : { goals: draft.details.goals }),
+    }));
+    const draftPhaseById = new Map(draft.phases.map((phase) => [phase.phaseId, phase]));
+    setLessonPhases((current) => current.map((phase) => {
+      const proposed = draftPhaseById.get(phase.id);
+      if (!proposed) return phase;
+      return {
+        ...phase,
+        ...(proposed.text === undefined ? {} : { text: [...proposed.text] }),
+        ...(proposed.note === undefined ? {} : { note: proposed.note }),
+      };
+    }));
+    if (isReady) setIsReady(false);
+    decideIntakeItem(draft.id, "applied");
+    setNotice("CODEX LESSON DRAFT APPLIED AFTER REVIEW · REFLECTION, ATTENDANCE, TODO STATE, AND UNSPECIFIED FIELDS STAYED UNCHANGED");
+  }
+
+  function applyPlannerAnnouncement(suggestion: PlannerAnnouncementSuggestion) {
+    if (mode !== "EDIT" || activePlanIsReadOnly()) return;
+    if (!announcementApplies(suggestion, activeLessonPlan.classId, activeLessonPlan.date)) {
+      setNotice("ANNOUNCEMENT BLOCKED · ITS EXACT CLASS OR EFFECTIVE DATE DOES NOT MATCH THIS LESSON");
+      return;
+    }
+    const next = appendAnnouncement(lessonDocumentDetails.announcements, suggestion.text);
+    setLessonDocumentDetails((current) => ({ ...current, announcements: next }));
+    if (isReady) setIsReady(false);
+    decideIntakeItem(suggestion.id, "applied");
+    setNotice("CLASS ANNOUNCEMENT APPLIED AFTER REVIEW · EXISTING ANNOUNCEMENT LINES WERE KEPT");
+  }
+
+  function queueReflectionBacklog(request: string) {
+    if (mode !== "EDIT" || activePlanIsReadOnly()) return;
+    if (!reflectionBacklogRequests.includes(request)) {
+      setNotice("BACKLOG CAPTURE BLOCKED · KEEP THE $BACKLOG MARKER AND REQUEST ON THE SAME REFLECTION LINE");
+      return;
+    }
+    if (queuedReflectionBacklogRequests.has(request)) {
+      setNotice("THAT REFLECTION BACKLOG REQUEST IS ALREADY QUEUED");
+      return;
+    }
+    const capture: PlannerBacklogCapture = {
+      id: `backlog-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      kind: "backlog-capture",
+      createdAt: new Date().toISOString(),
+      source: {
+        lessonId: activeLessonPlan.id,
+        lessonDate: activeLessonPlan.date,
+        classId: activeLessonPlan.classId,
+        className: activePlanClassName,
+      },
+      projectKey: reflectionBacklogProject,
+      request,
+    };
+    setPlannerIntake((current) => addPlannerIntakeItem(current, capture) ?? current);
+    setNotice("REFLECTION BACKLOG REQUEST QUEUED FOR LOCAL CODEX INTAKE · ONLY THE TEXT AFTER $BACKLOG WAS COPIED");
+  }
+
   function openGoalManager() {
     setSelectedGeneralGoalIds(activeClassDefaultGoalIds);
     setNewGeneralGoalText("");
@@ -8452,6 +8615,30 @@ export default function Home() {
               <label>REFLECTION <small>Optional note for after class.</small>
                 <textarea value={lessonDocumentDetails.reflection} onChange={(event) => updateLessonDocumentDetail("reflection", event.currentTarget.value)} placeholder="What worked? What should change next time?" maxLength={1000} rows={3} />
               </label>
+              {reflectionBacklogRequests.length ? (
+                <section className="reflection-backlog-panel" aria-label="Reflection backlog capture preview">
+                  <div className="reflection-backlog-heading">
+                    <div><b>$BACKLOG PREVIEW</b><span>ONLY SAME-LINE TEXT AFTER THE MARKER</span></div>
+                    <label>PROJECT
+                      <select value={reflectionBacklogProject} onChange={(event) => setReflectionBacklogProject(event.currentTarget.value as PlannerIntakeProjectKey)}>
+                        {PLANNER_INTAKE_PROJECTS.map((project) => <option key={project.key} value={project.key}>{project.label}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                  {reflectionBacklogRequests.map((request) => {
+                    const queued = queuedReflectionBacklogRequests.has(request);
+                    return (
+                      <div key={request} className={`reflection-backlog-row ${queued ? "queued" : ""}`}>
+                        <p>{request}</p>
+                        <button type="button" disabled={queued} onClick={() => queueReflectionBacklog(request)}>{queued ? "QUEUED ✓" : "QUEUE FOR CODEX"}</button>
+                      </div>
+                    );
+                  })}
+                  <small>Queueing is the approval step. The trusted local backlog intake writes the central and selected project backlog transactionally; the rest of the reflection is never copied.</small>
+                </section>
+              ) : (
+                <p className="reflection-backlog-help">To capture an idea, put <code>$backlog</code> and the request on the same reflection line. Nothing else in the reflection is copied.</p>
+              )}
             </div>
           </section> : null}
           <div className={`phase-editor-workspace ${mode === "EDIT" ? "editing" : ""}`}>
@@ -9293,8 +9480,56 @@ export default function Home() {
             <div className="window-title">PLANNER UPDATES <span>{unresolvedUpdateCount} to review</span></div>
             <div className="operations-demo-strip">
               <b>LOCAL PLANNER ASSISTANT</b>
-              <span>Rules check this lesson’s timing, missing plans, explicit safety/setup notes, and linked schedule advisories. No email, calendar, crawler, server, or shared-system connection.</span>
+              <span>Local rules check this lesson’s timing, missing plans, explicit safety/setup notes, and linked schedule advisories. The separate Codex Intake below accepts only strict review drafts; it never applies one automatically.</span>
             </div>
+            <section className="planner-intake-panel" aria-label="Codex Planner intake">
+              <div className="planner-intake-heading">
+                <div><b>CODEX INTAKE</b><span>STRICT CONTRACT · PREVIEW + APPLY</span></div>
+                <strong>{pendingLessonDrafts.length + pendingAnnouncementSuggestions.length} READY</strong>
+              </div>
+              <p className="planner-intake-note">A skill or sanitized crawl can place a keyless suggestion here. Exact class/date checks run again in this browser. Nothing changes until you tap Apply.</p>
+              {pendingLessonDrafts.map((draft) => {
+                const compatibility = lessonDraftCompatibility(
+                  draft,
+                  {
+                    lessonDate: activeLessonPlan.date,
+                    classId: activeLessonPlan.classId,
+                    className: activePlanClassName,
+                  },
+                  lessonPhases.map((phase) => ({ phaseId: phase.id, title: phase.title, time: phase.time })),
+                );
+                return (
+                  <article key={draft.id} className={`planner-intake-card ${compatibility.status}`}>
+                    <div className="planner-intake-card-meta"><span>LESSON DRAFT · {draft.source}</span><time>{draft.target.lessonDate}</time></div>
+                    <strong>{draft.target.className}</strong>
+                    {compatibility.status === "ready" ? (
+                      <div className="planner-intake-preview">
+                        {draft.details.announcements !== undefined ? <div><b>ANNOUNCEMENTS WILL BECOME</b><pre>{draft.details.announcements || "EMPTY"}</pre></div> : null}
+                        {draft.details.goals !== undefined ? <div><b>GOALS WILL BECOME</b><pre>{draft.details.goals || "EMPTY"}</pre></div> : null}
+                        {draft.phases.map((phase) => <div key={phase.phaseId}><b>{phase.time} · {phase.title}</b>{phase.text !== undefined ? <pre>{phase.text.join("\n") || "EMPTY TEXT PLAN"}</pre> : null}{phase.note !== undefined ? <pre>NOTE: {phase.note || "EMPTY"}</pre> : null}</div>)}
+                      </div>
+                    ) : <p className="planner-intake-blocked">{compatibility.message} Open the exact saved lesson before applying it.</p>}
+                    {mode === "EDIT" && !isPastActivePlan ? <div className="planner-intake-actions">
+                      <button type="button" onClick={() => decideIntakeItem(draft.id, "dismissed")}>DISMISS</button>
+                      <button type="button" disabled={compatibility.status !== "ready"} onClick={() => applyPlannerLessonDraft(draft)}>APPLY DRAFT</button>
+                    </div> : null}
+                  </article>
+                );
+              })}
+              {pendingAnnouncementSuggestions.map((suggestion) => (
+                <article key={suggestion.id} className="planner-intake-card announcement">
+                  <div className="planner-intake-card-meta"><span>CLASS ANNOUNCEMENT · {suggestion.source}</span><time>{suggestion.effectiveStart}–{suggestion.effectiveEnd}</time></div>
+                  <strong>{suggestion.className}</strong>
+                  <p>{suggestion.text}</p>
+                  <small>SOURCE: {suggestion.sourceRef}</small>
+                  {mode === "EDIT" && !isPastActivePlan ? <div className="planner-intake-actions">
+                    <button type="button" onClick={() => decideIntakeItem(suggestion.id, "dismissed")}>DISMISS</button>
+                    <button type="button" onClick={() => applyPlannerAnnouncement(suggestion)}>APPLY ANNOUNCEMENT</button>
+                  </div> : null}
+                </article>
+              ))}
+              {!pendingLessonDrafts.length && !pendingAnnouncementSuggestions.length ? <p className="planner-intake-empty">NO MATCHING CODEX DRAFTS OR CLASS ANNOUNCEMENTS.</p> : null}
+            </section>
             <section className="reminder-manager" aria-label="Your local reminders">
               <div className="reminder-manager-head">
                 <div><b>YOUR REMINDERS</b><span>RECURRING + TEMPORARY · LOCAL TO THIS BROWSER</span></div>
