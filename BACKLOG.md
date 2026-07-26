@@ -13,10 +13,11 @@
 - Plan: 2026-07-25 — Add one browser-local versioned alternate-schedule overlay shared by Calendar and Lesson Planner, with exact-date default scope, optional recurring weekday/parity scope, source fingerprints, and an immutable authoritative base schedule.
 - Notes: 2026-07-26 — Shipped across gymnastics-vault-calendar PR #21 and lesson-planner-program PR #14. Calendar saves browser-local exact-date or weekday/parity personal opening cards without changing the published schedule; Lesson Planner reads the shared contract as a read-only overlay, requires exact class/date/week scope, and marks mismatched, occupied, or Calendar-stale entries for review. Pages and live phone, iPad, and desktop validation passed.
 
-### BL-0009 — PLAN READY
+### BL-0009 — DONE
 - Captured: 2026-07-25 12:39 America/Los_Angeles
 - Request: I want to add that i want to make a feature where i can talk through chat gpt directly to my lesson planner program when invoking a skill and it like automatically makes the lesson plan for me do u understand me\
 - Plan: 2026-07-25 — Add a trusted skill-to-planner draft contract with a visible preview and explicit Apply step; never put an API key in the browser or silently overwrite an existing lesson.
+- Notes: 2026-07-26 — Shipped in lesson-planner-program PR #16. The keyless lesson-plan skill lists exact saved lesson targets and queues an immutable draft; the Planner rechecks class, date, phase ID, title, and time, shows a complete preview, and changes only reviewed fields after Apply. No API key or silent overwrite was added; 156 tests and live phone, iPad, and desktop checks passed.
 
 ### BL-0010 — DONE
 - Captured: 2026-07-25 12:43 America/Los_Angeles
@@ -36,15 +37,17 @@
 - Plan: 2026-07-25 — Visually test the current date/class layout at iPad and phone widths, then reduce only the date column enough to prevent overlap while preserving responsive stacking.
 - Notes: 2026-07-25 — Shipped in lesson-planner-program PR #8. GitHub Pages and live phone, iPad, 801px, and desktop checks confirm the smaller date column with no overlap, overflow, or console errors.
 
-### BL-0013 — PLAN READY
+### BL-0013 — DONE
 - Captured: 2026-07-25 12:48 America/Los_Angeles
 - Request: make the announcements correspond to each class and be automatic based on the codex crawls
 - Plan: 2026-07-25 — Convert sanitized crawl results into exact-class announcement suggestions, show their source and effective date, and require preview/apply before changing a lesson.
+- Notes: 2026-07-26 — Shipped in lesson-planner-program PR #16. Sanitized daily and weekly crawl automations can queue exact-class, date-bounded announcement suggestions with source and range; the browser revalidates class ID, class name, and date and requires explicit Apply. Raw email, roster, attendance, and unrelated crawl content are excluded; live responsive checks passed.
 
-### BL-0014 — PLAN READY
+### BL-0014 — DONE
 - Captured: 2026-07-25 12:55 America/Los_Angeles
 - Request: there should be a field for each idea called level where i check a box for all of the levels it applies for 3-10
 - Plan: 2026-07-25 — Add sorted Level 3–10 checkboxes to idea creation/editing and the compatible storage, sync, import, and export contracts; leave legacy ideas unchecked instead of guessing.
+- Notes: 2026-07-26 — Shipped in lesson-planner-program PR #11. Idea create and edit now have Level 3–10 checkboxes, and selections survive public sync, import, export, and browser storage. Legacy ideas remain unchecked; Pages and live responsive checks passed.
 
 ### BL-0015 — DONE
 - Captured: 2026-07-25 13:06 America/Los_Angeles
@@ -52,7 +55,8 @@
 - Plan: 2026-07-25 — Remove the visible Freeform Review tag while retaining its internal source provenance for compatibility and auditability.
 - Notes: 2026-07-25 — Verified current source and deployed Lesson Planner contain no visible Freeform Review label; no code change was required.
 
-### BL-0016 — PLAN READY
+### BL-0016 — DONE
 - Captured: 2026-07-25 14:01 America/Los_Angeles
 - Request: in the reflections it should see my notes about $backlog 's and apply them to the corresponding vault. that way i can add things to the backlog through the reflection section during class easily
 - Plan: 2026-07-25 — Extract only explicit $backlog marker text from lesson reflections/messages, preview the routed central and allowlisted project backlog entry, and apply both transactionally after approval without copying whole reflections.
+- Notes: 2026-07-26 — Shipped in lesson-planner-program PR #16. Reflections expose only same-line text after an explicit $backlog marker, show the selected allowlisted project, and queue only after Ryan taps Queue for Codex. The token-bound local importer writes identical central and project backlog blocks under one lock, excludes HTML TODOs and the stale vault ZIP repository, and the live empty-queue dry run passed.
