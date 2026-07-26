@@ -270,6 +270,7 @@ import {
   resolveOpenAreaAvailability,
   resolveAreaAvailabilityForInterval,
   resolveSafeScheduleDay,
+  resolveSafeScheduleWeekCycle,
   safeScheduleGroups,
   setSafeScheduleClassGroup,
   setSafeScheduleWeekAnchor,
@@ -279,6 +280,13 @@ import {
   type SafeScheduleTimeBlock,
   type ScheduleWeek,
 } from "./local-schedule";
+import {
+  PERSONAL_ALTERNATE_SCHEDULE_STORAGE_KEY,
+  emptyPersonalAlternateScheduleStore,
+  parsePersonalAlternateScheduleStoreJson,
+  personalAlternateScheduleCardsForLesson,
+  personalAlternateScheduleScopeLabel,
+} from "./personal-alternate-schedule";
 import {
   generatePlannerUpdates,
   getLessonReadinessReview,
@@ -2624,6 +2632,8 @@ export default function Home() {
   const [safeScheduleStorageState, setSafeScheduleStorageState] = useState<SafeScheduleStorage>(emptySafeScheduleStorage);
   const [hasLoadedSafeSchedule, setHasLoadedSafeSchedule] = useState(false);
   const [safeScheduleImportPreview, setSafeScheduleImportPreview] = useState<SafeScheduleImportPreview | null>(null);
+  const [personalAlternateSchedule, setPersonalAlternateSchedule] = useState(emptyPersonalAlternateScheduleStore);
+  const [personalAlternateScheduleError, setPersonalAlternateScheduleError] = useState("");
   const [openAreaSelectionByKey, setOpenAreaSelectionByKey] = useState<Record<string, string[]>>({});
   const [visualAnchorByCardId, setVisualAnchorByCardId] = useState<Record<string, string>>({});
   const [visualLabelLayoutByCardId, setVisualLabelLayoutByCardId] = useState<Record<string, VisualLabelLayout>>({});
@@ -2849,6 +2859,19 @@ export default function Home() {
       )
       : null,
     [activeLessonPlan.date, linkedSafeScheduleGroup, safeScheduleBundle, safeScheduleStorageState.manualWeekByDate, safeScheduleStorageState.weekAnchors],
+  );
+  const personalAlternateScheduleWeek = safeScheduleDay?.resolvedWeek
+    ?? safeScheduleStorageState.manualWeekByDate[activeLessonPlan.date]
+    ?? resolveSafeScheduleWeekCycle(activeLessonPlan.date, safeScheduleStorageState.weekAnchors).week;
+  const personalAlternateScheduleCards = useMemo(
+    () => personalAlternateScheduleCardsForLesson({
+      store: personalAlternateSchedule,
+      date: activeLessonPlan.date,
+      className: activePlanClassName,
+      lessonWeek: personalAlternateScheduleWeek,
+      safeSchedule: safeScheduleBundle,
+    }),
+    [activeLessonPlan.date, activePlanClassName, personalAlternateSchedule, personalAlternateScheduleWeek, safeScheduleBundle],
   );
   const futureLocalClass = useMemo(
     () => futurePlanClassId ? localClassById(classStorage, futurePlanClassId) : null,
@@ -3906,6 +3929,36 @@ export default function Home() {
     } finally {
       setHasLoadedSafeSchedule(true);
     }
+  }, []);
+
+  useEffect(() => {
+    const readPersonalAlternateSchedule = () => {
+      try {
+        const stored = window.localStorage.getItem(PERSONAL_ALTERNATE_SCHEDULE_STORAGE_KEY);
+        if (!stored) {
+          setPersonalAlternateSchedule(emptyPersonalAlternateScheduleStore());
+          setPersonalAlternateScheduleError("");
+          return;
+        }
+        const parsed = parsePersonalAlternateScheduleStoreJson(stored);
+        if (parsed.ok) {
+          setPersonalAlternateSchedule(parsed.value);
+          setPersonalAlternateScheduleError("");
+        } else {
+          setPersonalAlternateSchedule(emptyPersonalAlternateScheduleStore());
+          setPersonalAlternateScheduleError(parsed.error);
+        }
+      } catch {
+        setPersonalAlternateSchedule(emptyPersonalAlternateScheduleStore());
+        setPersonalAlternateScheduleError("This browser could not read the personal alternate schedule.");
+      }
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === PERSONAL_ALTERNATE_SCHEDULE_STORAGE_KEY) readPersonalAlternateSchedule();
+    };
+    readPersonalAlternateSchedule();
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   function persistSafeScheduleStorage(next: SafeScheduleStorage): boolean {
@@ -8308,6 +8361,34 @@ export default function Home() {
                   </div>
                 )}
                 <p className="schedule-open-advisory">ADVISORY ONLY · AREAS ARE NOT RESERVED · NOTHING IS ADDED UNTIL YOU CHOOSE AREAS AND TAP ADD OPEN EVENT</p>
+              </section>
+
+              <section className="schedule-advisory-section personal-alternate-openings" aria-label="Personal alternate schedule openings">
+                <div className="schedule-advisory-section-title">
+                  <b>MY ALTERNATE OPENINGS</b>
+                  <span>{personalAlternateScheduleCards.length} CARDS</span>
+                </div>
+                {personalAlternateScheduleError ? (
+                  <p className="personal-alternate-error">⚠ SAVED PERSONAL SCHEDULE DATA WAS REJECTED · {personalAlternateScheduleError}</p>
+                ) : personalAlternateScheduleCards.length ? (
+                  <div className="personal-alternate-card-list">
+                    {personalAlternateScheduleCards.map((card) => (
+                      <article key={card.id} className={`personal-alternate-card${card.isStale ? " is-stale" : ""}`}>
+                        <div className="personal-alternate-card-heading">
+                          <time>{formatScheduleRange(card.sourceOpening.startMinute, card.sourceOpening.endMinute)}</time>
+                          <b>{card.sourceOpening.equipment}</b>
+                          <span>{card.isStale ? "⚠ REVIEW" : "PERSONAL"}</span>
+                        </div>
+                        <p>{personalAlternateScheduleScopeLabel(card.scope)} · PERSONAL · NOT PUBLISHED</p>
+                        <small>SOURCE {card.sourceScheduleId} · FINGERPRINT {card.sourceFingerprint}</small>
+                        {card.isStale ? <strong className="personal-alternate-review">{card.reviewReason}</strong> : null}
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="schedule-advisory-empty">No personal alternate opening matches this exact class and lesson date.</p>
+                )}
+                <p className="personal-alternate-guard">READ-ONLY BROWSER OVERLAY · DOES NOT CHANGE THE SAFE SCHEDULE · DOES NOT RESERVE EQUIPMENT · DOES NOT ADD A PHASE</p>
               </section>
 
               <p className="schedule-advisory-source">PUBLIC SHARED SCHEDULE COPY · NO LIVE SCHEDULE, CALENDAR, OR AUTOMATION CONNECTION</p>
