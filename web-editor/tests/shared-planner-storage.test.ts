@@ -49,7 +49,13 @@ test("loading a shared workspace replaces planner records without touching devic
 
   replaceSharedPlannerStorage(storage as unknown as Storage, {
     classes: { version: 1, activeClassId: null, classes: [] },
-    rotationSchedule: { version: 1, bundle: null, scheduleGroupByClassId: {}, manualWeekByDate: {} },
+    rotationSchedule: {
+      version: 2,
+      bundle: null,
+      scheduleGroupByClassId: {},
+      manualWeekByDate: {},
+      weekAnchors: [{ weekStartDate: "2026-07-27", week: "Even" }],
+    },
     lessonIndex: { version: 2, plans: [nextPlan] },
     operations: {
       version: 3,

@@ -272,7 +272,7 @@ import {
   resolveSafeScheduleDay,
   safeScheduleGroups,
   setSafeScheduleClassGroup,
-  setSafeScheduleManualWeek,
+  setSafeScheduleWeekAnchor,
   suggestSafeScheduleGroup,
   type SafeScheduleParseResult,
   type SafeScheduleStorage,
@@ -2590,7 +2590,9 @@ export default function Home() {
   const [futurePlanDate, setFuturePlanDate] = useState(() => localLessonPlanDate());
   const [futurePlanClassId, setFuturePlanClassId] = useState<string | null>(null);
   const [futurePlanClassChosen, setFuturePlanClassChosen] = useState(false);
-  const [futurePlanManualWeek, setFuturePlanManualWeek] = useState<ScheduleWeek | "">("");
+  const [isScheduleWeekAnchorOpen, setIsScheduleWeekAnchorOpen] = useState(false);
+  const [scheduleWeekAnchorDate, setScheduleWeekAnchorDate] = useState(() => localLessonPlanDate());
+  const [scheduleWeekAnchorWeek, setScheduleWeekAnchorWeek] = useState<ScheduleWeek>("Even");
   const [hydratedPlanId, setHydratedPlanId] = useState<string | null>(null);
   const [isEventEditorOpen, setIsEventEditorOpen] = useState(false);
   const [openStationSearchEventId, setOpenStationSearchEventId] = useState<string | null>(null);
@@ -2843,9 +2845,10 @@ export default function Home() {
         activeLessonPlan.date,
         linkedSafeScheduleGroup,
         safeScheduleStorageState.manualWeekByDate[activeLessonPlan.date] ?? null,
+        safeScheduleStorageState.weekAnchors,
       )
       : null,
-    [activeLessonPlan.date, linkedSafeScheduleGroup, safeScheduleBundle, safeScheduleStorageState.manualWeekByDate],
+    [activeLessonPlan.date, linkedSafeScheduleGroup, safeScheduleBundle, safeScheduleStorageState.manualWeekByDate, safeScheduleStorageState.weekAnchors],
   );
   const futureLocalClass = useMemo(
     () => futurePlanClassId ? localClassById(classStorage, futurePlanClassId) : null,
@@ -2857,8 +2860,7 @@ export default function Home() {
   const futureSuggestedSafeScheduleGroup = futureLocalClass && !futureLinkedSafeScheduleGroup
     ? suggestSafeScheduleGroup(futureLocalClass.group ?? "", safeScheduleGroupOptions)
     : null;
-  const futurePlanResolvedWeek = futurePlanManualWeek
-    || safeScheduleStorageState.manualWeekByDate[futurePlanDate]
+  const futurePlanResolvedWeek = safeScheduleStorageState.manualWeekByDate[futurePlanDate]
     || null;
   const futurePlanSafeScheduleDay = useMemo(
     () => safeScheduleBundle && isLessonPlanDate(futurePlanDate)
@@ -2867,9 +2869,10 @@ export default function Home() {
         futurePlanDate,
         futureLinkedSafeScheduleGroup,
         futurePlanResolvedWeek,
+        safeScheduleStorageState.weekAnchors,
       )
       : null,
-    [futureLinkedSafeScheduleGroup, futurePlanDate, futurePlanResolvedWeek, safeScheduleBundle],
+    [futureLinkedSafeScheduleGroup, futurePlanDate, futurePlanResolvedWeek, safeScheduleBundle, safeScheduleStorageState.weekAnchors],
   );
   const futurePlanTemplate = useMemo(
     () => isLessonPlanDate(futurePlanDate)
@@ -3343,6 +3346,7 @@ export default function Home() {
         date,
         linkedGroup,
         manualWeek ?? scheduleStorage.manualWeekByDate[date] ?? null,
+        scheduleStorage.weekAnchors,
       )
       : null;
     return createLessonScheduleTemplate({
@@ -3490,7 +3494,6 @@ export default function Home() {
     setActivePhaseId(restored.phases[0]?.id ?? "l3-f2");
     setFuturePlanDate(plan.date < lessonToday ? lessonToday : plan.date);
     setFuturePlanClassId(plan.classId);
-    setFuturePlanManualWeek("");
     clearTransientLessonPlanControls();
     const nextMode = isPastLessonPlanDate(plan.date, lessonToday) ? "VIEW" : "EDIT";
     lessonModeRef.current = nextMode;
@@ -3599,7 +3602,6 @@ export default function Home() {
     setFuturePlanDate(lessonToday);
     setFuturePlanClassId(null);
     setFuturePlanClassChosen(false);
-    setFuturePlanManualWeek("");
     setPlanShelf("FUTURE");
     setNotice("CHOOSE THE CLASS FOR TODAY'S NEW LESSON PLAN");
   }
@@ -3628,16 +3630,8 @@ export default function Home() {
       return;
     }
 
-    const manualWeek = futurePlanManualWeek || safeScheduleStorageState.manualWeekByDate[date] || null;
+    const manualWeek = safeScheduleStorageState.manualWeekByDate[date] || null;
     const template = scheduleTemplateForLesson(date, requestedClassId, manualWeek);
-    if (safeScheduleBundle && selectedClass && template.safeScheduleStatus === "manual_week_confirmation_required") {
-      setNotice("CHOOSE ODD OR EVEN BEFORE STARTING THIS FIFTH-WEEK LESSON");
-      return;
-    }
-    if (futurePlanManualWeek) {
-      const withWeek = setSafeScheduleManualWeek(safeScheduleStorageState, date, futurePlanManualWeek);
-      if (!withWeek || !persistSafeScheduleStorage(withWeek)) return;
-    }
 
     const savedIndex = persistCurrentLessonForSwitch();
     if (!savedIndex) return;
@@ -7526,12 +7520,27 @@ export default function Home() {
       : `FULL-SCHEDULE GROUP LINK CLEARED · LOCAL CLASS SCHEDULE REMAINS THE FALLBACK${synchronized ? ` · ${synchronized.template.phases.length} ACTIVE LESSON PHASE${synchronized.template.phases.length === 1 ? "" : "S"} SYNCED` : ""}`);
   }
 
-  function confirmSafeScheduleWeek(week: ScheduleWeek) {
-    const next = setSafeScheduleManualWeek(safeScheduleStorageState, activeLessonPlan.date, week);
-    if (!next || !persistSafeScheduleStorage(next)) return;
+  function openSafeScheduleWeekAnchor() {
+    setScheduleWeekAnchorDate(activeLessonPlan.date);
+    setScheduleWeekAnchorWeek(safeScheduleDay?.resolvedWeek ?? "Even");
+    setIsScheduleWeekAnchorOpen(true);
+  }
+
+  function saveSafeScheduleWeekAnchor() {
+    const next = setSafeScheduleWeekAnchor(
+      safeScheduleStorageState,
+      scheduleWeekAnchorDate,
+      scheduleWeekAnchorWeek,
+    );
+    if (!next) {
+      setNotice("ROTATION ANCHOR WAS NOT SAVED · CHOOSE A VALID DATE AND KEEP THE CONFIRMED JULY 27 WEEK EVEN");
+      return;
+    }
+    if (!persistSafeScheduleStorage(next)) return;
     const synchronized = syncActiveLessonForScheduleChange(next);
     setOpenAreaSelectionByKey({});
-    setNotice(`${week.toUpperCase()} WEEK CONFIRMED FOR ${activeLessonDateLabel.toUpperCase()} · ${synchronized ? `${synchronized.template.phases.length} SCHEDULE PHASE${synchronized.template.phases.length === 1 ? "" : "S"} SYNCED` : "SAVED IN THIS BROWSER"}`);
+    setIsScheduleWeekAnchorOpen(false);
+    setNotice(`${scheduleWeekAnchorWeek.toUpperCase()} ROTATION ANCHORED FOR THE WEEK CONTAINING ${formatLessonPlanDate(scheduleWeekAnchorDate).toUpperCase()} · ${synchronized ? `${synchronized.template.phases.length} SCHEDULE PHASE${synchronized.template.phases.length === 1 ? "" : "S"} SYNCED` : "SHARED CYCLE SAVED"}`);
   }
 
   function confirmRemoveLocalClass() {
@@ -7968,7 +7977,6 @@ export default function Home() {
           setFuturePlanDate(lessonToday);
           setFuturePlanClassId(null);
           setFuturePlanClassChosen(false);
-          setFuturePlanManualWeek("");
           setIsClassManagerOpen(false);
           setRemoveClassCandidate(null);
           setPlanShelf((current) => current === "FUTURE" ? null : "FUTURE");
@@ -8101,7 +8109,7 @@ export default function Home() {
             }}>
               <label>
                 LESSON DATE
-                <input name="future-lesson-date" type="date" min={lessonToday} value={futurePlanDate} onInput={(event) => setFuturePlanDate(event.currentTarget.value)} onChange={(event) => { setFuturePlanDate(event.currentTarget.value); setFuturePlanManualWeek(""); }} />
+                <input name="future-lesson-date" type="date" min={lessonToday} value={futurePlanDate} onInput={(event) => setFuturePlanDate(event.currentTarget.value)} onChange={(event) => setFuturePlanDate(event.currentTarget.value)} />
               </label>
               <label>
                 CLASS / TYPE
@@ -8113,7 +8121,6 @@ export default function Home() {
                     const selected = event.currentTarget.value;
                     setFuturePlanClassId(selected === FUTURE_SAMPLE_CLASS_VALUE ? null : selected || null);
                     setFuturePlanClassChosen(Boolean(selected));
-                    setFuturePlanManualWeek("");
                   }}
                 >
                   <option value="" disabled>CHOOSE A CLASS / TYPE</option>
@@ -8127,14 +8134,6 @@ export default function Home() {
                   <button type="button" onClick={() => linkLocalClassToSafeSchedule(futureLocalClass.id, futureSuggestedSafeScheduleGroup)}>LINK {futureSuggestedSafeScheduleGroup} →</button>
                 </div>
               ) : null}
-              {futurePlanSafeScheduleDay?.status === "manual_week_confirmation_required" ? <label>
-                ROTATION WEEK
-                <select required value={futurePlanManualWeek || safeScheduleStorageState.manualWeekByDate[futurePlanDate] || ""} onChange={(event) => setFuturePlanManualWeek(event.currentTarget.value === "Odd" || event.currentTarget.value === "Even" ? event.currentTarget.value : "")}>
-                  <option value="">CHOOSE ODD OR EVEN</option>
-                  <option value="Odd">ODD</option>
-                  <option value="Even">EVEN</option>
-                </select>
-              </label> : null}
               <p>{!futurePlanClassChosen
                 ? "Choose a class or the sample type. The planner will not assume your active class."
                 : futurePlanTemplate.source === "safe-schedule"
@@ -8198,11 +8197,39 @@ export default function Home() {
                 {suggestedSafeScheduleGroup && activeLocalClass ? <button type="button" className="schedule-advisory-link" onClick={() => linkLocalClassToSafeSchedule(activeLocalClass.id, suggestedSafeScheduleGroup)}>REVIEW LINK {suggestedSafeScheduleGroup} →</button> : null}
               </div>
 
-              {safeScheduleDay?.status === "manual_week_confirmation_required" ? (
-                <section className="schedule-week-confirm" aria-label="Confirm Odd or Even schedule week">
-                  <b>FIFTH SCHEDULE WEEK · CHOOSE ROTATION</b>
-                  <span>The planner will not guess Odd or Even for {activeLessonDateLabel}.</span>
-                  <div><button type="button" onClick={() => confirmSafeScheduleWeek("Odd")}>USE ODD</button><button type="button" onClick={() => confirmSafeScheduleWeek("Even")}>USE EVEN</button></div>
+              {safeScheduleDay ? (
+                <section className="schedule-week-cycle" aria-label="Shared Odd and Even schedule week">
+                  <div className="schedule-week-cycle-status">
+                    <div>
+                      <b>{safeScheduleDay.resolvedWeek?.toUpperCase()} WEEK</b>
+                      <span>WEEK OF {formatLessonPlanDate(safeScheduleDay.weekStartDate).toUpperCase()}</span>
+                    </div>
+                    <button type="button" onClick={openSafeScheduleWeekAnchor}>RE-ANCHOR</button>
+                  </div>
+                  <small>{safeScheduleDay.weekResolutionSource === "legacy_exact_date"
+                    ? `LEGACY EXACT-DATE CONFIRMATION · THE SHARED CYCLE OTHERWISE USES ${safeScheduleDay.weekAnchor.week.toUpperCase()} FROM ${formatLessonPlanDate(safeScheduleDay.weekAnchor.weekStartDate).toUpperCase()}`
+                    : `CONTINUOUS MONDAY CYCLE · ${safeScheduleDay.weekAnchor.week.toUpperCase()} ANCHOR FROM ${formatLessonPlanDate(safeScheduleDay.weekAnchor.weekStartDate).toUpperCase()}`}</small>
+                  {isScheduleWeekAnchorOpen ? (
+                    <form className="schedule-week-anchor-form" onSubmit={(event) => {
+                      event.preventDefault();
+                      saveSafeScheduleWeekAnchor();
+                    }}>
+                      <b>SHARED ROTATION ANCHOR</b>
+                      <span>Choose any date in the changed week. That Monday starts the new Odd/Even cycle until another anchor.</span>
+                      <label>
+                        DATE IN WEEK
+                        <input type="date" required value={scheduleWeekAnchorDate} onChange={(event) => setScheduleWeekAnchorDate(event.currentTarget.value)} />
+                      </label>
+                      <label>
+                        ROTATION
+                        <select value={scheduleWeekAnchorWeek} onChange={(event) => setScheduleWeekAnchorWeek(event.currentTarget.value === "Odd" ? "Odd" : "Even")}>
+                          <option value="Odd">ODD</option>
+                          <option value="Even">EVEN</option>
+                        </select>
+                      </label>
+                      <div><button type="submit">SAVE SHARED ANCHOR</button><button type="button" onClick={() => setIsScheduleWeekAnchorOpen(false)}>CANCEL</button></div>
+                    </form>
+                  ) : null}
                 </section>
               ) : null}
 
@@ -8250,7 +8277,7 @@ export default function Home() {
 
               <section className="schedule-advisory-section optional-openings" aria-label="Optional schedule openings">
                 <div className="schedule-advisory-section-title"><b>SCHEDULED OPEN EVENTS</b><span>{usesSafeScheduleDay ? safeScheduleDay.openBlocks.length : 0} BLOCKS</span></div>
-                {hasMissingActiveClass ? <p className="schedule-advisory-empty">The saved class record is unavailable, so no open-station availability can be checked.</p> : !safeScheduleBundle ? <p className="schedule-advisory-empty">Import the privacy-safe full gym schedule to calculate which approved areas are free.</p> : !activeLocalClass ? <p className="schedule-advisory-empty">Select a local class, then link its exact imported schedule group.</p> : !linkedSafeScheduleGroup ? <p className="schedule-advisory-empty">Open Local Classes and link this class to an exact full-schedule group.</p> : safeScheduleDay?.status === "manual_week_confirmation_required" ? <p className="schedule-advisory-empty">Confirm Odd or Even above before checking scheduled Open events.</p> : !usesSafeScheduleDay ? <p className="schedule-advisory-empty">No full-schedule availability can be confirmed for this group and date.</p> : !safeScheduleDay.openBlocks.length ? <p className="schedule-advisory-empty">NO SCHEDULED OPEN BLOCK FOR THIS GROUP/DATE.</p> : (
+                {hasMissingActiveClass ? <p className="schedule-advisory-empty">The saved class record is unavailable, so no open-station availability can be checked.</p> : !safeScheduleBundle ? <p className="schedule-advisory-empty">Import the privacy-safe full gym schedule to calculate which approved areas are free.</p> : !activeLocalClass ? <p className="schedule-advisory-empty">Select a local class, then link its exact imported schedule group.</p> : !linkedSafeScheduleGroup ? <p className="schedule-advisory-empty">Open Local Classes and link this class to an exact full-schedule group.</p> : !usesSafeScheduleDay ? <p className="schedule-advisory-empty">No full-schedule availability can be confirmed for this group and date.</p> : !safeScheduleDay.openBlocks.length ? <p className="schedule-advisory-empty">NO SCHEDULED OPEN BLOCK FOR THIS GROUP/DATE.</p> : (
                   <div className="schedule-open-list">
                     {safeScheduleDay.openBlocks.map((block) => {
                       const availability = openAvailabilityByBookingId.get(block.bookingId);

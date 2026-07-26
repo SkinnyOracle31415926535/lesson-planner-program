@@ -10,11 +10,21 @@ import { gymPanelLayout } from "./gym-layout";
 
 export const SAFE_SCHEDULE_FORMAT = "lesson-planner-safe-schedule";
 export const SAFE_SCHEDULE_VERSION = 1;
-export const SAFE_SCHEDULE_STORAGE_VERSION = 1;
+export const SAFE_SCHEDULE_STORAGE_VERSION = 2;
 export const MAX_SAFE_SCHEDULE_FILE_BYTES = 2 * 1024 * 1024;
 
 export type ScheduleWeek = "Odd" | "Even";
 export type ScheduleDay = "Mon" | "Tues" | "Wed" | "Thurs" | "Fri" | "Sat" | "Sun";
+export type SafeScheduleWeekAnchor = {
+  weekStartDate: string;
+  week: ScheduleWeek;
+};
+
+/** Ryan confirmed this complete Monday–Sunday week is Even. */
+export const DEFAULT_SAFE_SCHEDULE_WEEK_ANCHOR: SafeScheduleWeekAnchor = {
+  weekStartDate: "2026-07-27",
+  week: "Even",
+};
 
 export type SafeSchedulePrivacy = {
   studentRecordsIncluded: false;
@@ -89,6 +99,7 @@ export type SafeScheduleStorage = {
   bundle: SafeScheduleBundleV1 | null;
   scheduleGroupByClassId: Record<string, string>;
   manualWeekByDate: Record<string, ScheduleWeek>;
+  weekAnchors: SafeScheduleWeekAnchor[];
 };
 
 export type SafeScheduleParseResult =
@@ -101,6 +112,9 @@ export type SafeScheduleDayResolution = {
   day: ScheduleDay;
   monthWeekOrdinal: number;
   resolvedWeek: ScheduleWeek | null;
+  weekStartDate: string;
+  weekAnchor: SafeScheduleWeekAnchor;
+  weekResolutionSource: "anchored_cycle" | "legacy_exact_date";
   group: string | null;
   allDayBlocks: SafeScheduleTimeBlock[];
   groupBlocks: SafeScheduleTimeBlock[];
@@ -150,13 +164,18 @@ const TIME_BLOCK_KEYS = [
   "eventLabel", "equipment", "activityType", "confidence", "reviewStatus",
 ] as const;
 const COLLISION_KEYS = ["warningCount", "statusCounts"] as const;
-const STORAGE_KEYS = ["version", "bundle", "scheduleGroupByClassId", "manualWeekByDate"] as const;
+const LEGACY_STORAGE_KEYS = ["version", "bundle", "scheduleGroupByClassId", "manualWeekByDate"] as const;
+const STORAGE_KEYS = [...LEGACY_STORAGE_KEYS, "weekAnchors"] as const;
+const WEEK_ANCHOR_KEYS = ["weekStartDate", "week"] as const;
 const DAY_LABELS: ScheduleDay[] = ["Mon", "Tues", "Wed", "Thurs", "Fri", "Sat", "Sun"];
 const ACTIVITY_TYPES: SafeScheduleTimeBlock["activityType"][] = ["rotation", "open", "support", "conditioning", "warmup"];
 const CONFIDENCE_VALUES: SafeScheduleTimeBlock["confidence"][] = ["high", "medium", "low"];
 const REVIEW_STATUS_VALUES: SafeScheduleTimeBlock["reviewStatus"][] = ["auto_extracted", "color_inferred", "color_inferred_needs_review", "needs_review"];
 const SAFE_LOCAL_ID = /^[a-z0-9][a-z0-9_-]*$/i;
 const MAX_TEXT_LENGTH = 240;
+const MAX_WEEK_ANCHORS = 260;
+const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
+const MILLISECONDS_PER_WEEK = 7 * MILLISECONDS_PER_DAY;
 
 class ScheduleValidationError extends Error {}
 
@@ -403,15 +422,56 @@ export function isSafeScheduleBundle(value: unknown): value is SafeScheduleBundl
   }
 }
 
+function defaultSafeScheduleWeekAnchors(): SafeScheduleWeekAnchor[] {
+  return [{ ...DEFAULT_SAFE_SCHEDULE_WEEK_ANCHOR }];
+}
+
+function normalizeWeekAnchors(value: unknown): SafeScheduleWeekAnchor[] {
+  if (!Array.isArray(value) || !value.length || value.length > MAX_WEEK_ANCHORS) {
+    throw new ScheduleValidationError(`weekAnchors must contain between 1 and ${MAX_WEEK_ANCHORS} entries.`);
+  }
+  const dates = new Set<string>();
+  const anchors = value.map<SafeScheduleWeekAnchor>((entry, index) => {
+    const path = `weekAnchors[${index}]`;
+    const anchor = requireRecord(entry, path);
+    requireOnlyKeys(anchor, WEEK_ANCHOR_KEYS, path);
+    const weekStartDate = isoDateParts(anchor.weekStartDate, `${path}.weekStartDate`).iso;
+    if (scheduleWeekStartDate(weekStartDate) !== weekStartDate) {
+      throw new ScheduleValidationError(`${path}.weekStartDate must be a Monday.`);
+    }
+    const week = anchor.week;
+    if (week !== "Odd" && week !== "Even") {
+      throw new ScheduleValidationError(`${path}.week must be Odd or Even.`);
+    }
+    if (dates.has(weekStartDate)) {
+      throw new ScheduleValidationError(`weekAnchors cannot repeat Monday ${weekStartDate}.`);
+    }
+    dates.add(weekStartDate);
+    return { weekStartDate, week };
+  }).sort((first, second) => first.weekStartDate.localeCompare(second.weekStartDate));
+  const baseline = anchors.find((anchor) => anchor.weekStartDate === DEFAULT_SAFE_SCHEDULE_WEEK_ANCHOR.weekStartDate);
+  if (baseline?.week !== DEFAULT_SAFE_SCHEDULE_WEEK_ANCHOR.week) {
+    throw new ScheduleValidationError("weekAnchors must retain the confirmed July 27, 2026 Even baseline.");
+  }
+  return anchors;
+}
+
 export function emptySafeScheduleStorage(): SafeScheduleStorage {
-  return { version: SAFE_SCHEDULE_STORAGE_VERSION, bundle: null, scheduleGroupByClassId: {}, manualWeekByDate: {} };
+  return {
+    version: SAFE_SCHEDULE_STORAGE_VERSION,
+    bundle: null,
+    scheduleGroupByClassId: {},
+    manualWeekByDate: {},
+    weekAnchors: defaultSafeScheduleWeekAnchors(),
+  };
 }
 
 export function normalizeSafeScheduleStorage(value: unknown): SafeScheduleStorage | null {
   try {
     const storage = requireRecord(value, "Safe schedule storage");
-    requireOnlyKeys(storage, STORAGE_KEYS, "Safe schedule storage");
-    if (storage.version !== SAFE_SCHEDULE_STORAGE_VERSION) return null;
+    const isLegacy = storage.version === 1;
+    if (!isLegacy && storage.version !== SAFE_SCHEDULE_STORAGE_VERSION) return null;
+    requireOnlyKeys(storage, isLegacy ? LEGACY_STORAGE_KEYS : STORAGE_KEYS, "Safe schedule storage");
     const bundle = storage.bundle === null ? null : normalizeSafeScheduleBundle(storage.bundle);
     const mappingsValue = requireRecord(storage.scheduleGroupByClassId, "scheduleGroupByClassId");
     const manualValue = requireRecord(storage.manualWeekByDate, "manualWeekByDate");
@@ -429,14 +489,25 @@ export function normalizeSafeScheduleStorage(value: unknown): SafeScheduleStorag
       if (week !== "Odd" && week !== "Even") return null;
       manualWeekByDate[date] = week;
     }
-    return { version: SAFE_SCHEDULE_STORAGE_VERSION, bundle, scheduleGroupByClassId, manualWeekByDate };
+    const weekAnchors = isLegacy
+      ? defaultSafeScheduleWeekAnchors()
+      : normalizeWeekAnchors(storage.weekAnchors);
+    return {
+      version: SAFE_SCHEDULE_STORAGE_VERSION,
+      bundle,
+      scheduleGroupByClassId,
+      manualWeekByDate,
+      weekAnchors,
+    };
   } catch {
     return null;
   }
 }
 
 export function isSafeScheduleStorage(value: unknown): value is SafeScheduleStorage {
-  return normalizeSafeScheduleStorage(value) !== null;
+  return isRecord(value)
+    && value.version === SAFE_SCHEDULE_STORAGE_VERSION
+    && normalizeSafeScheduleStorage(value) !== null;
 }
 
 export function replaceSafeScheduleBundle(current: SafeScheduleStorage, bundle: SafeScheduleBundleV1): SafeScheduleStorage {
@@ -449,6 +520,7 @@ export function replaceSafeScheduleBundle(current: SafeScheduleStorage, bundle: 
       Object.entries(current.scheduleGroupByClassId).filter(([, group]) => validGroups.has(group)),
     ),
     manualWeekByDate: { ...current.manualWeekByDate },
+    weekAnchors: current.weekAnchors.map((anchor) => ({ ...anchor })),
   };
 }
 
@@ -471,6 +543,33 @@ export function setSafeScheduleManualWeek(storage: SafeScheduleStorage, date: st
   if (week === null) delete manualWeekByDate[date];
   else manualWeekByDate[date] = week;
   return { ...storage, manualWeekByDate };
+}
+
+export function setSafeScheduleWeekAnchor(
+  storage: SafeScheduleStorage,
+  date: string,
+  week: ScheduleWeek,
+): SafeScheduleStorage | null {
+  if (week !== "Odd" && week !== "Even") return null;
+  let weekStartDate: string;
+  try {
+    weekStartDate = scheduleWeekStartDate(date);
+  } catch {
+    return null;
+  }
+  if (weekStartDate === DEFAULT_SAFE_SCHEDULE_WEEK_ANCHOR.weekStartDate
+    && week !== DEFAULT_SAFE_SCHEDULE_WEEK_ANCHOR.week) {
+    return null;
+  }
+  const weekAnchors = storage.weekAnchors
+    .filter((anchor) => anchor.weekStartDate !== weekStartDate)
+    .concat({ weekStartDate, week })
+    .sort((first, second) => first.weekStartDate.localeCompare(second.weekStartDate));
+  const manualWeekByDate = Object.fromEntries(
+    Object.entries(storage.manualWeekByDate)
+      .filter(([manualDate]) => scheduleWeekStartDate(manualDate) !== weekStartDate),
+  );
+  return normalizeSafeScheduleStorage({ ...storage, weekAnchors, manualWeekByDate });
 }
 
 export function safeScheduleGroups(bundle: SafeScheduleBundleV1): string[] {
@@ -499,6 +598,55 @@ function scheduleDayForDate(date: string): ScheduleDay {
   return (["Sun", "Mon", "Tues", "Wed", "Thurs", "Fri", "Sat"] as const)[sundayFirst];
 }
 
+function utcTimeForIsoDate(date: string): number {
+  const { year, month, day } = isoDateParts(date, "date");
+  const value = new Date(0);
+  value.setUTCHours(0, 0, 0, 0);
+  value.setUTCFullYear(year, month - 1, day);
+  return value.getTime();
+}
+
+function isoDateFromUtcTime(time: number): string {
+  return new Date(time).toISOString().slice(0, 10);
+}
+
+/** Returns the Monday that contains a strict YYYY-MM-DD calendar date. */
+export function scheduleWeekStartDate(date: string): string {
+  const time = utcTimeForIsoDate(date);
+  const sundayFirst = new Date(time).getUTCDay();
+  const daysSinceMonday = (sundayFirst + 6) % 7;
+  return isoDateFromUtcTime(time - (daysSinceMonday * MILLISECONDS_PER_DAY));
+}
+
+export type SafeScheduleWeekCycleResolution = {
+  week: ScheduleWeek;
+  weekStartDate: string;
+  anchor: SafeScheduleWeekAnchor;
+};
+
+/**
+ * Resolves a continuous Monday-based Odd/Even cycle. The latest anchor on or
+ * before the requested week governs it; the earliest anchor also extrapolates
+ * backward so dates before July 27, 2026 remain deterministic.
+ */
+export function resolveSafeScheduleWeekCycle(
+  date: string,
+  weekAnchors: readonly SafeScheduleWeekAnchor[] = defaultSafeScheduleWeekAnchors(),
+): SafeScheduleWeekCycleResolution {
+  const normalizedAnchors = normalizeWeekAnchors(weekAnchors);
+  const weekStartDate = scheduleWeekStartDate(date);
+  const anchor = [...normalizedAnchors]
+    .reverse()
+    .find((candidate) => candidate.weekStartDate <= weekStartDate)
+    ?? normalizedAnchors[0];
+  const weekDistance = (utcTimeForIsoDate(weekStartDate) - utcTimeForIsoDate(anchor.weekStartDate))
+    / MILLISECONDS_PER_WEEK;
+  const week = Math.abs(weekDistance) % 2 === 0
+    ? anchor.week
+    : anchor.week === "Odd" ? "Even" : "Odd";
+  return { week, weekStartDate, anchor: { ...anchor } };
+}
+
 export function scheduleMonthWeekOrdinal(date: string): number {
   const { year, month, day } = isoDateParts(date, "date");
   const firstSundayFirst = new Date(Date.UTC(year, month - 1, 1)).getUTCDay();
@@ -511,37 +659,36 @@ export function resolveSafeScheduleDay(
   date: string,
   group: string | null,
   manualWeek: ScheduleWeek | null = null,
+  weekAnchors: readonly SafeScheduleWeekAnchor[] = defaultSafeScheduleWeekAnchors(),
 ): SafeScheduleDayResolution {
   isoDateParts(date, "date");
   const day = scheduleDayForDate(date);
   const monthWeekOrdinal = scheduleMonthWeekOrdinal(date);
-  const rule = bundle.schedule.calendarWeekRule;
-  let resolvedWeek: ScheduleWeek | null = null;
-  if (monthWeekOrdinal >= 5 && rule.weekFiveOrLaterRequiresManualConfirmation) resolvedWeek = manualWeek;
-  else if (rule.oddWeekOrdinals.includes(monthWeekOrdinal)) resolvedWeek = "Odd";
-  else if (rule.evenWeekOrdinals.includes(monthWeekOrdinal)) resolvedWeek = "Even";
-  else if (manualWeek) resolvedWeek = manualWeek;
+  const cycle = resolveSafeScheduleWeekCycle(date, weekAnchors);
+  const usesLegacyExactDate = manualWeek !== null && manualWeek !== cycle.week;
+  const resolvedWeek = usesLegacyExactDate ? manualWeek : cycle.week;
   const inRange = (!bundle.schedule.effectiveStart || date >= bundle.schedule.effectiveStart)
     && (!bundle.schedule.effectiveEnd || date <= bundle.schedule.effectiveEnd);
-  const allDayBlocks = inRange && resolvedWeek
+  const allDayBlocks = inRange
     ? bundle.schedule.timeBlocks.filter((block) => block.day === day && block.week === resolvedWeek)
     : [];
   const groupBlocks = group ? allDayBlocks.filter((block) => block.group === group) : [];
   const status: SafeScheduleDayResolution["status"] = !inRange
     ? "outside_schedule_range"
-    : !resolvedWeek && rule.weekFiveOrLaterRequiresManualConfirmation
-      ? "manual_week_confirmation_required"
-      : !group
-        ? "group_required"
-        : !groupBlocks.length
-          ? "no_blocks_for_group"
-          : "ready";
+    : !group
+      ? "group_required"
+      : !groupBlocks.length
+        ? "no_blocks_for_group"
+        : "ready";
   return {
     status,
     date,
     day,
     monthWeekOrdinal,
     resolvedWeek,
+    weekStartDate: cycle.weekStartDate,
+    weekAnchor: cycle.anchor,
+    weekResolutionSource: usesLegacyExactDate ? "legacy_exact_date" : "anchored_cycle",
     group,
     allDayBlocks,
     groupBlocks,
