@@ -83,6 +83,10 @@ import {
   sharedPhotoLibraryManagerUrl,
 } from "./shared-photo-library";
 import {
+  canAutoSelectPhotoAreas,
+  suggestedPhotoAreasForPhase,
+} from "./phase-photo-areas";
+import {
   bootstrapSharedPlannerWorkspace,
   fetchSharedPlannerWorkspace,
   fetchSharedPlannerWorkspaceManifest,
@@ -3050,6 +3054,16 @@ export default function Home() {
     ],
     [areaCatalog, customBoards],
   );
+  const suggestedActivePhotoAreas = useMemo(
+    () => suggestedPhotoAreasForPhase(activePhase.title, availableZones),
+    [activePhase.title, availableZones],
+  );
+  const activePhotoAreaAliases = activePhase.zones.map((zone) => zone.alias);
+  const suggestedPhotoAreaAliases = suggestedActivePhotoAreas.map((zone) => zone.alias);
+  const activePhotoAreaIds = new Set(activePhase.zones.map((zone) => zone.id));
+  const usesSuggestedPhotoAreas = suggestedActivePhotoAreas.length > 0
+    && suggestedActivePhotoAreas.length === activePhotoAreaIds.size
+    && suggestedActivePhotoAreas.every((zone) => activePhotoAreaIds.has(zone.id));
   const openScheduleZones = useMemo(
     () => zoneCatalog
       .filter((zone) => !isBuiltInAreaHidden(areaCatalog, zone.id) && Boolean(gymPanelLayout(zone.id)))
@@ -4099,6 +4113,23 @@ export default function Home() {
     if (!hasLoadedCustomBoards || !hasLoadedAreaCatalog || isPastActivePlan) return;
     setLessonPhases((phases) => refreshAreaZoneMetadata(phases));
   }, [areaCatalog, customBoards, hasLoadedAreaCatalog, hasLoadedCustomBoards, isPastActivePlan]);
+
+  useEffect(() => {
+    if (!hasLoadedCustomBoards || !hasLoadedAreaCatalog || isPastActivePlan || !availableZones.length) return;
+    const hasUntouchedMatchingPhase = lessonPhases.some((phase) => (
+      canAutoSelectPhotoAreas(phase)
+      && suggestedPhotoAreasForPhase(phase.title, availableZones).length > 0
+    ));
+    if (!hasUntouchedMatchingPhase) return;
+    setIsReady(false);
+    setLessonPhases((phases) => phases.map((phase) => {
+      if (!canAutoSelectPhotoAreas(phase)) return phase;
+      const suggestedAreas = suggestedPhotoAreasForPhase(phase.title, availableZones);
+      return suggestedAreas.length
+        ? { ...phase, zones: suggestedAreas.map(copyZone) }
+        : phase;
+    }));
+  }, [availableZones, hasLoadedAreaCatalog, hasLoadedCustomBoards, isPastActivePlan, lessonPhases]);
 
   useEffect(() => {
     if (!hasLoadedCustomBoards) return;
@@ -5548,6 +5579,29 @@ export default function Home() {
     const catalogZone = availableZones.find((zone) => zone.id === zoneId);
     if (!catalogZone) return;
     toggleZonePanelForActivePhase(catalogZone);
+  }
+
+  function useSuggestedPhotoAreasForActivePhase() {
+    if (!suggestedActivePhotoAreas.length) return;
+    const suggestedIds = new Set(suggestedActivePhotoAreas.map((zone) => zone.id));
+    updateActivePhase((phase) => {
+      const existingById = new Map([
+        ...phase.zones,
+        ...(phase.parkedZones ?? []),
+      ].map((zone) => [zone.id, zone]));
+      const parkedById = new Map((phase.parkedZones ?? [])
+        .filter((zone) => !suggestedIds.has(zone.id))
+        .map((zone) => [zone.id, copyZone(zone)]));
+      phase.zones
+        .filter((zone) => !suggestedIds.has(zone.id))
+        .forEach((zone) => parkedById.set(zone.id, copyZone(zone)));
+      return {
+        ...phase,
+        zones: suggestedActivePhotoAreas.map((zone) => copyZone(existingById.get(zone.id) ?? zone)),
+        parkedZones: [...parkedById.values()],
+      };
+    });
+    setNotice(`AUTOMATIC PHOTO AREAS APPLIED · ${suggestedPhotoAreaAliases.join(" + ")}`);
   }
 
   function makeLessonSnapshot(card: LessonCard): LessonCard {
@@ -8770,8 +8824,25 @@ export default function Home() {
                 <div className="zone-picker">
                   <div className="zone-picker-copy">
                     <b>PHOTO AREAS FOR THIS PHASE</b>
-                    <span>Choose F2, F3, or an area you created. You can select F2 and F3 together; selecting an area never places an idea by itself.</span>
+                    <span>New, untouched phases automatically use their matching photo areas. Your saved choices always stay put until you change them.</span>
                   </div>
+                  <div className="zone-picker-summary" aria-live="polite">
+                    <b>{activePhotoAreaAliases.length ? `ON THIS PHASE · ${activePhotoAreaAliases.join(" + ")}` : "NO PHOTO AREA SELECTED"}</b>
+                    <span>{suggestedPhotoAreaAliases.length
+                      ? usesSuggestedPhotoAreas
+                        ? "AUTOMATIC MATCH"
+                        : `AUTOMATIC MATCH: ${suggestedPhotoAreaAliases.join(" + ")}`
+                      : "NO AUTOMATIC MATCH YET · EXPAND TO CHOOSE PHOTO AREAS"}</span>
+                  </div>
+                  <details className="zone-picker-details">
+                    <summary>EXPAND PHOTO AREAS FOR THIS PHASE</summary>
+                    <div className="zone-picker-expanded">
+                      {suggestedPhotoAreaAliases.length && !usesSuggestedPhotoAreas ? (
+                        <div className="zone-picker-suggestion">
+                          <div><b>AUTOMATIC MATCH: {suggestedPhotoAreaAliases.join(" + ")}</b><span>Use it to switch this phase. Your current areas remain saved off this phase.</span></div>
+                          <button type="button" onClick={useSuggestedPhotoAreasForActivePhase}>USE AUTOMATIC AREAS</button>
+                        </div>
+                      ) : null}
                   <div className="zone-picker-buttons" aria-label="Select your photo areas for this phase">
                     {availableZones.map((zone) => {
                       const selected = activePhase.zones.some((candidate) => candidate.id === zone.id);
@@ -8862,6 +8933,8 @@ export default function Home() {
                       <div><button type="button" onClick={() => setIsAddingCustomBoard(false)}>CANCEL</button><button type="submit">SAVE PHOTO AREA</button></div>
                     </form>
                   ) : null}
+                    </div>
+                  </details>
                   {activePhase.mode === "TEXT" && activePhase.zones.length ? (
                     <p className="phase-structure-hint">{activePhase.zones.length} selected panel{activePhase.zones.length === 1 ? " is" : "s are"} safely hidden while this phase is TEXT.</p>
                   ) : null}
