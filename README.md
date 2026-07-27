@@ -2,6 +2,10 @@
 
 Private, local-first lesson planning for gymnastics coaching: an iPad-first app with a private Mac editor, a visual gym-zone planner, a drill/activity library, offline media, and a bridge to the existing gymnastics vault.
 
+## LINK
+https://skinnyoracle31415926535.github.io/lesson-planner-program/
+
+
 ## Current status
 
 **Foundation implementation is underway.** The project now has a local-only Mac editor, a native SwiftUI iPad prototype, shared contracts, and a read-only vault bridge. Both prototypes have a usable local library layer; the bridge can safely resolve a class day from the schedule snapshot and export detailed drill text/variants without media or roster data. No production sync, TestFlight build, or live vault write exists yet.
