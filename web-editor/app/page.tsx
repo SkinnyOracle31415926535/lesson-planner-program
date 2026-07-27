@@ -8582,11 +8582,7 @@ export default function Home() {
             <div className="window-title schedule-phase-window-title"><b>YOUR LESSON PHASES</b><div><span>{isPastActivePlan ? "PAST SNAPSHOT · READ-ONLY" : "PUBLIC SHARED DRAFT"}</span>{mode === "EDIT" && !isPastActivePlan ? <button type="button" onClick={syncCurrentLessonSchedule}>SYNC DAY →</button> : null}{mode === "EDIT" && !isPastActivePlan ? <button type="button" onClick={() => { setIsEventEditorOpen(true); scrollToPlannerSection("lesson-plan"); }}>EDIT EVENTS →</button> : null}</div></div>
             <div className="window-body schedule-list">
               {lessonPhases.map((phase) => {
-                const eventName = eventNameForPhase(phase);
                 const phaseName = phase.title.trim();
-                const phaseDetail = phaseName && phaseName.toLocaleLowerCase() !== eventName.toLocaleLowerCase()
-                  ? `${phaseName} · `
-                  : "";
                 return (
                   <button
                     key={phase.id}
@@ -8594,7 +8590,7 @@ export default function Home() {
                     onClick={() => setActivePhaseId(phase.id)}
                   >
                     <time>{displayLessonTimeRange(phase.time)}</time>
-                    <span><b>{eventName}</b><small>{phaseDetail}{phase.mode} · {phase.mode === "TEXT" ? "text plan" : phase.zones.length ? phase.zones.map((zone) => zone.alias).join(" + ") : "choose stations"}</small></span>
+                    <span><b>{phaseName || "LESSON PHASE"}</b><small>{phase.mode} · {phase.mode === "TEXT" ? "text plan" : phase.zones.length ? phase.zones.map((zone) => zone.alias).join(" + ") : "choose stations"}</small></span>
                   </button>
                 );
               })}
