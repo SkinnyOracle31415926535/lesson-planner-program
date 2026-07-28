@@ -2021,7 +2021,7 @@ async function ensureSharedIdeaLibraryMedia(state: SharedIdeaLibraryState): Prom
     const remote = await fetchSharedIdeaMediaMetadata(mediaId);
     if (remote) {
       if (remote.ideaId !== reference.id || remote.kind !== reference.mediaKind) {
-        throw new Error("A public Idea Library attachment ID belongs to different media.");
+        throw new Error("A shared Idea Library attachment ID belongs to different media.");
       }
       continue;
     }
@@ -2653,12 +2653,12 @@ export default function Home() {
   const [hydratedPlanId, setHydratedPlanId] = useState<string | null>(null);
   const [isEventEditorOpen, setIsEventEditorOpen] = useState(false);
   const [openStationSearchEventId, setOpenStationSearchEventId] = useState<string | null>(null);
-  const [notice, setNotice] = useState("PUBLIC SHARED WORKSPACE · CONNECTING");
-  const [sharedPlannerSyncStatus, setSharedPlannerSyncStatus] = useState("CONNECTING PUBLIC WORKSPACE");
+  const [notice, setNotice] = useState("RYAN-ONLY SHARED WORKSPACE · CONNECTING");
+  const [sharedPlannerSyncStatus, setSharedPlannerSyncStatus] = useState("CONNECTING TO RYAN’S WORKSPACE");
   const [isSharedPlannerSyncReady, setIsSharedPlannerSyncReady] = useState(false);
   const [hasSharedPlannerSyncConflict, setHasSharedPlannerSyncConflict] = useState(false);
   const [sharedPlannerSyncRetry, setSharedPlannerSyncRetry] = useState(0);
-  const [sharedIdeaLibrarySyncStatus, setSharedIdeaLibrarySyncStatus] = useState("CONNECTING PUBLIC IDEAS");
+  const [sharedIdeaLibrarySyncStatus, setSharedIdeaLibrarySyncStatus] = useState("CONNECTING TO RYAN’S IDEAS");
   const [isSharedIdeaLibrarySyncReady, setIsSharedIdeaLibrarySyncReady] = useState(false);
   const [hasSharedIdeaLibrarySyncConflict, setHasSharedIdeaLibrarySyncConflict] = useState(false);
   const [sharedIdeaLibrarySyncRetry, setSharedIdeaLibrarySyncRetry] = useState(0);
@@ -3397,11 +3397,11 @@ export default function Home() {
         setNotice(classReconciliationBlocked
           ? "BROWSER LESSON CACHE RESTORED · ITS SAVED CLASS COULD NOT BE REASSIGNED BECAUSE THAT DATE ALREADY HAS A PLAN"
           : restored.migrated
-            ? "BROWSER LESSON CACHE RESTORED · PHASE DATA UPGRADED BEFORE PUBLIC SYNC"
-            : "BROWSER LESSON CACHE RESTORED · CONNECTING TO THE PUBLIC WORKSPACE");
+            ? "BROWSER LESSON CACHE RESTORED · PHASE DATA UPGRADED BEFORE PRIVATE SYNC"
+            : "BROWSER LESSON CACHE RESTORED · CONNECTING TO RYAN’S WORKSPACE");
       }
     } catch {
-      setNotice("BROWSER CACHE COULD NOT RESTORE THE LAST EDIT · CONNECTING TO THE PUBLIC WORKSPACE");
+      setNotice("BROWSER CACHE COULD NOT RESTORE THE LAST EDIT · CONNECTING TO RYAN’S WORKSPACE");
     } finally {
       setHasLoadedLocalLesson(true);
     }
@@ -3443,7 +3443,7 @@ export default function Home() {
         return next;
       });
     } catch {
-      setNotice("LESSON PLAN IS ACTIVE · BROWSER CACHE IS UNAVAILABLE, SO PUBLIC SYNC MAY RETRY");
+      setNotice("LESSON PLAN IS ACTIVE · BROWSER CACHE IS UNAVAILABLE, SO PRIVATE SYNC MAY RETRY");
     }
   }, [activeLessonPlan, attendanceById, customBoards, hasLoadedCustomBoards, hasLoadedLocalLesson, hasLoadedStationBoardOverrides, hydratedPlanId, isPastActivePlan, isReady, lessonDocumentDetails, lessonPhases, safetyAcknowledged, stationBoardOverrides, todoDone, visualAnchorByCardId, visualLabelLayoutByCardId]);
 
@@ -4079,7 +4079,7 @@ export default function Home() {
     if (!hasLoadedLocalClasses || !activeClassId) return;
     if (classStorage.classes.some((localClass) => localClass.id === activeClassId)) return;
     setActiveClassId(null);
-    setNotice("THE CLASS SAVED ON THIS LESSON IS NOT IN THIS BROWSER CACHE · SAMPLE ROSTER SHOWN UNTIL THE PUBLIC COPY LOADS");
+    setNotice("THE CLASS SAVED ON THIS LESSON IS NOT IN THIS BROWSER CACHE · SAMPLE ROSTER SHOWN UNTIL RYAN’S SHARED COPY LOADS");
   }, [activeClassId, classStorage.classes, hasLoadedLocalClasses]);
 
   useEffect(() => {
@@ -4513,7 +4513,7 @@ export default function Home() {
     setRemovedIdeaIds([...preferences.removedIdeaIds]);
     setStationSetupsById(Object.fromEntries(next.stationSetups.map((setup) => [setup.id, setup])));
     if (stationResults.some((result) => result.status === "rejected")) {
-      setNotice("PUBLIC IDEA LIBRARY LOADED · PIXEL STATIONS WILL RETRY SAVING TO THIS DEVICE");
+      setNotice("RYAN’S IDEA LIBRARY LOADED · PIXEL STATIONS WILL RETRY SAVING TO THIS DEVICE");
     }
   }, []);
 
@@ -4530,7 +4530,7 @@ export default function Home() {
     sharedIdeaLibrarySyncConflictRef.current = true;
     setHasSharedIdeaLibrarySyncConflict(true);
     setSharedIdeaLibrarySyncStatus("IDEA SYNC PAUSED · LOCAL CHANGES KEPT");
-    setNotice("PUBLIC IDEA LIBRARY CHANGED ELSEWHERE · YOUR LOCAL CHANGES ARE KEPT UNTIL YOU CHOOSE LOAD PUBLIC COPY");
+    setNotice("RYAN’S IDEA LIBRARY CHANGED ELSEWHERE · YOUR LOCAL CHANGES ARE KEPT UNTIL YOU CHOOSE LOAD SHARED COPY");
   }, []);
 
   const dropUnavailableIdeaStationReferences = useCallback((): boolean => {
@@ -4555,20 +4555,20 @@ export default function Home() {
 
   const loadPublicIdeaLibraryCopy = useCallback(() => {
     void (async () => {
-      setSharedIdeaLibrarySyncStatus("LOADING PUBLIC IDEA LIBRARY");
+      setSharedIdeaLibrarySyncStatus("LOADING RYAN’S IDEA LIBRARY");
       try {
         const remote = await fetchSharedIdeaLibrary();
-        if (!remote) throw new Error("The public Idea Library has not been created yet.");
+        if (!remote) throw new Error("Ryan’s shared Idea Library has not been created yet.");
         const fingerprint = sharedIdeaLibraryFingerprint(remote.value);
-        if (!fingerprint) throw new Error("The public Idea Library could not be verified.");
+        if (!fingerprint) throw new Error("Ryan’s shared Idea Library could not be verified.");
         await applyPublicIdeaLibraryState(remote.value);
         rememberSharedIdeaLibraryWorkspace(remote, fingerprint);
         sharedIdeaLibrarySyncReadyRef.current = true;
         setIsSharedIdeaLibrarySyncReady(true);
-        setSharedIdeaLibrarySyncStatus("PUBLIC IDEA LIBRARY LOADED · ONLINE");
-        setNotice("PUBLIC IDEA LIBRARY LOADED · LOCAL CHANGES WERE REPLACED WITH THE PUBLIC COPY");
+        setSharedIdeaLibrarySyncStatus("RYAN’S IDEA LIBRARY LOADED · ONLINE");
+        setNotice("RYAN’S IDEA LIBRARY LOADED · LOCAL CHANGES WERE REPLACED WITH THE SHARED COPY");
       } catch {
-        setSharedIdeaLibrarySyncStatus("PUBLIC IDEA COPY UNAVAILABLE · LOCAL CHANGES KEPT");
+        setSharedIdeaLibrarySyncStatus("SHARED IDEA COPY UNAVAILABLE · LOCAL CHANGES KEPT");
       }
     })();
   }, [applyPublicIdeaLibraryState, rememberSharedIdeaLibraryWorkspace]);
@@ -4597,19 +4597,19 @@ export default function Home() {
     };
     const replaceWithRemote = async (workspace: SharedIdeaLibraryWorkspaceRecord) => {
       const fingerprint = sharedIdeaLibraryFingerprint(workspace.value);
-      if (!fingerprint) throw new Error("The public Idea Library could not be verified.");
+      if (!fingerprint) throw new Error("Ryan’s shared Idea Library could not be verified.");
       await applyPublicIdeaLibraryState(workspace.value);
       if (!active) return;
       rememberSharedIdeaLibraryWorkspace(workspace, fingerprint);
       sharedIdeaLibrarySyncReadyRef.current = true;
       setIsSharedIdeaLibrarySyncReady(true);
-      setSharedIdeaLibrarySyncStatus("PUBLIC IDEA LIBRARY LOADED · ONLINE");
-      setNotice("PUBLIC IDEA LIBRARY LOADED · IDEAS, REFERENCE MEDIA, AND PIXEL STATIONS ARE READY ON THIS LINK");
+      setSharedIdeaLibrarySyncStatus("RYAN’S IDEA LIBRARY LOADED · ONLINE");
+      setNotice("RYAN’S IDEA LIBRARY LOADED · IDEAS, REFERENCE MEDIA, AND PIXEL STATIONS ARE READY ON THIS LINK");
     };
     const beginTimer = window.setTimeout(() => {
       void (async () => {
         try {
-          setSharedIdeaLibrarySyncStatus("CHECKING PUBLIC IDEA LIBRARY");
+          setSharedIdeaLibrarySyncStatus("CHECKING RYAN’S IDEA LIBRARY");
           const remote = await fetchSharedIdeaLibrary();
           if (!active) return;
           const local = sharedIdeaLibraryState;
@@ -4624,15 +4624,15 @@ export default function Home() {
             }
             const localFingerprint = sharedIdeaLibraryFingerprint(local);
             if (!localFingerprint) {
-              retry("PUBLIC IDEA SYNC PENDING · LOCAL COPY STILL AVAILABLE", 3_000);
+              retry("PRIVATE IDEA SYNC PENDING · LOCAL COPY STILL AVAILABLE", 3_000);
               return;
             }
             if (isSharedIdeaLibraryEmpty(local)) {
               markReady(
                 { version: 1, revision: 0, updatedAt: null, value: local },
                 localFingerprint,
-                "PUBLIC IDEA LIBRARY READY · WAITING FOR FIRST IDEA",
-                "PUBLIC IDEA LIBRARY READY · CREATE OR IMPORT AN IDEA TO SHARE IT ON EVERY WEB LINK",
+                "RYAN’S IDEA LIBRARY READY · WAITING FOR FIRST IDEA",
+                "RYAN’S IDEA LIBRARY READY · CREATE OR IMPORT AN IDEA TO SHARE IT ACROSS YOUR DEVICES",
               );
               return;
             }
@@ -4640,16 +4640,16 @@ export default function Home() {
             const created = await bootstrapSharedIdeaLibrary(local);
             if (!active) return;
             if (created.status === "conflict") {
-              retry("PUBLIC IDEA LIBRARY FOUND · LOADING LATEST COPY", 400);
+              retry("RYAN’S IDEA LIBRARY FOUND · LOADING LATEST COPY", 400);
               return;
             }
             const fingerprint = sharedIdeaLibraryFingerprint(created.workspace.value);
-            if (!fingerprint) throw new Error("The public Idea Library could not be verified.");
+            if (!fingerprint) throw new Error("Ryan’s shared Idea Library could not be verified.");
             markReady(
               created.workspace,
               fingerprint,
-              "PUBLIC IDEA SYNC · ONLINE",
-              "PUBLIC IDEA LIBRARY READY · IDEAS, REFERENCE MEDIA, AND PIXEL STATIONS SYNC ON EVERY WEB LINK",
+              "PRIVATE IDEA SYNC · ONLINE",
+              "RYAN’S IDEA LIBRARY READY · IDEAS, REFERENCE MEDIA, AND PIXEL STATIONS SYNC ACROSS YOUR DEVICES",
             );
             return;
           }
@@ -4660,18 +4660,18 @@ export default function Home() {
           }
           const localFingerprint = sharedIdeaLibraryFingerprint(local);
           if (!localFingerprint) {
-            retry("PUBLIC IDEA SYNC PENDING · LOCAL COPY STILL AVAILABLE", 3_000);
+            retry("PRIVATE IDEA SYNC PENDING · LOCAL COPY STILL AVAILABLE", 3_000);
             return;
           }
           const remoteFingerprint = sharedIdeaLibraryFingerprint(remote.value);
-          if (!remoteFingerprint) throw new Error("The public Idea Library could not be verified.");
+          if (!remoteFingerprint) throw new Error("Ryan’s shared Idea Library could not be verified.");
           const checkpoint = readSharedIdeaLibraryCheckpoint(window.localStorage);
           if (localFingerprint === remoteFingerprint) {
             markReady(
               remote,
               remoteFingerprint,
-              "PUBLIC IDEA SYNC · ONLINE",
-              "PUBLIC IDEA LIBRARY LOADED · IDEAS, REFERENCE MEDIA, AND PIXEL STATIONS ARE AVAILABLE ON EVERY WEB LINK",
+              "PRIVATE IDEA SYNC · ONLINE",
+              "RYAN’S IDEA LIBRARY LOADED · IDEAS, REFERENCE MEDIA, AND PIXEL STATIONS ARE AVAILABLE ACROSS YOUR DEVICES",
             );
             return;
           }
@@ -4684,7 +4684,7 @@ export default function Home() {
               remote,
               remoteFingerprint,
               "LOCAL IDEA CHANGES READY TO SYNC",
-              "LOCAL IDEA CHANGES KEPT · SAVING THEM TO THE PUBLIC IDEA LIBRARY",
+              "LOCAL IDEA CHANGES KEPT · SAVING THEM TO RYAN’S IDEA LIBRARY",
             );
             return;
           }
@@ -4692,7 +4692,7 @@ export default function Home() {
           setIsSharedIdeaLibrarySyncReady(true);
           pauseSharedIdeaLibrarySync();
         } catch {
-          retry("PUBLIC IDEA SYNC PENDING · LOCAL COPY STILL AVAILABLE", 3_000);
+          retry("PRIVATE IDEA SYNC PENDING · LOCAL COPY STILL AVAILABLE", 3_000);
         }
       })();
     }, 150);
@@ -4727,8 +4727,8 @@ export default function Home() {
       const fingerprint = sharedIdeaLibraryFingerprint(workspace.value);
       if (!fingerprint) return "uncertain";
       await applyPublicIdeaLibraryState(workspace.value);
-      acknowledge(workspace, fingerprint, "PUBLIC IDEA LIBRARY CHANGED · LOADED");
-      setNotice("PUBLIC IDEA LIBRARY CHANGED ELSEWHERE · THE LATEST PUBLIC COPY IS NOW LOADED");
+      acknowledge(workspace, fingerprint, "RYAN’S IDEA LIBRARY CHANGED · LOADED");
+      setNotice("RYAN’S IDEA LIBRARY CHANGED ELSEWHERE · THE LATEST SHARED COPY IS NOW LOADED");
       return "paused";
     };
     const loadRemoteAndReconcile = async (
@@ -4741,19 +4741,19 @@ export default function Home() {
         const remoteFingerprint = sharedIdeaLibraryFingerprint(remote.value);
         if (!remoteFingerprint) return "uncertain";
         if (remoteFingerprint === localFingerprint) {
-          acknowledge(remote, remoteFingerprint, "PUBLIC IDEA SYNC · SAVED");
+          acknowledge(remote, remoteFingerprint, "PRIVATE IDEA SYNC · SAVED");
           return "saved";
         }
         const known = sharedIdeaLibraryKnownWorkspaceRef.current;
         if (known && remoteFingerprint === known.fingerprint) {
-          acknowledge(remote, remoteFingerprint, "PUBLIC IDEA SYNC RETRYING");
+          acknowledge(remote, remoteFingerprint, "PRIVATE IDEA SYNC RETRYING");
           return "uncertain";
         }
         if (known && localFingerprint === known.fingerprint) return replaceWithRemote(remote);
         pauseSharedIdeaLibrarySync();
         return "paused";
       } catch {
-        if (active) setSharedIdeaLibrarySyncStatus("PUBLIC IDEA SYNC PENDING · RETRYING");
+        if (active) setSharedIdeaLibrarySyncStatus("PRIVATE IDEA SYNC PENDING · RETRYING");
         return "uncertain";
       }
     };
@@ -4767,7 +4767,7 @@ export default function Home() {
       if (fingerprint === known.fingerprint) return "idle";
 
       sharedIdeaLibrarySyncInProgressRef.current = true;
-      setSharedIdeaLibrarySyncStatus("SAVING PUBLIC IDEA LIBRARY");
+      setSharedIdeaLibrarySyncStatus("SAVING RYAN’S IDEA LIBRARY");
       try {
         await ensureSharedIdeaLibraryMedia(local);
         if (!active) return "idle";
@@ -4777,7 +4777,7 @@ export default function Home() {
         if (result.status === "conflict") return await loadRemoteAndReconcile(local, fingerprint);
         const savedFingerprint = sharedIdeaLibraryFingerprint(result.workspace.value);
         if (savedFingerprint === fingerprint) {
-          acknowledge(result.workspace, fingerprint, "PUBLIC IDEA SYNC · SAVED");
+          acknowledge(result.workspace, fingerprint, "PRIVATE IDEA SYNC · SAVED");
           return "saved";
         }
         return await loadRemoteAndReconcile(local, fingerprint);
@@ -4837,7 +4837,7 @@ export default function Home() {
           setUpdateDecisionByRevision(storedV4.updateDecisionByRevision);
           setGoalPreferences(storedV4.goalPreferences);
           setPlannerIntake(storedV4.plannerIntake);
-          setNotice("BROWSER OPERATIONS CACHE RESTORED · CONNECTING TO THE PUBLIC WORKSPACE");
+          setNotice("BROWSER OPERATIONS CACHE RESTORED · CONNECTING TO RYAN’S WORKSPACE");
         } else if (isStoredOperationsV3(parsed)) {
           setOperationTaskDoneByPlanId(parsed.taskDoneByPlanId);
           setViewAttendanceByPlanId(parsed.attendanceByPlanId);
@@ -4846,7 +4846,7 @@ export default function Home() {
           setUpdateDecisionByRevision(parsed.updateDecisionByRevision);
           setGoalPreferences(parsed.goalPreferences);
           setPlannerIntake(emptyPlannerIntake());
-          setNotice("BROWSER OPERATIONS CACHE UPGRADED · CONNECTING TO THE PUBLIC WORKSPACE");
+          setNotice("BROWSER OPERATIONS CACHE UPGRADED · CONNECTING TO RYAN’S WORKSPACE");
         } else if (isStoredOperationsV2(parsed)) {
           setOperationTaskDoneByPlanId(parsed.taskDoneByPlanId);
           setViewAttendanceByPlanId(parsed.attendanceByPlanId);
@@ -4855,13 +4855,13 @@ export default function Home() {
           setUpdateDecisionByRevision(parsed.updateDecisionByRevision);
           setGoalPreferences(emptyLessonGoalPreferences());
           setPlannerIntake(emptyPlannerIntake());
-          setNotice("BROWSER OPERATIONS CACHE RESTORED · CONNECTING TO THE PUBLIC WORKSPACE");
+          setNotice("BROWSER OPERATIONS CACHE RESTORED · CONNECTING TO RYAN’S WORKSPACE");
         } else if (isStoredOperationsV1(parsed)) {
           setOperationTaskDoneByPlanId({ [activeLessonPlanIdRef.current]: parsed.taskDoneById });
           setUpdateDecisionByRevision(parsed.updateDecisionByRevision);
           setGoalPreferences(emptyLessonGoalPreferences());
           setPlannerIntake(emptyPlannerIntake());
-          setNotice("BROWSER OPERATIONS CACHE RESTORED · CONNECTING TO THE PUBLIC WORKSPACE");
+          setNotice("BROWSER OPERATIONS CACHE RESTORED · CONNECTING TO RYAN’S WORKSPACE");
         }
       }
     } catch {
@@ -4901,25 +4901,25 @@ export default function Home() {
     sharedPlannerSyncConflictRef.current = true;
     setHasSharedPlannerSyncConflict(true);
     setSharedPlannerSyncStatus("SYNC PAUSED · LOCAL CHANGES KEPT");
-    setNotice("PUBLIC WORKSPACE CHANGED ELSEWHERE · YOUR LOCAL CHANGES ARE KEPT UNTIL YOU CHOOSE LOAD PUBLIC COPY");
+    setNotice("RYAN’S WORKSPACE CHANGED ELSEWHERE · YOUR LOCAL CHANGES ARE KEPT UNTIL YOU CHOOSE LOAD SHARED COPY");
   }, []);
 
   const loadPublicSharedCopy = useCallback(() => {
     void (async () => {
-      setSharedPlannerSyncStatus("LOADING PUBLIC WORKSPACE");
+      setSharedPlannerSyncStatus("LOADING RYAN’S WORKSPACE");
       try {
         const remoteWorkspace = await loadSharedPlannerWorkspace();
-        if (!remoteWorkspace) throw new Error("The public workspace is not available yet.");
+        if (!remoteWorkspace) throw new Error("Ryan’s shared workspace is not available yet.");
         const fingerprint = sharedPlannerWorkspaceFingerprint(remoteWorkspace.snapshot);
-        if (!fingerprint) throw new Error("The public workspace could not be verified.");
+        if (!fingerprint) throw new Error("Ryan’s shared workspace could not be verified.");
         replaceSharedPlannerStorage(window.localStorage, remoteWorkspace.snapshot);
         rememberSharedPlannerWorkspace(remoteWorkspace, fingerprint);
         sharedPlannerSyncReadyRef.current = false;
         setIsSharedPlannerSyncReady(false);
-        setSharedPlannerSyncStatus("PUBLIC WORKSPACE LOADED · RESTARTING PLANNER");
+        setSharedPlannerSyncStatus("RYAN’S WORKSPACE LOADED · RESTARTING PLANNER");
         window.location.reload();
       } catch {
-        setSharedPlannerSyncStatus("PUBLIC COPY UNAVAILABLE · LOCAL CHANGES KEPT");
+        setSharedPlannerSyncStatus("SHARED COPY UNAVAILABLE · LOCAL CHANGES KEPT");
       }
     })();
   }, [rememberSharedPlannerWorkspace]);
@@ -4955,18 +4955,18 @@ export default function Home() {
     };
     const replaceWithRemote = (workspace: SharedPlannerWorkspace) => {
       const fingerprint = sharedPlannerWorkspaceFingerprint(workspace.snapshot);
-      if (!fingerprint) throw new Error("The public workspace could not be verified.");
+      if (!fingerprint) throw new Error("Ryan’s shared workspace could not be verified.");
       replaceSharedPlannerStorage(window.localStorage, workspace.snapshot);
       rememberSharedPlannerWorkspace(workspace, fingerprint);
       sharedPlannerSyncReadyRef.current = false;
       setIsSharedPlannerSyncReady(false);
-      setSharedPlannerSyncStatus("PUBLIC WORKSPACE LOADED · RESTARTING PLANNER");
+      setSharedPlannerSyncStatus("RYAN’S WORKSPACE LOADED · RESTARTING PLANNER");
       window.location.reload();
     };
     const beginTimer = window.setTimeout(() => {
       void (async () => {
         try {
-          setSharedPlannerSyncStatus("CHECKING PUBLIC WORKSPACE");
+          setSharedPlannerSyncStatus("CHECKING RYAN’S WORKSPACE");
           // Remote comes first so a damaged or incomplete browser cache can be repaired.
           const remoteWorkspace = await loadSharedPlannerWorkspace();
           if (!active) return;
@@ -4974,29 +4974,29 @@ export default function Home() {
 
           if (!remoteWorkspace) {
             if (!localSnapshot) {
-              retry("PREPARING PUBLIC WORKSPACE", 400);
+              retry("PREPARING RYAN’S WORKSPACE", 400);
               return;
             }
             const created = await bootstrapSharedPlannerWorkspace(sharedPlannerDocumentEntries(localSnapshot));
             if (!active) return;
             if (created.status === "conflict") {
-              retry("PUBLIC WORKSPACE FOUND · LOADING LATEST COPY", 400);
+              retry("RYAN’S WORKSPACE FOUND · LOADING LATEST COPY", 400);
               return;
             }
             const createdWorkspace = workspaceFromSharedPlannerResponse(created.workspace);
             const fingerprint = sharedPlannerWorkspaceFingerprint(createdWorkspace.snapshot);
-            if (!fingerprint) throw new Error("The public workspace could not be verified.");
+            if (!fingerprint) throw new Error("Ryan’s shared workspace could not be verified.");
             markReady(
               createdWorkspace,
               fingerprint,
-              "PUBLIC SHARED SYNC · ONLINE",
-              "PUBLIC SHARED WORKSPACE READY · LESSONS, CLASSES, ATTENDANCE, AND ROTATIONS SYNC ON EVERY WEB LINK",
+              "RYAN-ONLY SYNC · ONLINE",
+              "RYAN’S SHARED WORKSPACE READY · LESSONS, CLASSES, ATTENDANCE, AND ROTATIONS SYNC ACROSS YOUR DEVICES",
             );
             return;
           }
 
           const remoteFingerprint = sharedPlannerWorkspaceFingerprint(remoteWorkspace.snapshot);
-          if (!remoteFingerprint) throw new Error("The public workspace could not be verified.");
+          if (!remoteFingerprint) throw new Error("Ryan’s shared workspace could not be verified.");
           if (!localSnapshot) {
             replaceWithRemote(remoteWorkspace);
             return;
@@ -5009,8 +5009,8 @@ export default function Home() {
             markReady(
               remoteWorkspace,
               remoteFingerprint,
-              "PUBLIC SHARED SYNC · ONLINE",
-              "PUBLIC SHARED WORKSPACE LOADED · LESSONS, CLASSES, ATTENDANCE, AND ROTATIONS ARE AVAILABLE ON EVERY WEB LINK",
+              "RYAN-ONLY SYNC · ONLINE",
+              "RYAN’S SHARED WORKSPACE LOADED · LESSONS, CLASSES, ATTENDANCE, AND ROTATIONS ARE AVAILABLE ACROSS YOUR DEVICES",
             );
             return;
           }
@@ -5025,7 +5025,7 @@ export default function Home() {
               remoteWorkspace,
               remoteFingerprint,
               "LOCAL CHANGES READY TO SYNC",
-              "LOCAL PLANNER CHANGES KEPT · SAVING THEM TO THE PUBLIC WORKSPACE",
+              "LOCAL PLANNER CHANGES KEPT · SAVING THEM TO RYAN’S WORKSPACE",
             );
             return;
           }
@@ -5035,7 +5035,7 @@ export default function Home() {
           setIsSharedPlannerSyncReady(true);
           pauseSharedPlannerSync();
         } catch {
-          retry("PUBLIC SYNC PENDING · LOCAL COPY STILL AVAILABLE", 3_000);
+          retry("PRIVATE SYNC PENDING · LOCAL COPY STILL AVAILABLE", 3_000);
         }
       })();
     }, 150);
@@ -5078,18 +5078,18 @@ export default function Home() {
         const remoteFingerprint = sharedPlannerWorkspaceFingerprint(remoteWorkspace.snapshot);
         if (!remoteFingerprint) return "uncertain";
         if (remoteFingerprint === localFingerprint) {
-          acknowledge(remoteWorkspace, remoteFingerprint, "PUBLIC SHARED SYNC · SAVED");
+          acknowledge(remoteWorkspace, remoteFingerprint, "RYAN-ONLY SYNC · SAVED");
           return "saved";
         }
         const known = sharedPlannerKnownWorkspaceRef.current;
         if (known && remoteFingerprint === known.fingerprint) {
           // Another save used the same content, so only the revision needs rebasing.
-          acknowledge(remoteWorkspace, remoteFingerprint, "PUBLIC SYNC RETRYING");
+          acknowledge(remoteWorkspace, remoteFingerprint, "PRIVATE SYNC RETRYING");
           return "uncertain";
         }
         if (known && localFingerprint === known.fingerprint) {
           replaceSharedPlannerStorage(window.localStorage, remoteWorkspace.snapshot);
-          acknowledge(remoteWorkspace, remoteFingerprint, "PUBLIC WORKSPACE CHANGED · RESTARTING PLANNER");
+          acknowledge(remoteWorkspace, remoteFingerprint, "RYAN’S WORKSPACE CHANGED · RESTARTING PLANNER");
           sharedPlannerSyncReadyRef.current = false;
           setIsSharedPlannerSyncReady(false);
           window.location.reload();
@@ -5098,7 +5098,7 @@ export default function Home() {
         pauseSharedPlannerSync();
         return "paused";
       } catch {
-        if (active) setSharedPlannerSyncStatus("PUBLIC SYNC PENDING · RETRYING");
+        if (active) setSharedPlannerSyncStatus("PRIVATE SYNC PENDING · RETRYING");
         return "uncertain";
       }
     };
@@ -5114,14 +5114,14 @@ export default function Home() {
       if (fingerprint === known.fingerprint) return "idle";
 
       sharedPlannerSyncInProgressRef.current = true;
-      setSharedPlannerSyncStatus("SAVING PUBLIC SHARED WORKSPACE");
+      setSharedPlannerSyncStatus("SAVING RYAN’S SHARED WORKSPACE");
       try {
         const result = await putSharedPlannerWorkspace(sharedPlannerDocumentEntries(snapshot), known.revision);
         if (result.status === "conflict") return await loadRemoteAndReconcile(snapshot, fingerprint);
         const savedWorkspace = workspaceFromSharedPlannerResponse(result.workspace);
         const savedFingerprint = sharedPlannerWorkspaceFingerprint(savedWorkspace.snapshot);
         if (savedFingerprint === fingerprint) {
-          acknowledge(savedWorkspace, fingerprint, "PUBLIC SHARED SYNC · SAVED");
+          acknowledge(savedWorkspace, fingerprint, "RYAN-ONLY SYNC · SAVED");
           return "saved";
         }
         return await loadRemoteAndReconcile(snapshot, fingerprint);
@@ -5147,7 +5147,7 @@ export default function Home() {
           const remoteFingerprint = sharedPlannerWorkspaceFingerprint(remoteWorkspace.snapshot);
           if (!remoteFingerprint) return;
           replaceSharedPlannerStorage(window.localStorage, remoteWorkspace.snapshot);
-          acknowledge(remoteWorkspace, remoteFingerprint, "PUBLIC WORKSPACE CHANGED · RESTARTING PLANNER");
+          acknowledge(remoteWorkspace, remoteFingerprint, "RYAN’S WORKSPACE CHANGED · RESTARTING PLANNER");
           sharedPlannerSyncReadyRef.current = false;
           setIsSharedPlannerSyncReady(false);
           window.location.reload();
@@ -7294,7 +7294,7 @@ export default function Home() {
     setGoalPreferences((current) => addGeneralClassGoal(current, { id: goalId, text }));
     setSelectedGeneralGoalIds((current) => [...new Set([...current, goalId])]);
     setNewGeneralGoalText("");
-    setNotice("GENERAL CLASS GOAL ADDED + SELECTED · SYNCING WITH THE PUBLIC WORKSPACE");
+    setNotice("GENERAL CLASS GOAL ADDED + SELECTED · SYNCING WITH RYAN’S WORKSPACE");
   }
 
   function toggleGeneralGoal(goalId: string, selected: boolean) {
@@ -7348,7 +7348,7 @@ export default function Home() {
     const card = allLibraryItems.find((item) => item.id === cardId);
     const willBeGem = !gemIds.includes(cardId);
     setGemIds((ids) => willBeGem ? [...ids, cardId] : ids.filter((id) => id !== cardId));
-    setNotice(`${card?.title.toUpperCase() ?? "CARD"} ${willBeGem ? "SAVED AS A GEM" : "REMOVED FROM GEMS"} · SYNCING TO THE PUBLIC IDEA LIBRARY`);
+    setNotice(`${card?.title.toUpperCase() ?? "CARD"} ${willBeGem ? "SAVED AS A GEM" : "REMOVED FROM GEMS"} · SYNCING TO RYAN’S IDEA LIBRARY`);
   }
 
   function toggleArchive(card: LibraryItem) {
@@ -7358,13 +7358,13 @@ export default function Home() {
     if (isCurrentlyArchived) {
       setArchivedIdeaIds((ids) => ids.filter((id) => id !== card.id));
       if (isDefaultArchived) setRestoredIdeaIds((ids) => [...new Set([...ids, card.id])]);
-      setNotice(`${card.title.toUpperCase()} RESTORED TO ALL IDEAS · SYNCING TO THE PUBLIC IDEA LIBRARY`);
+      setNotice(`${card.title.toUpperCase()} RESTORED TO ALL IDEAS · SYNCING TO RYAN’S IDEA LIBRARY`);
       return;
     }
     setRestoredIdeaIds((ids) => ids.filter((id) => id !== card.id));
     setDraftIdeaIds((ids) => ids.filter((id) => id !== card.id));
     setArchivedIdeaIds((ids) => [...new Set([...ids, card.id])]);
-    setNotice(`${card.title.toUpperCase()} MOVED TO ARCHIVE · NOTHING WAS DELETED · SYNCING TO THE PUBLIC IDEA LIBRARY`);
+    setNotice(`${card.title.toUpperCase()} MOVED TO ARCHIVE · NOTHING WAS DELETED · SYNCING TO RYAN’S IDEA LIBRARY`);
   }
 
   function moveIdeaToDraft(card: LibraryItem) {
@@ -7377,11 +7377,11 @@ export default function Home() {
   function toggleDraft(card: LibraryItem) {
     if (draftIdeaIds.includes(card.id)) {
       setDraftIdeaIds((ids) => ids.filter((id) => id !== card.id));
-      setNotice(`${card.title.toUpperCase()} MARKED COMPLETE · REMOVED FROM DRAFTS · SYNCING TO THE PUBLIC IDEA LIBRARY`);
+      setNotice(`${card.title.toUpperCase()} MARKED COMPLETE · REMOVED FROM DRAFTS · SYNCING TO RYAN’S IDEA LIBRARY`);
       return;
     }
     moveIdeaToDraft(card);
-    setNotice(`${card.title.toUpperCase()} MARKED AS DRAFT · KEEP EDITING IT FROM DRAFTS · SYNCING TO THE PUBLIC IDEA LIBRARY`);
+    setNotice(`${card.title.toUpperCase()} MARKED AS DRAFT · KEEP EDITING IT FROM DRAFTS · SYNCING TO RYAN’S IDEA LIBRARY`);
   }
 
   function startLibraryEdit(card: LibraryItem) {
@@ -7505,8 +7505,8 @@ export default function Home() {
       setRemoveEditingIdeaMedia(false);
       setRemoveEditingStation(false);
       setNotice(moveToDraft
-        ? `${edited.title.toUpperCase()} SAVED AS A DRAFT${edited.mediaId ? ` WITH A ${edited.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · KEEP EDITING IT FROM DRAFTS · SYNCING TO THE PUBLIC IDEA LIBRARY`
-        : `${edited.title.toUpperCase()} SAVED${edited.mediaId ? ` WITH A ${edited.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · SYNCING TO THE PUBLIC IDEA LIBRARY`);
+        ? `${edited.title.toUpperCase()} SAVED AS A DRAFT${edited.mediaId ? ` WITH A ${edited.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · KEEP EDITING IT FROM DRAFTS · SYNCING TO RYAN’S IDEA LIBRARY`
+        : `${edited.title.toUpperCase()} SAVED${edited.mediaId ? ` WITH A ${edited.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · SYNCING TO RYAN’S IDEA LIBRARY`);
     } catch {
       if (newMediaId) {
         try {
@@ -7587,7 +7587,7 @@ export default function Home() {
   function restoreLibraryItem(card: LibraryItem) {
     if (removedIdeaIds.includes(card.id)) {
       setRemovedIdeaIds((ids) => ids.filter((id) => id !== card.id));
-      setNotice(`${card.title.toUpperCase()} RESTORED TO ACTIVE LIBRARY · SYNCING TO THE PUBLIC IDEA LIBRARY`);
+      setNotice(`${card.title.toUpperCase()} RESTORED TO ACTIVE LIBRARY · SYNCING TO RYAN’S IDEA LIBRARY`);
       return;
     }
     toggleArchive(card);
@@ -7735,12 +7735,12 @@ export default function Home() {
     }));
     if (taskId === LEGACY_RECURRING_TASK_ID) setTodoDone(isDone);
     const task = operationTasks.find((candidate) => candidate.id === taskId);
-    setNotice(`${task?.title.toUpperCase() ?? "TASK"} ${isDone ? "MARKED COMPLETE" : "REOPENED"} · SAVED TO THE PUBLIC WORKSPACE`);
+    setNotice(`${task?.title.toUpperCase() ?? "TASK"} ${isDone ? "MARKED COMPLETE" : "REOPENED"} · SAVED TO RYAN’S WORKSPACE`);
   }
 
   function recordUpdateDecision(update: Pick<PlannerUpdate, "id" | "revisionId">, decision: UpdateDecision) {
     setUpdateDecisionByRevision((current) => ({ ...current, [revisionKey(update)]: decision }));
-    setNotice(`${decision} SAVED FOR ${update.revisionId.toUpperCase()} · PUBLIC WORKSPACE`);
+    setNotice(`${decision} SAVED FOR ${update.revisionId.toUpperCase()} · RYAN’S WORKSPACE`);
   }
 
   function resetLibrarySearch() {
@@ -8061,7 +8061,7 @@ export default function Home() {
           return;
         }
         setNewIdeaStationSetup(setup);
-        setNotice("PIXEL STATION READY · SAVE THE IDEA TO SHARE IT IN THE PUBLIC LIBRARY");
+        setNotice("PIXEL STATION READY · SAVE THE IDEA TO SHARE IT IN RYAN’S LIBRARY");
       } else {
         await saveStationSetup(setup);
         setStationSetupsById((current) => ({ ...current, [setup.id]: setup }));
@@ -8082,7 +8082,7 @@ export default function Home() {
     if (isSavingNewIdea) return;
     const title = newIdeaTitle.trim();
     if (!title) {
-      setNotice("NAME THE IDEA BEFORE SAVING IT TO YOUR PUBLIC IDEA LIBRARY");
+      setNotice("NAME THE IDEA BEFORE SAVING IT TO RYAN’S IDEA LIBRARY");
       return;
     }
     const tags = newIdeaTags.split(",").map((tag) => tag.trim()).filter(Boolean);
@@ -8116,10 +8116,10 @@ export default function Home() {
       setIsAddingIdea(false);
       setLibraryFilter("all");
       setNotice(asDraft
-        ? `${idea.title.toUpperCase()} SAVED AS A DRAFT${idea.mediaId ? ` WITH A ${idea.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · KEEP EDITING IT FROM DRAFTS · SYNCING TO THE PUBLIC IDEA LIBRARY`
+        ? `${idea.title.toUpperCase()} SAVED AS A DRAFT${idea.mediaId ? ` WITH A ${idea.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · KEEP EDITING IT FROM DRAFTS · SYNCING TO RYAN’S IDEA LIBRARY`
         : mode === "VIEW"
-          ? `${idea.title.toUpperCase()} SAVED TO THE PUBLIC IDEA LIBRARY${idea.mediaId ? ` WITH A ${idea.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · READY TO PLACE WHEN YOU RETURN TO EDIT`
-          : `${idea.title.toUpperCase()} SAVED TO THE PUBLIC IDEA LIBRARY${idea.mediaId ? ` WITH A ${idea.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · SELECT IT TO PLACE IT`);
+          ? `${idea.title.toUpperCase()} SAVED TO RYAN’S IDEA LIBRARY${idea.mediaId ? ` WITH A ${idea.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · READY TO PLACE WHEN YOU RETURN TO EDIT`
+          : `${idea.title.toUpperCase()} SAVED TO RYAN’S IDEA LIBRARY${idea.mediaId ? ` WITH A ${idea.mediaKind === "video" ? "VIDEO" : "PHOTO"}` : ""} · SELECT IT TO PLACE IT`);
     } catch {
       setNotice("THE IDEA ATTACHMENT COULD NOT BE SAVED · THE IDEA IS STILL OPEN SO YOU CAN TRY AGAIN");
     } finally {
@@ -8173,7 +8173,7 @@ export default function Home() {
       </fieldset>
       <label>TAGS<input value={newIdeaTags} onChange={(event) => setNewIdeaTags(event.target.value)} placeholder="floor, L3, warmup" maxLength={120} /></label>
       <div className="new-idea-media-actions">
-        <b>REFERENCE PHOTO OR VIDEO <small>optional · one public attachment · syncs with this Idea Library</small></b>
+        <b>REFERENCE PHOTO OR VIDEO <small>optional · one shared attachment · syncs with this Idea Library</small></b>
         <input
           ref={newIdeaCameraInputRef}
           className="new-idea-file-input"
@@ -8226,7 +8226,7 @@ export default function Home() {
       </div>
       <div className="library-placement-strip">
         <b>{isLibraryWindow ? "VIEW · EDIT · DRAFT · FAVORITE · ARCHIVE · RESTORE" : "PLACE → THEN TAP A HIGHLIGHTED STATION"}</b>
-        <span>{isLibraryWindow ? "Use Drafts for Ideas you still want to edit. Changes sync publicly in the planner window." : "Pinch this list out for details, or in to compact it. One finger still scrolls; normal size shows five ideas."}</span>
+        <span>{isLibraryWindow ? "Use Drafts for Ideas you still want to edit. Changes sync only for Ryan in the planner window." : "Pinch this list out for details, or in to compact it. One finger still scrolls; normal size shows five ideas."}</span>
       </div>
       <button className="new-idea-trigger" onClick={() => setIsAddingIdea((open) => !open)}>{isAddingIdea ? "CLOSE NEW IDEA" : "+ NEW IDEA"}</button>
       {newIdeaForm}
@@ -8396,28 +8396,28 @@ export default function Home() {
   return (
     <main id="today" className={`app-shell ${isLibraryWindow ? "library-workspace-shell" : ""}`}>
       <header className="titlebar">
-        <div className="titlebar-label"><span className="title-dot" /> <span className="title-spark" aria-hidden="true">✦</span> <span className="routine-builder-title">{isLibraryWindow ? "IDEA LIBRARY" : "LESSON PLANNER"}</span> <small>{isLibraryWindow ? "PUBLIC IDEA SYNC" : "v0.1 PUBLIC SYNC"}</small></div>
+        <div className="titlebar-label"><span className="title-dot" /> <span className="title-spark" aria-hidden="true">✦</span> <span className="routine-builder-title">{isLibraryWindow ? "IDEA LIBRARY" : "LESSON PLANNER"}</span> <small>{isLibraryWindow ? "PRIVATE IDEA SYNC" : "v0.1 RYAN-ONLY SYNC"}</small></div>
       </header>
 
       <section className="terminal" role="status">
         <span>● {isLibraryWindow ? `IDEA LIBRARY · ${sharedIdeaLibrarySyncStatus}` : notice}</span>
         <span className="demo-indicator">{isLibraryWindow ? sharedIdeaLibrarySyncStatus : sharedPlannerSyncStatus}</span>
-        {!isLibraryWindow && hasSharedPlannerSyncConflict ? <button type="button" className="terminal-sync-action" onClick={loadPublicSharedCopy}>LOAD PUBLIC COPY</button> : null}
-        {!isLibraryWindow && hasSharedIdeaLibrarySyncConflict ? <button type="button" className="terminal-sync-action" onClick={loadPublicIdeaLibraryCopy}>LOAD PUBLIC IDEAS</button> : null}
-        {isLibraryWindow && hasSharedIdeaLibrarySyncConflict ? <button type="button" className="terminal-sync-action" onClick={loadPublicIdeaLibraryCopy}>LOAD PUBLIC COPY</button> : null}
-        <span>WORKSPACE: RYAN / {isLibraryWindow ? "IDEAS" : "PUBLIC SHARED"}</span>
+        {!isLibraryWindow && hasSharedPlannerSyncConflict ? <button type="button" className="terminal-sync-action" onClick={loadPublicSharedCopy}>LOAD SHARED COPY</button> : null}
+        {!isLibraryWindow && hasSharedIdeaLibrarySyncConflict ? <button type="button" className="terminal-sync-action" onClick={loadPublicIdeaLibraryCopy}>LOAD SHARED IDEAS</button> : null}
+        {isLibraryWindow && hasSharedIdeaLibrarySyncConflict ? <button type="button" className="terminal-sync-action" onClick={loadPublicIdeaLibraryCopy}>LOAD SHARED COPY</button> : null}
+        <span>WORKSPACE: RYAN / {isLibraryWindow ? "IDEAS" : "PRIVATE SHARED"}</span>
       </section>
 
       {isLibraryWindow ? (
         <>
           <nav className="library-workspace-nav" aria-label="Idea Library window controls">
             <button type="button" onClick={returnToPlanner}>← BACK TO PLANNER</button>
-            <span>MARK IDEAS AS DRAFTS TO KEEP EDITING · ARCHIVE IDEAS TO HIDE THEM · EDITS SYNC PUBLICLY</span>
+            <span>MARK IDEAS AS DRAFTS TO KEEP EDITING · ARCHIVE IDEAS TO HIDE THEM · EDITS SYNC ONLY FOR RYAN</span>
           </nav>
           <section className="library-workspace-body">
             {ideaLibraryPanel}
           </section>
-          <footer className="statusbar"><span>☑ PUBLIC SHARED</span><span>{allLibraryItems.length} SAVED IDEAS</span><span>LIBRARY WINDOW</span></footer>
+          <footer className="statusbar"><span>☑ RYAN-ONLY SHARED</span><span>{allLibraryItems.length} SAVED IDEAS</span><span>LIBRARY WINDOW</span></footer>
         </>
       ) : (
       <>
@@ -8445,7 +8445,7 @@ export default function Home() {
 
       {mode === "EDIT" && isClassManagerOpen ? (
         <section className="class-manager retro-window" aria-label="Import and manage local classes">
-          <div className="window-title">SHARED CLASSES <span>PUBLIC WORKSPACE</span><button type="button" onClick={() => { setIsClassManagerOpen(false); setRemoveClassCandidate(null); }} aria-label="Close shared classes">×</button></div>
+          <div className="window-title">SHARED CLASSES <span>RYAN-ONLY WORKSPACE</span><button type="button" onClick={() => { setIsClassManagerOpen(false); setRemoveClassCandidate(null); }} aria-label="Close shared classes">×</button></div>
           <div className="class-manager-body">
             <section className="local-class-list" aria-label="Saved shared classes">
               <div className="local-class-list-heading"><b>SAVED CLASSES</b><span>{classStorage.classes.length} SHARED</span></div>
@@ -8485,7 +8485,7 @@ export default function Home() {
 
           {removeClassCandidate ? (
             <section className="remove-local-class-confirm" aria-label={`Confirm removal of ${removeClassCandidate.name}`}>
-              <div><b>{removeClassPlanCount ? `REASSIGN ${removeClassPlanCount} SAVED LESSON PLAN${removeClassPlanCount === 1 ? "" : "S"} FIRST` : `REMOVE ${removeClassCandidate.name.toUpperCase()}?`}</b><span>{removeClassPlanCount ? "This class is still used by saved lesson plans. Open each one and choose another class or the sample type before removing the class record." : "This is the second confirmation. Its class record and roster will be removed from the public workspace; lesson phases stay untouched."}</span></div>
+              <div><b>{removeClassPlanCount ? `REASSIGN ${removeClassPlanCount} SAVED LESSON PLAN${removeClassPlanCount === 1 ? "" : "S"} FIRST` : `REMOVE ${removeClassCandidate.name.toUpperCase()}?`}</b><span>{removeClassPlanCount ? "This class is still used by saved lesson plans. Open each one and choose another class or the sample type before removing the class record." : "This is the second confirmation. Its class record and roster will be removed from Ryan’s shared workspace; lesson phases stay untouched."}</span></div>
               <div><button type="button" onClick={() => setRemoveClassCandidate(null)}>KEEP CLASS</button><button type="button" onClick={confirmRemoveLocalClass} disabled={removeClassPlanCount > 0}>REMOVE CLASS NOW</button></div>
             </section>
           ) : null}
@@ -8531,7 +8531,7 @@ export default function Home() {
               <button type="button" onClick={loadSummer2026LocalSchedule}>{safeScheduleBundle?.schedule.scheduleId === "summer_2026" ? "RELOAD SUMMER 2026 SHARED COPY" : "LOAD SUMMER 2026 SHARED COPY"}</button>
               {safeScheduleImportPreview?.result.ok ? <button type="button" onClick={applySafeScheduleImport}>{safeScheduleBundle ? "REPLACE SHARED SCHEDULE" : "APPLY FULL SCHEDULE"}</button> : null}
             </div>
-            <p className="class-import-help">The included Summer 2026 copy is public-shared and advisory only. It retains the source&apos;s accepted-as-is status and unresolved review warnings; it never reserves equipment or changes the source vault.</p>
+            <p className="class-import-help">The included Summer 2026 copy is shared across Ryan&apos;s planner and is advisory only. It retains the source&apos;s accepted-as-is status and unresolved review warnings; it never reserves equipment or changes the source vault.</p>
           </section>
         </section>
       ) : null}
@@ -8618,7 +8618,7 @@ export default function Home() {
       <section className="workspace-grid">
         <aside className="schedule-column" aria-label="Schedule advisory and shared lesson phases">
           <section className="retro-window schedule-advisory-window" aria-label="Shared schedule advisory preview">
-            <div className="window-title">SCHEDULE ADVISORY <span>PUBLIC SHARED PLAN</span></div>
+            <div className="window-title">SCHEDULE ADVISORY <span>RYAN-ONLY SHARED PLAN</span></div>
             <div className="schedule-advisory-body">
               <dl className="schedule-advisory-meta">
                 <div><dt>DATE</dt><dd>{activeLessonDateLabel}</dd></div>
@@ -8814,12 +8814,12 @@ export default function Home() {
                 <p className="personal-alternate-guard">READ-ONLY BROWSER OVERLAY · DOES NOT CHANGE THE SAFE SCHEDULE · DOES NOT RESERVE EQUIPMENT · DOES NOT ADD A PHASE</p>
               </section>
 
-              <p className="schedule-advisory-source">PUBLIC SHARED SCHEDULE COPY · NO LIVE SCHEDULE, CALENDAR, OR AUTOMATION CONNECTION</p>
+              <p className="schedule-advisory-source">RYAN-ONLY SHARED SCHEDULE COPY · NO LIVE SCHEDULE, CALENDAR, OR AUTOMATION CONNECTION</p>
             </div>
           </section>
 
           <section className="retro-window schedule-window">
-            <div className="window-title schedule-phase-window-title"><b>YOUR LESSON PHASES</b><div><span>{isPastActivePlan ? "PAST SNAPSHOT · READ-ONLY" : "PUBLIC SHARED DRAFT"}</span>{mode === "EDIT" && !isPastActivePlan ? <button type="button" onClick={syncCurrentLessonSchedule}>SYNC DAY →</button> : null}{mode === "EDIT" && !isPastActivePlan ? <button type="button" onClick={() => { setIsEventEditorOpen(true); scrollToPlannerSection("lesson-plan"); }}>EDIT EVENTS →</button> : null}</div></div>
+            <div className="window-title schedule-phase-window-title"><b>YOUR LESSON PHASES</b><div><span>{isPastActivePlan ? "PAST SNAPSHOT · READ-ONLY" : "RYAN-ONLY SHARED DRAFT"}</span>{mode === "EDIT" && !isPastActivePlan ? <button type="button" onClick={syncCurrentLessonSchedule}>SYNC DAY →</button> : null}{mode === "EDIT" && !isPastActivePlan ? <button type="button" onClick={() => { setIsEventEditorOpen(true); scrollToPlannerSection("lesson-plan"); }}>EDIT EVENTS →</button> : null}</div></div>
             <div className="window-body schedule-list">
               {lessonPhases.map((phase) => {
                 const phaseName = phase.title.trim();
@@ -8837,7 +8837,7 @@ export default function Home() {
             </div>
             <div className="schedule-footer">
               <p>✦ Smart draft surfaced 4 useful ideas. It has not placed any for you.</p>
-              <span className="tiny-static-note">PAST PLANS STAY IN THE PUBLIC SHARED WORKSPACE</span>
+              <span className="tiny-static-note">PAST PLANS STAY IN RYAN’S SHARED WORKSPACE</span>
             </div>
           </section>
         </aside>
@@ -10073,7 +10073,7 @@ export default function Home() {
                 <>
                   {detailCard.mediaId && ideaMediaUrls[detailCard.mediaId] ? (
                     <figure className="idea-reference-media">
-                      <figcaption>PUBLIC REFERENCE {detailCard.mediaKind === "video" ? "VIDEO" : "PHOTO"} · {detailCard.mediaFilename ?? "IDEA ATTACHMENT"}</figcaption>
+                      <figcaption>SHARED REFERENCE {detailCard.mediaKind === "video" ? "VIDEO" : "PHOTO"} · {detailCard.mediaFilename ?? "IDEA ATTACHMENT"}</figcaption>
                       {detailCard.mediaKind === "video"
                         ? <video src={ideaMediaUrls[detailCard.mediaId]} controls playsInline preload="metadata" aria-label={`Reference video for ${detailCard.title}`} />
                         : <img src={ideaMediaUrls[detailCard.mediaId]} alt={`Reference photo for ${detailCard.title}`} />}
@@ -10129,7 +10129,7 @@ export default function Home() {
                 </>
               ) : (
                 <section className="media-placeholder" aria-label="Media and reference placeholders">
-                  <div><b>VIDEO</b><span>PUBLIC VIDEO SLOT</span></div>
+                  <div><b>VIDEO</b><span>SHARED VIDEO SLOT</span></div>
                   <div><b>PHOTO</b><span>PERFECT-DEMO SLOT</span></div>
                   <div><b>LINK</b><span>REFERENCE SLOT</span></div>
                   <p>Media has not been linked to this Idea yet. This is where a saved demo video, photo, or reference will open.</p>
@@ -10153,9 +10153,9 @@ export default function Home() {
             onMouseDown={(event) => event.stopPropagation()}
             onSubmit={(event) => { event.preventDefault(); void saveLibraryEdit(); }}
           >
-            <div className="window-title">EDIT PUBLIC LIBRARY IDEA <button type="button" disabled={isSavingLibraryEdit} onClick={closeLibraryEdit} aria-label="Close idea editor">×</button></div>
+            <div className="window-title">EDIT RYAN’S LIBRARY IDEA <button type="button" disabled={isSavingLibraryEdit} onClick={closeLibraryEdit} aria-label="Close idea editor">×</button></div>
             <div className="idea-detail-body idea-editor-body">
-              <p className="idea-editor-note">Changes sync with the public Idea Library. The saved vault/Freeform source stays untouched.</p>
+              <p className="idea-editor-note">Changes sync with Ryan&apos;s private Idea Library. The saved vault/Freeform source stays untouched.</p>
               <div className="idea-editor-grid">
                 <label>NAME<input value={libraryEditDraft.title} onChange={(event) => updateLibraryEditDraft("title", event.target.value)} maxLength={100} autoFocus /></label>
                 <label>TYPE
@@ -10196,7 +10196,7 @@ export default function Home() {
                 <label className="wide">SAFETY NOTE<input value={libraryEditDraft.safety} onChange={(event) => updateLibraryEditDraft("safety", event.target.value)} maxLength={260} /></label>
               </div>
               <section className="idea-editor-media" aria-label="Idea picture or video attachment">
-                <b>REFERENCE PHOTO OR VIDEO <small>one public attachment · 35 MB photo / 100 MB video</small></b>
+                <b>REFERENCE PHOTO OR VIDEO <small>one shared attachment · 35 MB photo / 100 MB video</small></b>
                 <input
                   ref={editIdeaCameraInputRef}
                   className="new-idea-file-input"
@@ -10255,7 +10255,7 @@ export default function Home() {
               <div className="idea-editor-actions">
                 <button type="button" disabled={isSavingLibraryEdit} onClick={closeLibraryEdit}>CANCEL</button>
                 <button type="button" disabled={isSavingLibraryEdit} onClick={() => void saveLibraryEdit({ moveToDraft: true })}>MOVE TO DRAFT</button>
-                <button type="submit" disabled={isSavingLibraryEdit}>{isSavingLibraryEdit ? "SAVING…" : "SAVE PUBLIC EDIT"}</button>
+                <button type="submit" disabled={isSavingLibraryEdit}>{isSavingLibraryEdit ? "SAVING…" : "SAVE SHARED EDIT"}</button>
               </div>
             </div>
           </form>
