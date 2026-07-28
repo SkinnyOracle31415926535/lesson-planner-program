@@ -29,10 +29,5 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><head>
-    <script
-      src="https://student-shuffle-shared.ryan-666-mp3.chatgpt.site/durable-storage.js"
-      data-durable-namespace="lesson-planner-local-v1"
-    />
-  </head><body>{children}</body></html>;
+  return <html lang="en"><body>{children}</body></html>;
 }
