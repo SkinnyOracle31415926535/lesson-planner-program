@@ -205,6 +205,27 @@ test("unsafe lesson IDs cannot validate or materialize dynamic storage keys", ()
     false,
     validateLesson,
   ));
+
+  const unsafeActiveRecord = {
+    ...unsafeRecord,
+    value: { version: 2 as const, activePlanId: "unsupported active id", plans: [] },
+  };
+  assert.equal(validateLessonPlannerSyncRecord(unsafeActiveRecord, validateLesson), false);
+  assert.deepEqual(
+    lessonPlannerStorageKeysForRecord(unsafeActiveRecord, validateLesson),
+    [LOCAL_LESSON_PLAN_INDEX_STORAGE_KEY],
+  );
+  storage.setItem(
+    LOCAL_LESSON_PLAN_INDEX_STORAGE_KEY,
+    JSON.stringify(unsafeActiveRecord.value),
+  );
+  assert.equal(rawLessonPlannerBackup(storage as unknown as Storage).index_valid, false);
+
+  const emptyIndexRecord = {
+    ...unsafeRecord,
+    value: { version: 2 as const, activePlanId: "", plans: [] },
+  };
+  assert.equal(validateLessonPlannerSyncRecord(emptyIndexRecord, validateLesson), true);
 });
 
 test("the central migration marker is explicit and does not alter planner records", () => {
