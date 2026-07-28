@@ -178,6 +178,8 @@ import {
   type PlannerLessonDraft,
 } from "./planner-intake";
 import { parsePlannerOperationsV4 } from "./planner-operations";
+import { LessonPlannerAppSync } from "./lesson-planner-app-sync";
+import { hasCompletedLessonPlannerAppSync } from "./lesson-planner-app-sync-storage";
 import {
   addLocalStationBoardSpot,
   effectiveStationBoardSpots,
@@ -2609,6 +2611,10 @@ function LegacyLessonDocument({
 }
 
 export default function Home() {
+  const validateLessonForAppSync = useCallback(
+    (value: unknown) => restoreLesson(value) !== null,
+    [],
+  );
   const [lessonToday, setLessonToday] = useState(localLessonPlanDate);
   const [activePhaseId, setActivePhaseId] = useState("l3-f2");
   const [mode, setMode] = useState<"EDIT" | "VIEW">("EDIT");
@@ -4925,7 +4931,8 @@ export default function Home() {
   }, [rememberSharedPlannerWorkspace]);
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("library") === "1"
+    if (hasCompletedLessonPlannerAppSync(window.localStorage)
+      || new URLSearchParams(window.location.search).get("library") === "1"
       || !hasLoadedLocalLesson
       || !hasLoadedLocalClasses
       || !hasLoadedSafeSchedule
@@ -8436,6 +8443,10 @@ export default function Home() {
         <button onClick={openLibraryWindow} aria-label="Open the Idea Library in a new window">LIBRARY <b>{allLibraryItems.length} IDEAS</b></button>
         {mode === "VIEW" ? <button className="view-new-idea-nav" onClick={() => setIsAddingIdea((open) => !open)}>{isAddingIdea ? "CLOSE NEW IDEA" : "+ NEW IDEA"}</button> : null}
         <button className={unresolvedUpdateCount ? "pending-shake" : ""} onClick={() => scrollToPlannerSection("daily-updates")}>UPDATES <b className="hot">{unresolvedUpdateCount}</b></button>
+        <LessonPlannerAppSync
+          validateLesson={validateLessonForAppSync}
+          onStatus={setSharedPlannerSyncStatus}
+        />
         <div className="mode-switch" aria-label="Lesson mode">
           {(["EDIT", "VIEW"] as const).map((entry) => (
             <button key={entry} className={mode === entry ? "selected" : ""} onClick={() => setLessonMode(entry)} disabled={entry === "EDIT" && isPastActivePlan}>{entry}</button>
