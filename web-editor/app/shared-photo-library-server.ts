@@ -28,7 +28,15 @@ export async function isSharedPhotoLibraryOwner(user: Pick<ChatGPTUser, "email">
   return Boolean(configuredOwner) && user.email.trim().toLocaleLowerCase() === configuredOwner;
 }
 
-/** Public pages stay readable; writes require the configured owner at this origin. */
+/** Synchronized planner records are readable only by the configured owner. */
+export async function hasSharedPhotoLibraryReadAccess(request: Request): Promise<boolean> {
+  const user = await getChatGPTUser();
+  if (!user || !(await isSharedPhotoLibraryOwner(user))) return false;
+  const origin = request.headers.get("origin");
+  return !origin || origin === new URL(request.url).origin;
+}
+
+/** Mutations also require the configured owner and this service's own origin. */
 export async function hasSharedPhotoLibraryWriteAccess(request: Request): Promise<boolean> {
   const user = await getChatGPTUser();
   return Boolean(user) && (await isSharedPhotoLibraryOwner(user)) && hasSameOrigin(request);

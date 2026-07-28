@@ -15,7 +15,10 @@ import {
   type SharedPlannerStoredDocument,
   type SharedPlannerStoredWorkspace,
 } from "../../shared-planner-documents-server";
-import { hasSharedPhotoLibraryWriteAccess } from "../../shared-photo-library-server";
+import {
+  hasSharedPhotoLibraryReadAccess,
+  hasSharedPhotoLibraryWriteAccess,
+} from "../../shared-photo-library-server";
 
 export const dynamic = "force-dynamic";
 
@@ -181,8 +184,11 @@ export async function OPTIONS() {
   return new Response(null, { status: 204, headers: publicPlannerCorsHeaders() });
 }
 
-/** A full public workspace snapshot is read in one D1 query, never document-by-document. */
+/** An owner-only workspace snapshot is read in one D1 query, never document-by-document. */
 export async function GET(request: Request) {
+  if (!(await hasSharedPhotoLibraryReadAccess(request))) {
+    return sharedPlannerError("Sign in with the owner ChatGPT account before reading the shared planner.", 401);
+  }
   try {
     const manifestOnly = new URL(request.url).searchParams.get("manifest") === "1";
     return await readWorkspaceResponse(await sharedPlannerDatabase(), manifestOnly);
