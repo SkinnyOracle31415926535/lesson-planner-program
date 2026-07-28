@@ -8,6 +8,7 @@ import {
   LESSON_PLANNER_APP_SYNC_MIGRATED_KEY,
   applyLessonPlannerRemoteRecord,
   hasCompletedLessonPlannerAppSync,
+  lessonPlannerStorageKeysForRecord,
   markLessonPlannerAppSyncComplete,
   rawLessonPlannerBackup,
   readLessonPlannerSyncRecords,
@@ -171,6 +172,39 @@ test("an invalid index is backed up without discovering arbitrary dynamic keys",
     false,
   );
   assert.doesNotMatch(JSON.stringify(backup), /NEVER_DISCOVER/);
+});
+
+test("unsafe lesson IDs cannot validate or materialize dynamic storage keys", () => {
+  const unsafePlan = { ...plan, id: "unsupported lesson id" };
+  const unsafeRecord = {
+    collection: "lesson_z_index" as const,
+    recordId: "default",
+    value: {
+      ...index,
+      activePlanId: unsafePlan.id,
+      plans: [unsafePlan],
+    },
+  };
+  assert.equal(validateLessonPlannerSyncRecord(unsafeRecord, validateLesson), false);
+  assert.deepEqual(
+    lessonPlannerStorageKeysForRecord(unsafeRecord, validateLesson),
+    [LOCAL_LESSON_PLAN_INDEX_STORAGE_KEY],
+  );
+
+  const storage = readyStorage();
+  storage.setItem(LOCAL_LESSON_PLAN_INDEX_STORAGE_KEY, JSON.stringify(unsafeRecord.value));
+  const backup = rawLessonPlannerBackup(storage as unknown as Storage);
+  assert.equal(backup.index_valid, false);
+  assert.equal(
+    backup.records.some((record) => record.key.includes(unsafePlan.id)),
+    false,
+  );
+  assert.throws(() => applyLessonPlannerRemoteRecord(
+    storage as unknown as Storage,
+    unsafeRecord,
+    false,
+    validateLesson,
+  ));
 });
 
 test("the central migration marker is explicit and does not alter planner records", () => {

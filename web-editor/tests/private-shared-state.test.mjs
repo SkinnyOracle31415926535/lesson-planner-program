@@ -26,3 +26,19 @@ test("shared planner and Idea Library reads require the configured owner", async
     );
   }
 });
+
+test("Lesson Planner sync loads on demand and preserves concurrent local edits", async () => {
+  const sync = await read("app/lesson-planner-app-sync.tsx");
+  const snapshot = sync.indexOf("const before = new Map");
+  const idleWait = sync.indexOf("await waitForEditorIdle()", snapshot);
+  const lockedApply = sync.indexOf("await withStorageLock", idleWait);
+  const recheck = sync.indexOf("window.localStorage.getItem(key) !== before.get(key)", lockedApply);
+  assert.ok(snapshot >= 0 && snapshot < idleWait && idleWait < lockedApply && lockedApply < recheck);
+  assert.match(sync, /clientScriptPromise = null/);
+  assert.match(sync, /setupPromise = null/);
+  assert.match(sync, /showModal\(\);[\s\S]*?void initializeSync\(\);/);
+  assert.doesNotMatch(
+    sync,
+    /useEffect\(\(\) => \{[\s\S]{0,300}?setupClient\(validateLesson\)/,
+  );
+});

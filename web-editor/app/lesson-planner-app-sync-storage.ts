@@ -212,8 +212,10 @@ export function validateLessonPlannerSyncRecord(
       && parsePlannerOperationsV4(record.value) !== null;
   }
   if (record.collection === "lesson_z_index") {
+    const index = normalizeLessonPlanIndex(record.value)?.index;
     return record.recordId === "default"
-      && normalizeLessonPlanIndex(record.value) !== null;
+      && index !== undefined
+      && index.plans.every((plan) => SAFE_RECORD_ID.test(plan.id));
   }
   return parseLessonWrapper(record.value, record.recordId, validateLesson) !== null;
 }
@@ -238,6 +240,9 @@ export function rawLessonPlannerBackup(
   let indexValid = false;
   try {
     const index = normalizedIndex(storage);
+    if (index.plans.some((plan) => !SAFE_RECORD_ID.test(plan.id))) {
+      throw new Error("The lesson-plan index contains an unsupported local ID.");
+    }
     indexValid = true;
     index.plans.forEach((plan) => keys.add(lessonStorageKey(plan)));
   } catch {
@@ -270,9 +275,12 @@ export function lessonPlannerStorageKeysForRecord(
   if (record.collection === "operations") return [LOCAL_OPERATIONS_STORAGE_KEY];
   if (record.collection === "lesson_z_index") {
     const index = normalizeLessonPlanIndex(record.value)?.index;
+    if (!index || index.plans.some((plan) => !SAFE_RECORD_ID.test(plan.id))) {
+      return [LOCAL_LESSON_PLAN_INDEX_STORAGE_KEY];
+    }
     return [
       LOCAL_LESSON_PLAN_INDEX_STORAGE_KEY,
-      ...(index?.plans.map(lessonStorageKey) ?? []),
+      ...index.plans.map(lessonStorageKey),
     ];
   }
   const wrapper = parseLessonWrapper(record.value, record.recordId, validateLesson);

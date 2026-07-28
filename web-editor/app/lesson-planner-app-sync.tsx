@@ -128,14 +128,19 @@ function loadClientScript(): Promise<RyanAppSyncGlobal> {
       'script[data-lesson-planner-app-sync-client="true"]',
     );
     const script = existing ?? document.createElement("script");
+    const fail = (message: string) => {
+      script.remove();
+      clientScriptPromise = null;
+      reject(new Error(message));
+    };
     const finish = () => {
       if (window.RyanAppSync) resolve(window.RyanAppSync);
-      else reject(new Error("The Ryan App Sync client did not initialize."));
+      else fail("The Ryan App Sync client did not initialize.");
     };
     script.addEventListener("load", finish, { once: true });
     script.addEventListener(
       "error",
-      () => reject(new Error("The Ryan App Sync client could not be loaded.")),
+      () => fail("The Ryan App Sync client could not be loaded."),
       { once: true },
     );
     if (!existing) {
@@ -265,10 +270,10 @@ async function setupClient(
             throw new Error("The sync client requested an invalid remote planner write.");
           }
           const record = { collection, recordId, value };
+          const keys = lessonPlannerStorageKeysForRecord(record, validateLesson);
+          const before = new Map(keys.map((key) => [key, window.localStorage.getItem(key)]));
           await waitForEditorIdle();
           await withStorageLock(() => {
-            const keys = lessonPlannerStorageKeysForRecord(record, validateLesson);
-            const before = new Map(keys.map((key) => [key, window.localStorage.getItem(key)]));
             if (keys.some((key) => window.localStorage.getItem(key) !== before.get(key))) {
               throw new Error("A newer local planner edit was preserved.");
             }
@@ -289,7 +294,10 @@ async function setupClient(
     await client.finalizeRegistration();
     registering = false;
     return setup;
-  })();
+  })().catch((error: unknown) => {
+    setupPromise = null;
+    throw error;
+  });
   return setupPromise;
 }
 
@@ -390,6 +398,9 @@ export function LessonPlannerAppSync({
   onStatus?: (status: string) => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const mountedRef = useRef(true);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
+  const initializingRef = useRef<Promise<void> | null>(null);
   const [setup, setSetup] = useState<Setup | null>(null);
   const [syncState, setSyncState] = useState<SyncState>({
     mode: "disconnected",
@@ -401,37 +412,59 @@ export function LessonPlannerAppSync({
   const [conflicts, setConflicts] = useState<SyncConflict[]>([]);
   const [alert, setAlert] = useState("");
   const [busy, setBusy] = useState(false);
+  const [initializing, setInitializing] = useState(false);
 
   const refreshConflicts = useCallback(async (client: SyncClient) => {
     setConflicts(await client.listConflicts());
   }, []);
 
   useEffect(() => {
-    let active = true;
-    let unsubscribe: (() => void) | null = null;
-    void setupClient(validateLesson).then((ready) => {
-      if (!active) return;
-      setSetup(ready);
-      unsubscribe = ready.client.onStateChange((state) => {
-        if (!active) return;
-        setSyncState(state);
-        onStatus?.(`RYAN APP SYNC · ${stateLabel(state.mode).toUpperCase()}`);
-        if (state.mode === "conflict") void refreshConflicts(ready.client);
-        if (state.mode === "synced" && ready.reloadRequired) window.location.reload();
-      });
-    }).catch((error: unknown) => {
-      if (!active) return;
-      const message = error instanceof Error
-        ? error.message
-        : "Ryan App Sync could not be initialized.";
-      setAlert(message);
-      onStatus?.("RYAN APP SYNC · LOCAL COPY AVAILABLE");
-    });
+    mountedRef.current = true;
     return () => {
-      active = false;
-      unsubscribe?.();
+      mountedRef.current = false;
+      unsubscribeRef.current?.();
+      unsubscribeRef.current = null;
     };
-  }, [onStatus, refreshConflicts, validateLesson]);
+  }, []);
+
+  const initializeSync = useCallback(async () => {
+    if (setup) return;
+    if (initializingRef.current) return initializingRef.current;
+    setInitializing(true);
+    setAlert("");
+    const pending = (async () => {
+      try {
+        const ready = await setupClient(validateLesson);
+        if (!mountedRef.current) return;
+        const showState = (state: SyncState) => {
+          if (!mountedRef.current) return;
+          setSyncState(state);
+          onStatus?.(`RYAN APP SYNC · ${stateLabel(state.mode).toUpperCase()}`);
+          if (state.mode === "conflict") void refreshConflicts(ready.client);
+          if (state.mode === "synced" && ready.reloadRequired) window.location.reload();
+        };
+        setSetup(ready);
+        showState(ready.client.getState());
+        unsubscribeRef.current?.();
+        unsubscribeRef.current = ready.client.onStateChange(showState);
+      } catch (error: unknown) {
+        if (!mountedRef.current) return;
+        const message = error instanceof Error
+          ? error.message
+          : "Ryan App Sync could not be initialized.";
+        setAlert(message);
+        onStatus?.("RYAN APP SYNC · LOCAL COPY AVAILABLE");
+      } finally {
+        if (mountedRef.current) setInitializing(false);
+      }
+    })();
+    initializingRef.current = pending;
+    try {
+      await pending;
+    } finally {
+      if (initializingRef.current === pending) initializingRef.current = null;
+    }
+  }, [onStatus, refreshConflicts, setup, validateLesson]);
 
   useEffect(() => {
     if (!setup || !hasCompletedLessonPlannerAppSync(window.localStorage)) return;
@@ -543,7 +576,10 @@ export function LessonPlannerAppSync({
         type="button"
         className="lesson-app-sync-open"
         data-state={syncState.mode}
-        onClick={() => dialogRef.current?.showModal()}
+        onClick={() => {
+          dialogRef.current?.showModal();
+          void initializeSync();
+        }}
       >
         SYNC &amp; BACKUP
       </button>
@@ -586,12 +622,22 @@ export function LessonPlannerAppSync({
           <div className="lesson-app-sync-actions">
             <button
               type="button"
-              disabled={!setup || busy}
-              onClick={() => void run(async (ready) => {
-                await ready.client.connect();
-              })}
+              disabled={busy || initializing}
+              onClick={() => {
+                if (!setup) {
+                  void initializeSync();
+                  return;
+                }
+                void run(async (ready) => {
+                  await ready.client.connect();
+                });
+              }}
             >
-              Connect as Ryan
+              {initializing
+                ? "Loading sync controls…"
+                : setup
+                  ? "Connect as Ryan"
+                  : "Retry loading sync controls"}
             </button>
             <button
               type="button"
