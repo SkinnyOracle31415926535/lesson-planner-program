@@ -1,4 +1,4 @@
-import type { ChatGPTUser } from "./chatgpt-auth";
+import { getChatGPTUser, type ChatGPTUser } from "./chatgpt-auth";
 
 type SharedPhotoLibraryRuntime = {
   DB?: D1Database;
@@ -26,6 +26,12 @@ export async function sharedPhotoLibraryImages(): Promise<R2Bucket> {
 export async function isSharedPhotoLibraryOwner(user: Pick<ChatGPTUser, "email">): Promise<boolean> {
   const configuredOwner = (await runtime()).SHARED_LIBRARY_OWNER_EMAIL?.trim().toLocaleLowerCase();
   return Boolean(configuredOwner) && user.email.trim().toLocaleLowerCase() === configuredOwner;
+}
+
+/** Public pages stay readable; writes require the configured owner at this origin. */
+export async function hasSharedPhotoLibraryWriteAccess(request: Request): Promise<boolean> {
+  const user = await getChatGPTUser();
+  return Boolean(user) && (await isSharedPhotoLibraryOwner(user)) && hasSameOrigin(request);
 }
 
 /** Reject cross-site mutation attempts even when a browser has an active SIWC session. */

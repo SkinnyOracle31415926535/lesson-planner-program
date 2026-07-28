@@ -7,6 +7,7 @@ import {
   sharedIdeaLibraryError,
   workspaceResponse,
 } from "../../shared-idea-library-server";
+import { hasSharedPhotoLibraryWriteAccess } from "../../shared-photo-library-server";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,9 @@ export async function GET(request: Request) {
 
 /** Creates exactly one initial public Idea Library. A blank browser never needs to call this. */
 export async function POST(request: Request) {
+  if (!(await hasSharedPhotoLibraryWriteAccess(request))) {
+    return sharedIdeaLibraryError("Sign in with the owner ChatGPT account before editing the shared Idea Library.", 401);
+  }
   if (request.headers.get("if-none-match") !== "*") {
     return sharedIdeaLibraryError("Use If-None-Match to create the public Idea Library.", 428);
   }
@@ -54,6 +58,9 @@ export async function POST(request: Request) {
  * prevents one device from silently replacing another device's full library.
  */
 export async function PUT(request: Request) {
+  if (!(await hasSharedPhotoLibraryWriteAccess(request))) {
+    return sharedIdeaLibraryError("Sign in with the owner ChatGPT account before editing the shared Idea Library.", 401);
+  }
   const expected = request.headers.get("if-match")?.match(/^\"([1-9]\d*)\"$/)?.[1];
   if (!expected) return sharedIdeaLibraryError("Use If-Match with the current public Idea Library revision.", 428);
   const parsed = await parseSharedIdeaLibraryStateWrite(request);

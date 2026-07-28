@@ -70,6 +70,14 @@ import {
   type VisualLabelLayout,
 } from "./custom-boards";
 import {
+  emptyFloorPhotoAreaStorage,
+  floorPhotoAreaStorage,
+  isFloorPhotoAreaId,
+  isFloorPhotoAreaStorage,
+  type FloorPhotoAreaId,
+  type FloorPhotoAreaStorage,
+} from "./floor-photo-areas";
+import {
   MAX_CUSTOM_BOARD_IMPORT_AREAS,
   createCustomBoardImportFromPhotoNames,
   customBoardImportBoardId,
@@ -327,6 +335,7 @@ const LOCAL_LIBRARY_STORAGE_KEY = "gym-lesson-planner-local-library-v1";
 const LOCAL_LIBRARY_VIEW_STORAGE_KEY = "gym-lesson-planner-local-library-view-v1";
 const LOCAL_REMINDER_STORAGE_KEY = "gym-lesson-planner-local-reminders-v1";
 const LOCAL_CUSTOM_BOARD_STORAGE_KEY = "gym-lesson-planner-local-custom-boards-v1";
+const LOCAL_FLOOR_PHOTO_AREA_STORAGE_KEY = "gym-lesson-planner-local-floor-photo-areas-v1";
 const LOCAL_STATION_BOARD_OVERRIDE_STORAGE_KEY = "gym-lesson-planner-local-station-board-overrides-v1";
 const LOCAL_AREA_CATALOG_STORAGE_KEY = "gym-lesson-planner-local-area-catalog-v1";
 const BUILT_IN_BOARD_TOOL_PREFIX = "built-in:";
@@ -2679,10 +2688,13 @@ export default function Home() {
   const [visualLabelLayoutByCardId, setVisualLabelLayoutByCardId] = useState<Record<string, VisualLabelLayout>>({});
   const [customBoards, setCustomBoards] = useState<CustomBoard[]>([]);
   const [customBoardPhotoUrls, setCustomBoardPhotoUrls] = useState<Record<string, string>>({});
+  const [floorPhotoAreas, setFloorPhotoAreas] = useState<FloorPhotoAreaStorage>(emptyFloorPhotoAreaStorage);
+  const [floorPhotoUrls, setFloorPhotoUrls] = useState<Partial<Record<FloorPhotoAreaId, string>>>({});
   const [sharedCustomBoardPhotoUrls, setSharedCustomBoardPhotoUrls] = useState<Record<string, string>>({});
   const [sharedPhotoAreaCount, setSharedPhotoAreaCount] = useState<number | null>(null);
   const [sharedPhotoLibraryAdminUrl, setSharedPhotoLibraryAdminUrl] = useState<string | null>(null);
   const [hasLoadedCustomBoards, setHasLoadedCustomBoards] = useState(false);
+  const [hasLoadedFloorPhotoAreas, setHasLoadedFloorPhotoAreas] = useState(false);
   const [areaCatalog, setAreaCatalog] = useState<AreaCatalogPreferences>(emptyAreaCatalogPreferences);
   const [hasLoadedAreaCatalog, setHasLoadedAreaCatalog] = useState(false);
   const [stationBoardOverrides, setStationBoardOverrides] = useState<StationBoardOverrideStorage>(() => stationBoardOverrideStorage());
@@ -2695,6 +2707,8 @@ export default function Home() {
   const [isSavingCustomBoardImport, setIsSavingCustomBoardImport] = useState(false);
   const [replacingCustomBoardId, setReplacingCustomBoardId] = useState<string | null>(null);
   const [replacementCustomBoardFile, setReplacementCustomBoardFile] = useState<File | null>(null);
+  const [replacingFloorPhotoAreaId, setReplacingFloorPhotoAreaId] = useState<FloorPhotoAreaId | null>(null);
+  const [replacementFloorPhotoFile, setReplacementFloorPhotoFile] = useState<File | null>(null);
   const [editingArea, setEditingArea] = useState<AreaEditTarget | null>(null);
   const [areaTitleDraft, setAreaTitleDraft] = useState("");
   const [areaAliasDraft, setAreaAliasDraft] = useState("");
@@ -3077,6 +3091,31 @@ export default function Home() {
       resolveOpenAreaAvailability(safeScheduleDay, block, openScheduleZones.map((zone) => zone.id)),
     ]));
   }, [openScheduleZones, safeScheduleDay, usesSafeScheduleDay]);
+  const derivedOpenAreaCards = useMemo(() => {
+    if (!usesSafeScheduleDay || !safeScheduleDay) return [];
+    const candidatePanelIds = openScheduleZones.map((zone) => zone.id);
+    return eventEditorGroups.flatMap((event) => {
+      const firstPhase = event.phases[0];
+      const window = eventWindow(event.phases);
+      const startMinute = window ? pickerMinuteForSchedule(window.start) : null;
+      const endMinute = window ? pickerMinuteForSchedule(window.end) : null;
+      if (!firstPhase || startMinute === null || endMinute === null) return [];
+      const availability = resolveAreaAvailabilityForInterval(
+        safeScheduleDay,
+        { startMinute, endMinute },
+        candidatePanelIds,
+      );
+      if (!availability) return [];
+      return [{
+        eventId: event.id,
+        eventLabel: firstPhase.title.trim() || eventNameForPhase(firstPhase),
+        startMinute,
+        endMinute,
+        unmappedEquipment: availability.unmappedEquipment,
+        availableZones: openScheduleZones.filter((zone) => availability.availablePanelIds.includes(zone.id)),
+      }];
+    });
+  }, [eventEditorGroups, openScheduleZones, safeScheduleDay, usesSafeScheduleDay]);
   const plannerScheduleEventConflicts = useMemo(() => {
     if (!usesSafeScheduleDay || !safeScheduleDay) return [];
     const candidatePanelIds = openScheduleZones.map((zone) => zone.id);
@@ -3877,6 +3916,34 @@ export default function Home() {
   }, [customBoards, hasLoadedCustomBoards]);
 
   useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(LOCAL_FLOOR_PHOTO_AREA_STORAGE_KEY);
+      if (stored) {
+        const parsed: unknown = JSON.parse(stored);
+        if (isFloorPhotoAreaStorage(parsed)) {
+          setFloorPhotoAreas(parsed);
+          setNotice("F2 + F3 PHOTO AREAS RESTORED · EACH IMAGE HAS A SHARED BACKUP WHEN CONNECTED");
+        } else {
+          setNotice("SAVED F2/F3 PHOTO AREAS WERE NOT VALID · FLOOR CROPS STAY ACTIVE");
+        }
+      }
+    } catch {
+      setNotice("F2/F3 PHOTO AREA LIST COULD NOT BE RESTORED IN THIS BROWSER");
+    } finally {
+      setHasLoadedFloorPhotoAreas(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedFloorPhotoAreas) return;
+    try {
+      window.localStorage.setItem(LOCAL_FLOOR_PHOTO_AREA_STORAGE_KEY, JSON.stringify(floorPhotoAreaStorage(floorPhotoAreas.photosByZoneId)));
+    } catch {
+      setNotice("F2/F3 PHOTO AREA LIST CHANGED · BROWSER STORAGE COULD NOT SAVE THE METADATA");
+    }
+  }, [floorPhotoAreas, hasLoadedFloorPhotoAreas]);
+
+  useEffect(() => {
     setSharedPhotoLibraryAdminUrl(sharedPhotoLibraryManagerUrl());
     let active = true;
     void fetchSharedPhotoLibrary().then((library) => {
@@ -4155,6 +4222,30 @@ export default function Home() {
       urls.forEach((url) => URL.revokeObjectURL(url));
     };
   }, [hasLoadedCustomBoards, renderingCustomBoards, sharedCustomBoardPhotoUrls]);
+
+  useEffect(() => {
+    if (!hasLoadedFloorPhotoAreas) return;
+    let active = true;
+    const urls: string[] = [];
+    setFloorPhotoUrls({});
+    void Promise.all(Object.entries(floorPhotoAreas.photosByZoneId).map(async ([zoneId, photo]) => {
+      if (!isFloorPhotoAreaId(zoneId) || !photo) return [zoneId, ""] as const;
+      const storedPhoto = await loadCustomBoardPhoto(photo.photoId);
+      if (!storedPhoto || !active) return [zoneId, ""] as const;
+      const url = URL.createObjectURL(storedPhoto.blob);
+      urls.push(url);
+      return [zoneId, url] as const;
+    })).then((entries) => {
+      if (!active) return;
+      setFloorPhotoUrls(Object.fromEntries(entries.filter(([zoneId, url]) => isFloorPhotoAreaId(zoneId) && Boolean(url))) as Partial<Record<FloorPhotoAreaId, string>>);
+    }).catch(() => {
+      if (active) setNotice("F2/F3 PHOTO AREA METADATA RESTORED · ONE OR MORE LOCAL PHOTOS ARE UNAVAILABLE");
+    });
+    return () => {
+      active = false;
+      urls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [floorPhotoAreas, hasLoadedFloorPhotoAreas]);
 
   useEffect(() => {
     try {
@@ -6322,6 +6413,8 @@ export default function Home() {
     setAreaNoteDraft(zone.note);
     setReplacingCustomBoardId(null);
     setReplacementCustomBoardFile(null);
+    setReplacingFloorPhotoAreaId(null);
+    setReplacementFloorPhotoFile(null);
     setRemovingArea(null);
   }
 
@@ -6333,6 +6426,8 @@ export default function Home() {
     setAreaNoteDraft("");
     setReplacingCustomBoardId(null);
     setReplacementCustomBoardFile(null);
+    setReplacingFloorPhotoAreaId(null);
+    setReplacementFloorPhotoFile(null);
     setRemovingArea(null);
   }
 
@@ -6341,6 +6436,8 @@ export default function Home() {
     setAreaTitleDraft("");
     setAreaAliasDraft("");
     setAreaNoteDraft("");
+    setReplacingFloorPhotoAreaId(null);
+    setReplacementFloorPhotoFile(null);
   }
 
   function saveBuiltInAreaDetails(zone: ZonePanel) {
@@ -6445,6 +6542,70 @@ export default function Home() {
     } catch {
       setNotice("THE NEW AREA PHOTO COULD NOT BE SAVED IN THIS BROWSER");
     }
+  }
+
+  function startReplacingFloorPhotoArea(zoneId: FloorPhotoAreaId) {
+    if (activePlanIsReadOnly()) return;
+    setReplacingFloorPhotoAreaId(zoneId);
+    setReplacementFloorPhotoFile(null);
+    setRemovingArea(null);
+  }
+
+  function cancelReplacingFloorPhotoArea() {
+    setReplacingFloorPhotoAreaId(null);
+    setReplacementFloorPhotoFile(null);
+  }
+
+  async function replaceFloorPhotoArea(zone: ZonePanel, zoneId: FloorPhotoAreaId) {
+    if (activePlanIsReadOnly()) return;
+    const photo = replacementFloorPhotoFile;
+    if (!photo) {
+      setNotice(`CHOOSE A ${zone.alias.toUpperCase()} PHOTO BEFORE SAVING`);
+      return;
+    }
+    if (!isAllowedCustomBoardPhoto(photo)) {
+      setNotice("USE A JPEG, PNG, WEBP, HEIC, OR HEIF PHOTO UNDER 35 MB");
+      return;
+    }
+    try {
+      const dimensions = await readCustomPhotoDimensions(photo);
+      if (!dimensions.width || !dimensions.height) throw new Error("empty image");
+      const timestamp = new Date().toISOString();
+      const photoId = `photo-${zoneId}-${Date.now()}`;
+      await saveCustomBoardPhoto({
+        id: photoId,
+        blob: photo,
+        filename: photo.name || `${zoneId}-photo`,
+        mimeType: photo.type || "image/*",
+        width: dimensions.width,
+        height: dimensions.height,
+        createdAt: timestamp,
+      });
+      setFloorPhotoAreas((current) => floorPhotoAreaStorage({
+        ...current.photosByZoneId,
+        [zoneId]: {
+          photoId,
+          filename: photo.name || `${zoneId}-photo`,
+          width: dimensions.width,
+          height: dimensions.height,
+          updatedAt: timestamp,
+        },
+      }));
+      cancelReplacingFloorPhotoArea();
+      setNotice(`${zone.alias.toUpperCase()} PHOTO SAVED SEPARATELY · ${zone.alias.toUpperCase()} WILL NOT SHARE F3/F2'S IMAGE`);
+    } catch {
+      setNotice(`${zone.alias.toUpperCase()} PHOTO COULD NOT BE SAVED IN THIS BROWSER`);
+    }
+  }
+
+  function restoreFloorPhotoCrop(zone: ZonePanel, zoneId: FloorPhotoAreaId) {
+    if (activePlanIsReadOnly()) return;
+    setFloorPhotoAreas((current) => {
+      const { [zoneId]: _removed, ...remaining } = current.photosByZoneId;
+      return floorPhotoAreaStorage(remaining);
+    });
+    cancelReplacingFloorPhotoArea();
+    setNotice(`${zone.alias.toUpperCase()} RESTORED TO ITS OWN FLOOR CROP · F2 AND F3 STAY SEPARATE`);
   }
 
   function startRemovingArea(target: AreaEditTarget, keepEventEditor = false) {
@@ -8600,9 +8761,34 @@ export default function Home() {
                 <p className="schedule-open-advisory">ADVISORY ONLY · AREAS ARE NOT RESERVED · NOTHING IS ADDED UNTIL YOU CHOOSE AREAS AND TAP ADD OPEN EVENT</p>
               </section>
 
+              <section className="schedule-advisory-section derived-open-areas" aria-label="Derived open areas for lesson events">
+                <div className="schedule-advisory-section-title">
+                  <b>DERIVED OPEN AREAS</b>
+                  <span>{derivedOpenAreaCards.length} EVENT{derivedOpenAreaCards.length === 1 ? "" : "S"}</span>
+                </div>
+                {hasMissingActiveClass ? <p className="schedule-advisory-empty">The saved class record is unavailable, so its event availability cannot be checked.</p> : !safeScheduleBundle ? <p className="schedule-advisory-empty">Import the privacy-safe full gym schedule to derive free areas for this lesson.</p> : !activeLocalClass ? <p className="schedule-advisory-empty">Select a local class, then link its exact imported schedule group.</p> : !linkedSafeScheduleGroup ? <p className="schedule-advisory-empty">Open Local Classes and link this class to an exact full-schedule group.</p> : !usesSafeScheduleDay ? <p className="schedule-advisory-empty">No full-schedule availability can be confirmed for this group and date.</p> : !derivedOpenAreaCards.length ? <p className="schedule-advisory-empty">No complete lesson-event time window is available to check.</p> : (
+                  <div className="derived-open-area-list">
+                    {derivedOpenAreaCards.map((card) => (
+                      <article key={card.eventId} className={`derived-open-area-card${card.unmappedEquipment.length ? " needs-review" : ""}`}>
+                        <div className="derived-open-area-heading">
+                          <time>{formatScheduleRange(card.startMinute, card.endMinute)}</time>
+                          <b>{card.eventLabel}</b>
+                          <span>{card.unmappedEquipment.length ? "⚠ REVIEW" : `${card.availableZones.length} AREAS`}</span>
+                        </div>
+                        {card.unmappedEquipment.length ? <>
+                          <p>⚠ UNMAPPED: {card.unmappedEquipment.join(" + ")} · REVIEW BEFORE USE.</p>
+                          {card.availableZones.length ? <p>POSSIBLE FROM MAPPED SCHEDULE: {card.availableZones.map((zone) => zone.alias).join(" · ")}</p> : <p>NO MAPPED AREA IS AVAILABLE TO SUGGEST.</p>}
+                        </> : card.availableZones.length ? <p>{card.availableZones.map((zone) => zone.alias).join(" · ")} FREE FOR THE FULL EVENT</p> : <p>NO MAPPED AREA IS FREE FOR THE FULL EVENT.</p>}
+                      </article>
+                    ))}
+                  </div>
+                )}
+                <p className="derived-open-area-guard">DERIVED FROM FULL SCHEDULE · AREAS MUST STAY FREE FOR THE ENTIRE EVENT · ADVISORY ONLY</p>
+              </section>
+
               <section className="schedule-advisory-section personal-alternate-openings" aria-label="Personal alternate schedule openings">
                 <div className="schedule-advisory-section-title">
-                  <b>MY ALTERNATE OPENINGS</b>
+                  <b>PERSONAL CALENDAR OVERLAY</b>
                   <span>{personalAlternateScheduleCards.length} CARDS</span>
                 </div>
                 {personalAlternateScheduleError ? (
@@ -8623,7 +8809,7 @@ export default function Home() {
                     ))}
                   </div>
                 ) : (
-                  <p className="schedule-advisory-empty">No personal alternate opening matches this exact class and lesson date.</p>
+                  <p className="schedule-advisory-empty">No personal Calendar overlay matches this exact class and lesson date.</p>
                 )}
                 <p className="personal-alternate-guard">READ-ONLY BROWSER OVERLAY · DOES NOT CHANGE THE SAFE SCHEDULE · DOES NOT RESERVE EQUIPMENT · DOES NOT ADD A PHASE</p>
               </section>
@@ -8994,8 +9180,27 @@ export default function Home() {
                   const customPhotoUrl = customBoard ? customBoardPhotoUrls[customBoard.photoId] : undefined;
                   const customPhotoPanel = customBoard ? customBoardPhotoPanelLayout(customBoard) : null;
                   const sourceLayout = customBoard ? null : gymPanelLayout(zone.id);
-                  const layout = sourceLayout;
-                  const referenceBoard = layout?.referenceBoard;
+                  const floorPhotoAreaId = !customBoard && isFloorPhotoAreaId(zone.id) ? zone.id : null;
+                  const floorPhotoArea = floorPhotoAreaId
+                    ? floorPhotoAreas.photosByZoneId[floorPhotoAreaId]
+                    : undefined;
+                  const floorPhotoUrl = floorPhotoAreaId
+                    ? floorPhotoUrls[floorPhotoAreaId]
+                    : undefined;
+                  const referenceBoard = floorPhotoArea && floorPhotoUrl
+                    ? {
+                      src: floorPhotoUrl,
+                      width: floorPhotoArea.width,
+                      height: floorPhotoArea.height,
+                      description: `${zone.title} photo area`,
+                    }
+                    : sourceLayout?.referenceBoard;
+                  // A local F2/F3 photo is a real board frame, not merely an
+                  // image replacement. Project source station spots into that
+                  // same frame so labels and edit gestures stay on its photo.
+                  const layout = sourceLayout && referenceBoard !== sourceLayout.referenceBoard
+                    ? { ...sourceLayout, referenceBoard }
+                    : sourceLayout;
                   const builtInStationSpots = layout ? effectiveBuiltInStationSpots(zone, layout) : undefined;
                   const hasBuiltInStationEditor = Boolean(layout && !customBoard);
                   const boardTool = customBoard
@@ -9379,6 +9584,17 @@ export default function Home() {
                               <label>EVENT LABEL<input value={areaAliasDraft} onChange={(event) => setAreaAliasDraft(event.target.value)} maxLength={48} placeholder={zone.alias} /></label>
                               <label className="wide">SETUP / SAFETY NOTE<textarea value={areaNoteDraft} onChange={(event) => setAreaNoteDraft(event.target.value)} maxLength={320} placeholder={zone.note} /></label>
                               <small>These are your local labels and notes. The supplied board image and source contract remain intact.</small>
+                              {floorPhotoAreaId ? <div className="custom-board-image-replace floor-photo-area-replace">
+                                <b>{zone.alias.toUpperCase()} PHOTO AREA</b>
+                                <small>{floorPhotoArea ? `${floorPhotoArea.filename} is used only for ${zone.alias}. F2 and F3 never share an uploaded photo.` : `No separate ${zone.alias} photo yet. Its own floor crop stays visible until you add one.`}</small>
+                                {replacingFloorPhotoAreaId === floorPhotoAreaId ? <>
+                                  <label>NEW {zone.alias.toUpperCase()} PHOTO<input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" onChange={(event) => setReplacementFloorPhotoFile(event.target.files?.[0] ?? null)} /></label>
+                                  <small>{replacementFloorPhotoFile ? replacementFloorPhotoFile.name : "Choose a JPEG, PNG, WEBP, HEIC, or HEIF photo under 35 MB."}</small>
+                                  <button type="button" onClick={cancelReplacingFloorPhotoArea}>CANCEL</button>
+                                  <button type="button" className="custom-board-save-image" onClick={() => void replaceFloorPhotoArea(zone, floorPhotoAreaId)}>SAVE {zone.alias.toUpperCase()} PHOTO</button>
+                                </> : <button type="button" className="custom-board-replace-event" onClick={() => startReplacingFloorPhotoArea(floorPhotoAreaId)}>{floorPhotoArea ? `REPLACE ${zone.alias.toUpperCase()} PHOTO` : `ADD ${zone.alias.toUpperCase()} PHOTO`}</button>}
+                                {floorPhotoArea && replacingFloorPhotoAreaId !== floorPhotoAreaId ? <button type="button" onClick={() => restoreFloorPhotoCrop(zone, floorPhotoAreaId)}>RESTORE {zone.alias.toUpperCase()} FLOOR CROP</button> : null}
+                              </div> : null}
                               <button type="button" onClick={cancelEditingArea}>CANCEL</button>
                               <button type="button" className="custom-board-save-event" onClick={() => saveBuiltInAreaDetails(zone)}>SAVE EVENT</button>
                               <button type="button" className="area-remove-trigger" onClick={() => startRemovingArea({ kind: "built-in", id: zone.id }, true)}>REMOVE EVENT</button>

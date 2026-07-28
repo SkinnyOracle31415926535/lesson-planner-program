@@ -97,3 +97,20 @@ export const sharedIdeaMedia = sqliteTable(
     index("shared_idea_media_idea_id_idx").on(table.ideaId),
   ],
 );
+
+/** Browser-created station and floor photos, with their bytes stored in R2. */
+export const plannerLocalMedia = sqliteTable(
+  "planner_local_media",
+  {
+    mediaId: text("media_id").notNull(),
+    filename: text("filename").notNull(),
+    mimeType: text("mime_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    objectKey: text("object_key").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.mediaId] })],
+);

@@ -474,6 +474,9 @@ export async function bootstrapSharedIdeaLibrary(state: SharedIdeaLibraryState):
     headers: { "Content-Type": "application/json", "If-None-Match": "*" },
     body: JSON.stringify({ version: SHARED_IDEA_LIBRARY_API_VERSION, value: state }),
   });
+  if (response.status === 401 || response.status === 403) {
+    throw new Error("Sign in with the owner ChatGPT account before editing the shared Idea Library.");
+  }
   if (response.status === 412) return { status: "conflict" };
   if (!response.ok) throw new Error("The public Idea Library could not be created.");
   const workspace = parseSharedIdeaLibraryWorkspace(await responseJson(response));
@@ -492,6 +495,9 @@ export async function putSharedIdeaLibrary(
     headers: { "Content-Type": "application/json", "If-Match": `\"${expectedRevision}\"` },
     body: JSON.stringify({ version: SHARED_IDEA_LIBRARY_API_VERSION, value: state }),
   });
+  if (response.status === 401 || response.status === 403) {
+    throw new Error("Sign in with the owner ChatGPT account before editing the shared Idea Library.");
+  }
   if (response.status === 412) return { status: "conflict" };
   if (!response.ok) throw new Error("The public Idea Library could not be saved.");
   const workspace = parseSharedIdeaLibraryWorkspace(await responseJson(response));
@@ -543,6 +549,9 @@ export async function uploadSharedIdeaMedia(media: SharedIdeaMediaUpload): Promi
     createdAt: media.createdAt,
   }));
   const response = await fetch(sharedIdeaMediaUrl(media.id), { method: "PUT", cache: "no-store", body: form });
+  if (response.status === 401 || response.status === 403) {
+    throw new Error("Sign in with the owner ChatGPT account before uploading Idea Library media.");
+  }
   if (!response.ok) throw new Error("The Idea Library attachment could not be uploaded.");
   const metadata = parseSharedIdeaMediaMetadata(await responseJson(response));
   if (!metadata) throw new Error("The public Idea Library attachment returned invalid metadata.");

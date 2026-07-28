@@ -11,6 +11,7 @@ import {
   sharedIdeaLibraryJson,
   sharedIdeaLibraryMediaBucket,
 } from "../../../shared-idea-library-server";
+import { hasSharedPhotoLibraryWriteAccess } from "../../../shared-photo-library-server";
 
 export const dynamic = "force-dynamic";
 
@@ -210,6 +211,9 @@ export async function HEAD(request: Request, context: { params: Promise<{ mediaI
 export async function PUT(request: Request, context: { params: Promise<{ mediaId: string }> }) {
   const { mediaId } = await context.params;
   if (!isSafeSharedIdeaMediaId(mediaId)) return sharedIdeaLibraryError("The Idea Library attachment ID is invalid.", 400);
+  if (!(await hasSharedPhotoLibraryWriteAccess(request))) {
+    return sharedIdeaLibraryError("Sign in with the owner ChatGPT account before uploading Idea Library media.", 401);
+  }
   try {
     const form = await request.formData();
     const file = form.get("file");

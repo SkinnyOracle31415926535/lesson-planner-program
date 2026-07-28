@@ -279,6 +279,9 @@ export async function bootstrapSharedPlannerWorkspace(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ version: SHARED_PLANNER_DOCUMENT_API_VERSION, documents }),
   });
+  if (response.status === 401 || response.status === 403) {
+    throw new Error("Sign in with the owner ChatGPT account before editing the shared planner.");
+  }
   if (response.status === 412) return { status: "conflict" };
   if (!response.ok) throw new Error("The shared planner workspace could not be created.");
   const workspace = parseSharedPlannerWorkspace(await responseJson(response));
@@ -309,6 +312,9 @@ export async function putSharedPlannerWorkspace(
     },
     body: JSON.stringify({ version: SHARED_PLANNER_DOCUMENT_API_VERSION, documents }),
   });
+  if (response.status === 401 || response.status === 403) {
+    throw new Error("Sign in with the owner ChatGPT account before editing the shared planner.");
+  }
   if (response.status === 412) return { status: "conflict" };
   if (!response.ok) throw new Error("The shared planner document could not be saved.");
   const workspace = parseSharedPlannerWorkspace(await responseJson(response));

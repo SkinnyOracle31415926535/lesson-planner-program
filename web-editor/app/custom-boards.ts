@@ -109,6 +109,7 @@ export type StoredAreaPhoto = {
 const PHOTO_DATABASE_NAME = "gym-lesson-planner-local-media";
 const PHOTO_STORE_NAME = "areaPhotos";
 const PHOTO_DATABASE_VERSION = 1;
+const PUBLISHED_PLANNER_MEDIA_ORIGIN = "https://lesson-planner-photo-library.ryan-666-mp3.chatgpt.site";
 
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -136,6 +137,39 @@ async function photoDatabase(): Promise<IDBDatabase> {
   return requestResult(request);
 }
 
+function sharedPhotoUrl(photoId: string): string {
+  return new URL(`/api/planner-local-media/${encodeURIComponent(photoId)}`, PUBLISHED_PLANNER_MEDIA_ORIGIN).toString();
+}
+
+async function uploadSharedCustomBoardPhoto(photo: StoredAreaPhoto): Promise<void> {
+  if (typeof window === "undefined" || !photo.id || !photo.blob.size) return;
+  const form = new FormData();
+  form.set("file", photo.blob, photo.filename);
+  form.set("metadata", JSON.stringify({
+    filename: photo.filename,
+    mimeType: photo.mimeType,
+    width: photo.width,
+    height: photo.height,
+    createdAt: photo.createdAt,
+  }));
+  const response = await fetch(sharedPhotoUrl(photo.id), { method: "PUT", cache: "no-store", body: form });
+  if (!response.ok && response.status !== 409) throw new Error("Shared planner photo upload failed.");
+}
+
+async function loadSharedCustomBoardPhoto(photoId: string): Promise<StoredAreaPhoto | null> {
+  if (typeof window === "undefined") return null;
+  const response = await fetch(sharedPhotoUrl(photoId), { cache: "no-store" });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error("Shared planner photo download failed.");
+  const blob = await response.blob();
+  const filename = response.headers.get("X-Planner-Photo-Filename") ?? `${photoId}.jpg`;
+  const width = Number(response.headers.get("X-Planner-Photo-Width"));
+  const height = Number(response.headers.get("X-Planner-Photo-Height"));
+  const createdAt = response.headers.get("X-Planner-Photo-Created-At") ?? new Date().toISOString();
+  if (!blob.size || !Number.isInteger(width) || width <= 0 || !Number.isInteger(height) || height <= 0) return null;
+  return { id: photoId, blob, filename, mimeType: blob.type || "image/*", width, height, createdAt };
+}
+
 export async function saveCustomBoardPhoto(photo: StoredAreaPhoto): Promise<void> {
   const database = await photoDatabase();
   try {
@@ -145,6 +179,7 @@ export async function saveCustomBoardPhoto(photo: StoredAreaPhoto): Promise<void
   } finally {
     database.close();
   }
+  void uploadSharedCustomBoardPhoto(photo).catch(() => undefined);
 }
 
 /** Saves a validated import batch in one IndexedDB transaction. */
@@ -159,6 +194,7 @@ export async function saveCustomBoardPhotos(photos: readonly StoredAreaPhoto[]):
   } finally {
     database.close();
   }
+  void Promise.all(photos.map((photo) => uploadSharedCustomBoardPhoto(photo))).catch(() => undefined);
 }
 
 export async function loadCustomBoardPhoto(photoId: string): Promise<StoredAreaPhoto | null> {
@@ -167,10 +203,17 @@ export async function loadCustomBoardPhoto(photoId: string): Promise<StoredAreaP
     const transaction = database.transaction(PHOTO_STORE_NAME, "readonly");
     const photo = await requestResult(transaction.objectStore(PHOTO_STORE_NAME).get(photoId));
     await transactionDone(transaction);
-    return (photo as StoredAreaPhoto | undefined) ?? null;
+    const stored = (photo as StoredAreaPhoto | undefined) ?? null;
+    if (stored) {
+      void uploadSharedCustomBoardPhoto(stored).catch(() => undefined);
+      return stored;
+    }
   } finally {
     database.close();
   }
+  const shared = await loadSharedCustomBoardPhoto(photoId);
+  if (shared) await saveCustomBoardPhoto(shared);
+  return shared;
 }
 
 export async function removeCustomBoardPhoto(photoId: string): Promise<void> {

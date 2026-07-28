@@ -15,6 +15,7 @@ import {
   type SharedPlannerStoredDocument,
   type SharedPlannerStoredWorkspace,
 } from "../../shared-planner-documents-server";
+import { hasSharedPhotoLibraryWriteAccess } from "../../shared-photo-library-server";
 
 export const dynamic = "force-dynamic";
 
@@ -192,6 +193,9 @@ export async function GET(request: Request) {
 
 /** Creates the first deliberately public workspace as one all-or-nothing D1 batch. */
 export async function POST(request: Request) {
+  if (!(await hasSharedPhotoLibraryWriteAccess(request))) {
+    return sharedPlannerError("Sign in with the owner ChatGPT account before editing the shared planner.", 401);
+  }
   const parsed = await parseSharedPlannerWorkspaceBootstrap(request);
   if (!parsed.ok) return sharedPlannerError(parsed.message, parsed.status);
 
@@ -223,6 +227,9 @@ export async function POST(request: Request) {
  * publish a partial or stale multi-document snapshot.
  */
 export async function PUT(request: Request) {
+  if (!(await hasSharedPhotoLibraryWriteAccess(request))) {
+    return sharedPlannerError("Sign in with the owner ChatGPT account before editing the shared planner.", 401);
+  }
   const expectedRevision = parseSharedPlannerWorkspaceRevision(request);
   if (!expectedRevision) return sharedPlannerError("Use If-Match with the current public workspace revision.", 428);
   const parsed = await parseSharedPlannerWorkspaceBootstrap(request);
