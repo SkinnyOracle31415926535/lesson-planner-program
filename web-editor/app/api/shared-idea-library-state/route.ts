@@ -7,7 +7,10 @@ import {
   sharedIdeaLibraryError,
   workspaceResponse,
 } from "../../shared-idea-library-server";
-import { hasSharedPhotoLibraryWriteAccess } from "../../shared-photo-library-server";
+import {
+  hasSharedPhotoLibraryReadAccess,
+  hasSharedPhotoLibraryWriteAccess,
+} from "../../shared-photo-library-server";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +18,11 @@ export async function OPTIONS() {
   return new Response(null, { status: 204, headers: publicIdeaLibraryCorsHeaders() });
 }
 
-/** Public state shared by every Lesson Planner link, including the standalone Library view. */
+/** Owner-only state shared by Ryan's Lesson Planner links and Library view. */
 export async function GET(request: Request) {
+  if (!(await hasSharedPhotoLibraryReadAccess(request))) {
+    return sharedIdeaLibraryError("Sign in with the owner ChatGPT account before reading the shared Idea Library.", 401);
+  }
   try {
     const row = await readSharedIdeaLibraryWorkspace(await sharedIdeaLibraryDatabase());
     return workspaceResponse(row, new URL(request.url).searchParams.get("manifest") === "1");

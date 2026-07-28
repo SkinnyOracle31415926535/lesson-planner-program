@@ -12,6 +12,7 @@ import {
   storedPlannerDocumentPayload,
   type SharedPlannerStoredDocument,
 } from "../../../../shared-planner-documents-server";
+import { hasSharedPhotoLibraryReadAccess } from "../../../../shared-photo-library-server";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +41,10 @@ export async function OPTIONS() {
   return new Response(null, { status: 204, headers: publicPlannerCorsHeaders() });
 }
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
+  if (!(await hasSharedPhotoLibraryReadAccess(request))) {
+    return sharedPlannerError("Sign in with the owner ChatGPT account before reading shared planner records.", 401);
+  }
   const address = await addressFor(context);
   if (!address) return sharedPlannerError("Shared planner document not found.", 404);
   try {
