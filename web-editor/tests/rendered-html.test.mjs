@@ -30,22 +30,22 @@ test("server-renders the Gym Lesson Planner shell", async () => {
 
   const html = await response.text();
   assert.match(html, /<title>Gym Lesson Planner<\/title>/i);
-  assert.match(html, /Public shared lesson planning for gymnastics coaching\./);
+  assert.match(html, /Ryan-only shared lesson planning for gymnastics coaching\./);
   assert.match(html, /LESSON PLANNER/);
   assert.match(html, /\+ LESSON PLAN/);
   assert.match(html, /\+ IMPORT CLASS/);
-  assert.match(html, /CONNECTING PUBLIC WORKSPACE/);
+  assert.match(html, /CONNECTING TO RYAN’S WORKSPACE/);
   assert.doesNotMatch(html, /Your site is taking shape|Building your site|SkeletonPreview/i);
 });
 
-test("keeps the planner's public-shared metadata and capability surface", async () => {
+test("keeps the planner's Ryan-only metadata and capability surface", async () => {
   const [page, layout] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
   ]);
 
   assert.match(layout, /title:\s*"Gym Lesson Planner"/);
-  assert.match(layout, /description:\s*"Public shared lesson planning for gymnastics coaching\."/);
+  assert.match(layout, /description:\s*"Ryan-only shared lesson planning for gymnastics coaching\."/);
   assert.match(layout, /manifest:\s*"\/site\.webmanifest"/);
   assert.match(layout, /appleWebApp:/);
   assert.match(page, /createLessonPlanMeta/);
@@ -53,7 +53,7 @@ test("keeps the planner's public-shared metadata and capability surface", async 
   assert.doesNotMatch(page, /SkeletonPreview|_sites-preview/);
 });
 
-test("keeps direct Draft actions beside the public Idea save actions", async () => {
+test("keeps direct Draft actions beside the shared Idea save actions", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const newIdeaActionsStart = page.indexOf('<div className="new-idea-actions">');
   const newIdeaActions = page.slice(newIdeaActionsStart, page.indexOf("</div>", newIdeaActionsStart));
@@ -66,6 +66,6 @@ test("keeps direct Draft actions beside the public Idea save actions", async () 
   assert.ok(newIdeaActions.indexOf("DRAFT IDEA") < newIdeaActions.indexOf("CANCEL"));
   assert.match(newIdeaActions, /<button type="button"[\s\S]*?saveNewIdea\(\{ asDraft: true \}\)[\s\S]*?>DRAFT IDEA<\/button>/);
   assert.ok(editorActions.indexOf("CANCEL") < editorActions.indexOf("MOVE TO DRAFT"));
-  assert.ok(editorActions.indexOf("MOVE TO DRAFT") < editorActions.indexOf("SAVE PUBLIC EDIT"));
+  assert.ok(editorActions.indexOf("MOVE TO DRAFT") < editorActions.indexOf("SAVE SHARED EDIT"));
   assert.match(editorActions, /<button type="button"[\s\S]*?saveLibraryEdit\(\{ moveToDraft: true \}\)[\s\S]*?>MOVE TO DRAFT<\/button>/);
 });

@@ -83,7 +83,7 @@ export function StationMakerDialog({ setup, onSave, onCancel }: { setup: Station
 
   return <div className="station-maker-scrim" role="presentation">
     <section className="station-maker retro-window" role="dialog" aria-modal="true" aria-label="Make pixel station">
-      <div className="window-title"><b>MAKE STATION</b><span>PIXEL SETUP · SYNCED WITH THE PUBLIC IDEA LIBRARY</span><button type="button" onClick={onCancel} aria-label="Close station maker">×</button></div>
+      <div className="window-title"><b>MAKE STATION</b><span>PIXEL SETUP · SYNCED WITH RYAN’S IDEA LIBRARY</span><button type="button" onClick={onCancel} aria-label="Close station maker">×</button></div>
       <div className="station-maker-body">
         <aside className="station-palette"><b>BUILDING BLOCKS</b>{stationAssets.map((asset) => <button key={asset.id} type="button" onClick={() => addEquipment(asset.id)}><i className={`station-palette-icon ${asset.id}`} /><span>{asset.name}</span></button>)}<hr /><button type="button" onClick={() => addAnnotation("label")}>+ TEXT LABEL</button><button type="button" onClick={() => addAnnotation("arrow")}>+ ARROW</button></aside>
         <div className="station-maker-center">
