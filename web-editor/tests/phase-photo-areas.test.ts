@@ -12,7 +12,6 @@ const photoAreas = [
   area("pb", "PB", "Parallel Bars"),
   area("hb", "HB", "High Bar"),
   area("pb-hb", "PB/HB", "Parallel Bars / High Bar"),
-  area("f3-f2", "F3/F2", "Floor 3 / Floor 2"),
   area("f4", "F4", "Floor 4"),
   area("ts", "TS", "Tumble Strip"),
   area("beams", "All Beams", "Beam photo"),

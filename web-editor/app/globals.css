@@ -1137,3 +1137,19 @@ button { cursor: pointer; touch-action:manipulation; -webkit-tap-highlight-color
   .lesson-app-sync-window { padding:12px; }
   .lesson-app-sync-actions { grid-template-columns:1fr; }
 }
+
+/* Everyday Planner cleanup: the new-plan surface stays in the document flow,
+   and station sketches are intentionally rough equipment-only layouts. */
+.lesson-plan-inline-panel { width:min(820px,calc(100% - 20px)); margin:10px auto; }
+.visual-note-card { display:flex; align-items:center; gap:6px; width:max-content; max-width:calc(100% - 14px); padding:4px 7px; background:#fffef2; border:1px solid #315463; color:#172222; font:800 10px/1.25 ui-monospace,monospace; }
+.visual-note-card .remove-snapshot { margin-left:auto; }
+.station-piece > span { display:none; }
+.station-piece { box-shadow:inset 2px -3px rgb(0 0 0 / 14%) !important; }
+.station-piece.beam { box-shadow:0 3px 0 #64513a !important; }
+.station-label-object { background:#fffef2; color:#172222; border:1px solid #315463; box-shadow:none; font-size:9px; }
+.station-canvas { background-color:#dff5ee; background-image:linear-gradient(rgb(23 34 34 / 12%) 1px,transparent 1px),linear-gradient(90deg,rgb(23 34 34 / 12%) 1px,transparent 1px); border-color:#315463; box-shadow:inset 0 0 0 2px #fff; }
+.station-maker-center p { color:#315463; }
+
+@media (max-width:800px) {
+  .lesson-plan-inline-panel { width:calc(100% - 14px); margin:7px auto; }
+}

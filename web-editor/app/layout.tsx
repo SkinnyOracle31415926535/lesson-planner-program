@@ -29,5 +29,5 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body>{children}</body></html>;
+  return <html lang="en"><body>{children}<script defer src="https://ryan-app-sync.ryan-666-mp3.chatgpt.site/coach-workspace.js" /></body></html>;
 }
