@@ -7119,17 +7119,6 @@ export default function Home() {
     setNotice("LOCAL TEXT NOTE REMOVED FROM THIS PHASE");
   }
 
-  function toggleReady() {
-    if (activePlanIsReadOnly()) return;
-    if (isReady) {
-      setIsReady(false);
-      setNotice("RETURNED TO LOCAL DRAFT · NO SHARED VERSION EXISTS");
-      return;
-    }
-    setIsReady(true);
-    setNotice("READY FLAG SET · LOCAL BROWSER ONLY");
-  }
-
   function updateLessonDocumentDetail(field: keyof LessonDocumentDetails, value: string) {
     if (activePlanIsReadOnly()) return;
     if (isReady) setIsReady(false);
@@ -8502,13 +8491,6 @@ export default function Home() {
         <div>
           <p className="eyebrow">{activeLessonDateLabel}</p>
           <h1>LESSON PLANNER <span>•</span> {activePlanClassName.toUpperCase()} · {activeLocalClass ? "SHARED CLASS" : hasMissingActiveClass ? "REMOVED CLASS" : "3:30–5:25 PM"}</h1>
-        </div>
-        <div className="readiness">
-          <span className="pixel-label">READY STATE</span>
-          <strong>{isPastActivePlan ? "PAST SNAPSHOT" : isReady ? "READY" : "DRAFT"}</strong>
-          {mode === "EDIT" && !isPastActivePlan ? <>
-            <button onClick={toggleReady} title={isReady ? "Return this browser-local lesson to Draft." : "Mark this browser-local lesson ready."}>{isReady ? "RETURN TO DRAFT" : "MARK READY →"}</button>
-          </> : null}
         </div>
       </section>
 
