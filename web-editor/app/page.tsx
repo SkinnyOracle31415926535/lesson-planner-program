@@ -3262,6 +3262,29 @@ export default function Home() {
   const shouldShowTextLane = activePhase.mode !== "VISUAL";
 
   useEffect(() => {
+    const provideSafePlannerMigration = (event: Event) => {
+      const request = event as CustomEvent<{ accept?: (candidate: unknown) => void }>;
+      if (typeof request.detail?.accept !== "function") return;
+      request.detail.accept({
+        source: "lesson-planner-local-v1",
+        reminders: reminderStorage.templates.map((reminder) => ({
+          id: reminder.id,
+          title: reminder.title,
+          kind: reminder.cadence === "temporary" ? "temporary" : "recurring",
+        })),
+        ideas: allLibraryItems.map((idea) => ({
+          id: idea.id,
+          title: idea.title,
+          tags: idea.tags,
+          notes: idea.description,
+        })),
+      });
+    };
+    window.addEventListener("coach-workspace-request-migration", provideSafePlannerMigration);
+    return () => window.removeEventListener("coach-workspace-request-migration", provideSafePlannerMigration);
+  }, [allLibraryItems, reminderStorage]);
+
+  useEffect(() => {
     if (!isTimerRunning || timerSeconds <= 0) return;
     const timer = window.setInterval(() => setTimerSeconds((seconds) => Math.max(0, seconds - 1)), 1000);
     return () => window.clearInterval(timer);
