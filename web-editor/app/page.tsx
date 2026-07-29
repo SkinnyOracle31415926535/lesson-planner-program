@@ -319,11 +319,7 @@ import {
   personalAlternateScheduleCardsForLesson,
   personalAlternateScheduleScopeLabel,
 } from "./personal-alternate-schedule";
-import {
-  generatePlannerUpdates,
-  getLessonReadinessReview,
-  type PlannerUpdate,
-} from "./planner-updates";
+import { type PlannerUpdate } from "./planner-updates";
 import { summer2026SafeScheduleFixture } from "../fixtures/summer-2026-safe-schedule-fixture";
 import {
   copyLessonBoardSnapshot,
@@ -2140,6 +2136,15 @@ function makeLegacyLessonPlanMeta(date: string, now = new Date().toISOString()):
 }
 
 function Card({ card, compact = false, onRemove }: { card: LessonCard; compact?: boolean; onRemove?: () => void }) {
+  const isVisualNote = card.kind === "REFERENCE" && card.tags.includes("visual label");
+  if (isVisualNote) {
+    return (
+      <article className="visual-note-card">
+        <strong>{card.title}</strong>
+        {onRemove ? <button className="remove-snapshot" onClick={onRemove}>REMOVE NOTE</button> : null}
+      </article>
+    );
+  }
   return (
     <article className={`lesson-card accent-${card.accent} ${compact ? "compact" : ""}`}>
       <div className="card-kicker">
@@ -2887,33 +2892,6 @@ export default function Home() {
     ?? (hasMissingActiveClass
       ? activeLessonPlan.title.replace(/\s+LESSON$/i, "").trim() || "REMOVED LOCAL CLASS"
       : "SAMPLE LEVEL 3");
-  const pendingLessonDrafts = useMemo(
-    () => plannerIntake.lessonDrafts.filter((draft) => !plannerIntake.decisionById[draft.id]),
-    [plannerIntake],
-  );
-  const pendingAnnouncementSuggestions = useMemo(
-    () => plannerIntake.announcementSuggestions.filter((suggestion) => (
-      !plannerIntake.decisionById[suggestion.id]
-      && (
-        announcementApplies(
-          suggestion,
-          activeLessonPlan.classId,
-          activePlanClassName,
-          activeLessonPlan.date,
-        )
-        || (hasLoadedLocalClasses
-          && !announcementTargetExists(suggestion, classStorage.classes))
-      )
-    )),
-    [
-      activeLessonPlan.classId,
-      activeLessonPlan.date,
-      activePlanClassName,
-      classStorage.classes,
-      hasLoadedLocalClasses,
-      plannerIntake,
-    ],
-  );
   const reflectionBacklogRequests = useMemo(
     () => extractBacklogMarkers(lessonDocumentDetails.reflection),
     [lessonDocumentDetails.reflection],
@@ -3069,7 +3047,8 @@ export default function Home() {
           && Boolean(gymPanelLayout(zone.id)))
         .map((zone) => areaZoneWithOverride(zone, areaCatalog)),
       ...customBoards
-        .filter((board) => !isCustomBoardHidden(areaCatalog, board.id))
+        .filter((board) => !isCustomBoardHidden(areaCatalog, board.id)
+          && !/^F3\s*\/\s*F2$/i.test(customBoardEventLabel(board)))
         .map(customZoneForBoard),
     ],
     [areaCatalog, customBoards],
@@ -3182,31 +3161,6 @@ export default function Home() {
       warning: null,
     };
   }, [eventEditorGroups, openScheduleZones, openStationSearchEventId, safeScheduleDay, usesSafeScheduleDay]);
-  const assistantUpdates = useMemo(
-    () => generatePlannerUpdates({
-      phases: lessonPhases,
-      schedule: {
-        status: safeScheduleDay?.status ?? "not_linked",
-        collisionWarningCount: safeScheduleBundle?.schedule.collisionWarnings.warningCount,
-        eventConflicts: plannerScheduleEventConflicts,
-      },
-    }),
-    [lessonPhases, plannerScheduleEventConflicts, safeScheduleBundle?.schedule.collisionWarnings.warningCount, safeScheduleDay?.status],
-  );
-  const lessonReadinessReview = useMemo(
-    () => getLessonReadinessReview(assistantUpdates, updateDecisionByRevision),
-    [assistantUpdates, updateDecisionByRevision],
-  );
-  const readyBlockerCount = Number(!safetyAcknowledged)
-    + lessonReadinessReview.blockingPlanUpdates.length
-    + lessonReadinessReview.pendingScheduleReviewUpdates.length;
-  const readyBlockerCopy = !safetyAcknowledged
-    ? "ACKNOWLEDGE THE READY CHECK"
-    : lessonReadinessReview.blockingPlanUpdates.length
-      ? `COMPLETE ${lessonReadinessReview.blockingPlanUpdates.length} REQUIRED PLAN ITEM${lessonReadinessReview.blockingPlanUpdates.length === 1 ? "" : "S"}`
-      : lessonReadinessReview.pendingScheduleReviewUpdates.length
-        ? `REVIEW ${lessonReadinessReview.pendingScheduleReviewUpdates.length} SCHEDULE ${lessonReadinessReview.pendingScheduleReviewUpdates.length === 1 ? "ADVISORY" : "ADVISORIES"}`
-        : "READY TO MARK";
   const hiddenAreaEntries = useMemo(
     () => customBoards
       .filter((board) => isCustomBoardHidden(areaCatalog, board.id))
@@ -3300,10 +3254,6 @@ export default function Home() {
         return Number(Boolean(second.starred)) - Number(Boolean(first.starred)) || first.title.localeCompare(second.title);
       });
   }, [allLibraryItems, archivedIdeaIds, draftIdeaIds, gemIds, libraryFilter, librarySearch, recentIdeaIds, removedIdeaIds, restoredIdeaIds]);
-  const unresolvedUpdateCount = useMemo(
-    () => assistantUpdates.filter((update) => !updateDecisionByRevision[revisionKey(update)]).length,
-    [assistantUpdates, updateDecisionByRevision],
-  );
   const visibleZones = activePhase.mode === "TEXT"
     ? []
     : activePhase.zones.filter((zone) => isPastActivePlan || !isZoneHidden(zone));
@@ -5857,8 +5807,8 @@ export default function Home() {
         id: `visual-label-${Date.now()}`,
         kind: "REFERENCE",
         title,
-        description: "Short visual label for this station. Tap it after placement to add details or connect a media reference.",
-        tags: ["visual label", "lesson local"],
+        description: "",
+        tags: ["visual label"],
         accent: "yellow",
       },
     });
@@ -7176,26 +7126,8 @@ export default function Home() {
       setNotice("RETURNED TO LOCAL DRAFT · NO SHARED VERSION EXISTS");
       return;
     }
-    if (!safetyAcknowledged) {
-      setNotice("ACKNOWLEDGE THE READY CHECK BEFORE MARKING THIS LOCAL PLAN READY");
-      return;
-    }
-    if (lessonReadinessReview.blockingPlanUpdates.length) {
-      setNotice(`${lessonReadinessReview.blockingPlanUpdates.length} REQUIRED PLAN ITEM${lessonReadinessReview.blockingPlanUpdates.length === 1 ? "" : "S"} STILL NEED${lessonReadinessReview.blockingPlanUpdates.length === 1 ? "S" : ""} WORK · SEE UPDATE INBOX`);
-      return;
-    }
-    if (lessonReadinessReview.pendingScheduleReviewUpdates.length) {
-      setNotice(`${lessonReadinessReview.pendingScheduleReviewUpdates.length} SCHEDULE ${lessonReadinessReview.pendingScheduleReviewUpdates.length === 1 ? "ADVISORY NEEDS" : "ADVISORIES NEED"} YOUR LOCAL DECISION · SEE UPDATE INBOX`);
-      return;
-    }
     setIsReady(true);
-    setNotice("READY FLAG SET · REQUIRED PLAN ITEMS ARE COMPLETE, SCHEDULE ADVISORIES ARE REVIEWED, AND SAFETY WAS ACKNOWLEDGED · LOCAL BROWSER ONLY");
-  }
-
-  function acknowledgeSafetyForReady() {
-    if (activePlanIsReadOnly()) return;
-    setSafetyAcknowledged(true);
-    setNotice("READY CHECK ACKNOWLEDGED · COMPLETE REQUIRED PLAN ITEMS AND REVIEW SCHEDULE ADVISORIES BEFORE MARKING READY");
+    setNotice("READY FLAG SET · LOCAL BROWSER ONLY");
   }
 
   function updateLessonDocumentDetail(field: keyof LessonDocumentDetails, value: string) {
@@ -8237,48 +8169,6 @@ export default function Home() {
       </div>
       <button className="new-idea-trigger" onClick={() => setIsAddingIdea((open) => !open)}>{isAddingIdea ? "CLOSE NEW IDEA" : "+ NEW IDEA"}</button>
       {newIdeaForm}
-      <section className="library-transfer" aria-label="Move Idea Library ideas between iPads">
-        <div className="library-transfer-heading">
-          <b>MOVE IDEAS BETWEEN IPADS</b>
-          <span>JSON MERGE · TEXT ONLY · NOTHING REPLACED</span>
-        </div>
-        <div className="library-transfer-actions">
-          <button type="button" disabled={!allLibraryItems.length} onClick={exportIdeaLibrary}>EXPORT JSON</button>
-          <button type="button" onClick={() => libraryTransferInputRef.current?.click()}>IMPORT JSON</button>
-        </div>
-        <input
-          ref={libraryTransferInputRef}
-          className="new-idea-file-input"
-          type="file"
-          accept=".json,application/json"
-          hidden
-          aria-hidden="true"
-          tabIndex={-1}
-          onChange={(event) => { void previewIdeaLibraryImport(event.currentTarget.files?.[0] ?? null); }}
-        />
-        {libraryTransferImport ? (
-          <div className={`library-transfer-preview ${libraryTransferImport.kind}`}>
-            <strong>{libraryTransferImport.kind === "ready" ? "IMPORT PREVIEW" : "IMPORT BLOCKED"}</strong>
-            <span>{libraryTransferImport.fileName}</span>
-            {libraryTransferImport.kind === "ready" ? (
-              <>
-                <p><b>{libraryTransferImport.newCount} NEW</b> · {libraryTransferImport.duplicateCount} ALREADY HERE · ATTACHMENTS NOT INCLUDED</p>
-                <div>
-                  <button type="button" disabled={!libraryTransferImport.newCount} onClick={applyIdeaLibraryImport}>
-                    {libraryTransferImport.newCount ? `MERGE ${libraryTransferImport.newCount} NEW` : "NOTHING NEW"}
-                  </button>
-                  <button type="button" onClick={() => setLibraryTransferImport(null)}>CANCEL</button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p>{libraryTransferImport.message}</p>
-                <button type="button" onClick={() => setLibraryTransferImport(null)}>CLOSE</button>
-              </>
-            )}
-          </div>
-        ) : null}
-      </section>
       <label className="library-search">
         <span>FIND TITLE / TAG / SKILL / VARIANT</span>
         <input
@@ -8442,7 +8332,6 @@ export default function Home() {
         {mode === "EDIT" && !isPastActivePlan ? <button className={isClassManagerOpen ? "active class-manager-trigger" : "class-manager-trigger"} onClick={openClassImportManager}>+ IMPORT CLASS</button> : null}
         <button onClick={openLibraryWindow} aria-label="Open the Idea Library in a new window">LIBRARY <b>{allLibraryItems.length} IDEAS</b></button>
         {mode === "VIEW" ? <button className="view-new-idea-nav" onClick={() => setIsAddingIdea((open) => !open)}>{isAddingIdea ? "CLOSE NEW IDEA" : "+ NEW IDEA"}</button> : null}
-        <button className={unresolvedUpdateCount ? "pending-shake" : ""} onClick={() => scrollToPlannerSection("daily-updates")}>UPDATES <b className="hot">{unresolvedUpdateCount}</b></button>
         <LessonPlannerAppSync
           validateLesson={validateLessonForAppSync}
           onStatus={setSharedPlannerSyncStatus}
@@ -8562,8 +8451,7 @@ export default function Home() {
       ) : null}
 
       {planShelf === "FUTURE" ? (
-        <div className="lesson-plan-dialog-scrim" onClick={(event) => { if (event.target === event.currentTarget) setPlanShelf(null); }}>
-          <section className="lesson-plan-shelf retro-window" role="dialog" aria-modal="true" aria-label="Start a new local lesson plan">
+        <section className="lesson-plan-inline-panel retro-window" aria-label="Start a new local lesson plan">
             <div className="window-title">NEW LESSON PLAN <button type="button" onClick={() => setPlanShelf(null)} aria-label="Close new lesson plan">×</button></div>
             <form className="future-lesson-form" onSubmit={(event) => {
               event.preventDefault();
@@ -8607,8 +8495,7 @@ export default function Home() {
                     : "No schedule blocks match this class and date; the plan will start with one editable unscheduled phase."}</p>
               <button type="submit">START LESSON PLAN →</button>
             </form>
-          </section>
-        </div>
+        </section>
       ) : null}
 
       <section className="identity-strip">
@@ -8620,8 +8507,7 @@ export default function Home() {
           <span className="pixel-label">READY STATE</span>
           <strong>{isPastActivePlan ? "PAST SNAPSHOT" : isReady ? "READY" : "DRAFT"}</strong>
           {mode === "EDIT" && !isPastActivePlan ? <>
-            <button onClick={toggleReady} title={isReady ? "Return this browser-local lesson to Draft." : readyBlockerCopy}>{isReady ? "RETURN TO DRAFT" : "MARK READY →"}</button>
-            {!isReady ? <small className={readyBlockerCount ? "readiness-blocked" : "readiness-clear"}>{readyBlockerCopy}</small> : null}
+            <button onClick={toggleReady} title={isReady ? "Return this browser-local lesson to Draft." : "Mark this browser-local lesson ready."}>{isReady ? "RETURN TO DRAFT" : "MARK READY →"}</button>
           </> : null}
         </div>
       </section>
@@ -8735,66 +8621,6 @@ export default function Home() {
                 {!usesSafeScheduleDay && activeLocalClass && !localScheduleBlocks.length ? <p className="schedule-advisory-empty">No local blocks match this lesson’s date. The class schedule remains unchanged.</p> : null}
                 {safeScheduleDay?.status === "outside_schedule_range" ? <p className="schedule-advisory-empty">This date is outside the imported full schedule range. Local class blocks remain the fallback.</p> : null}
                 {safeScheduleDay?.status === "no_blocks_for_group" ? <p className="schedule-advisory-empty">The linked full-schedule group has no blocks on this date and rotation. Local class blocks remain the fallback.</p> : null}
-              </section>
-
-              <section className="schedule-advisory-section optional-openings" aria-label="Optional schedule openings">
-                <div className="schedule-advisory-section-title"><b>SCHEDULED OPEN EVENTS</b><span>{usesSafeScheduleDay ? safeScheduleDay.openBlocks.length : 0} BLOCKS</span></div>
-                {hasMissingActiveClass ? <p className="schedule-advisory-empty">The saved class record is unavailable, so no open-station availability can be checked.</p> : !safeScheduleBundle ? <p className="schedule-advisory-empty">Import the privacy-safe full gym schedule to calculate which approved areas are free.</p> : !activeLocalClass ? <p className="schedule-advisory-empty">Select a local class, then link its exact imported schedule group.</p> : !linkedSafeScheduleGroup ? <p className="schedule-advisory-empty">Open Local Classes and link this class to an exact full-schedule group.</p> : !usesSafeScheduleDay ? <p className="schedule-advisory-empty">No full-schedule availability can be confirmed for this group and date.</p> : !safeScheduleDay.openBlocks.length ? <p className="schedule-advisory-empty">NO SCHEDULED OPEN BLOCK FOR THIS GROUP/DATE.</p> : (
-                  <div className="schedule-open-list">
-                    {safeScheduleDay.openBlocks.map((block) => {
-                      const availability = openAvailabilityByBookingId.get(block.bookingId);
-                      const key = safeScheduleSelectionKey(safeScheduleBundle.schedule.revision, block.bookingId);
-                      const selectedPanelIds = normalizeOpenPanelSelection(openAreaSelectionByKey[key] ?? [], availability?.availablePanelIds ?? []);
-                      const availableZonesForBlock = openScheduleZones.filter((zone) => availability?.availablePanelIds.includes(zone.id));
-                      const existingPhase = existingOpenPhaseForBlock(block);
-                      return (
-                        <details key={block.bookingId} className="schedule-open-card">
-                          <summary className="schedule-open-heading"><span><time>{formatScheduleRange(block.startMinute, block.endMinute)}</time><b>OPEN</b></span><em>{availableZonesForBlock.length} AREAS</em></summary>
-                          <p>{availableZonesForBlock.length} AVAILABLE ACCORDING TO MAPPED SCHEDULE</p>
-                          {availability?.unmappedEquipment.length ? <div className="schedule-open-warning"><b>UNMAPPED SCHEDULE AREA</b><span>{availability.unmappedEquipment.join(" + ")} could not be guessed.</span></div> : null}
-                          {!availableZonesForBlock.length ? <p className="schedule-advisory-empty">NO FULL-BLOCK AREA CONFIRMED.</p> : mode === "EDIT" && !isPastActivePlan && !existingPhase ? (
-                            <>
-                              <div className="open-area-options" aria-label={`Choose free areas for ${formatScheduleRange(block.startMinute, block.endMinute)}`}>
-                                {availableZonesForBlock.map((zone) => {
-                                  const selected = selectedPanelIds.includes(zone.id);
-                                  const conflicts = !selected && !openPanelSelectionAllowed(selectedPanelIds, zone.id);
-                                  return <button key={zone.id} type="button" className={selected ? "selected" : ""} aria-pressed={selected} disabled={conflicts} onClick={() => toggleOpenAreaSelection(block, zone.id)}><b>{zone.alias}</b><small>{selected ? "SELECTED" : conflicts ? "OVERLAPS CHOICE" : zone.title}</small></button>;
-                                })}
-                              </div>
-                              <button type="button" className="open-add-action" disabled={!selectedPanelIds.length} onClick={() => addOpenEvent(block)}>ADD OPEN EVENT</button>
-                            </>
-                          ) : mode === "EDIT" && !isPastActivePlan && existingPhase ? <button type="button" className="open-add-action added" onClick={() => addOpenEvent(block)}>OPEN ADDED EVENT</button> : existingPhase ? <p className="schedule-advisory-empty">THIS OPEN EVENT IS ALREADY SAVED IN THE {isPastActivePlan ? "READ-ONLY SNAPSHOT" : "LESSON"}.</p> : <p className="schedule-advisory-empty">Open choices are read-only in View mode.</p>}
-                        </details>
-                      );
-                    })}
-                  </div>
-                )}
-                <p className="schedule-open-advisory">ADVISORY ONLY · AREAS ARE NOT RESERVED · NOTHING IS ADDED UNTIL YOU CHOOSE AREAS AND TAP ADD OPEN EVENT</p>
-              </section>
-
-              <section className="schedule-advisory-section derived-open-areas" aria-label="Derived open areas for lesson events">
-                <div className="schedule-advisory-section-title">
-                  <b>DERIVED OPEN AREAS</b>
-                  <span>{derivedOpenAreaCards.length} EVENT{derivedOpenAreaCards.length === 1 ? "" : "S"}</span>
-                </div>
-                {hasMissingActiveClass ? <p className="schedule-advisory-empty">The saved class record is unavailable, so its event availability cannot be checked.</p> : !safeScheduleBundle ? <p className="schedule-advisory-empty">Import the privacy-safe full gym schedule to derive free areas for this lesson.</p> : !activeLocalClass ? <p className="schedule-advisory-empty">Select a local class, then link its exact imported schedule group.</p> : !linkedSafeScheduleGroup ? <p className="schedule-advisory-empty">Open Local Classes and link this class to an exact full-schedule group.</p> : !usesSafeScheduleDay ? <p className="schedule-advisory-empty">No full-schedule availability can be confirmed for this group and date.</p> : !derivedOpenAreaCards.length ? <p className="schedule-advisory-empty">No complete lesson-event time window is available to check.</p> : (
-                  <div className="derived-open-area-list">
-                    {derivedOpenAreaCards.map((card) => (
-                      <article key={card.eventId} className={`derived-open-area-card${card.unmappedEquipment.length ? " needs-review" : ""}`}>
-                        <div className="derived-open-area-heading">
-                          <time>{formatScheduleRange(card.startMinute, card.endMinute)}</time>
-                          <b>{card.eventLabel}</b>
-                          <span>{card.unmappedEquipment.length ? "⚠ REVIEW" : `${card.availableZones.length} AREAS`}</span>
-                        </div>
-                        {card.unmappedEquipment.length ? <>
-                          <p>⚠ UNMAPPED: {card.unmappedEquipment.join(" + ")} · REVIEW BEFORE USE.</p>
-                          {card.availableZones.length ? <p>POSSIBLE FROM MAPPED SCHEDULE: {card.availableZones.map((zone) => zone.alias).join(" · ")}</p> : <p>NO MAPPED AREA IS AVAILABLE TO SUGGEST.</p>}
-                        </> : card.availableZones.length ? <p>{card.availableZones.map((zone) => zone.alias).join(" · ")} FREE FOR THE FULL EVENT</p> : <p>NO MAPPED AREA IS FREE FOR THE FULL EVENT.</p>}
-                      </article>
-                    ))}
-                  </div>
-                )}
-                <p className="derived-open-area-guard">DERIVED FROM FULL SCHEDULE · AREAS MUST STAY FREE FOR THE ENTIRE EVENT · ADVISORY ONLY</p>
               </section>
 
               <section className="schedule-advisory-section personal-alternate-openings" aria-label="Personal alternate schedule openings">
@@ -8998,8 +8824,8 @@ export default function Home() {
                 {activePhase.mode !== "TEXT" ? (
                   <div className="visual-label-tool">
                     <div>
-                      <b>SHORT VISUAL LABEL</b>
-                      <span>Make a small label, then tap an empty highlighted anchor in one selected station.</span>
+                      <b>STATION NOTE</b>
+                      <span>Make a short plain-text note, then tap an empty highlighted anchor in one selected station.</span>
                     </div>
                     <input
                       value={visualLabelDraft}
@@ -9012,9 +8838,9 @@ export default function Home() {
                       }}
                       maxLength={56}
                       placeholder="e.g. 3 clean cast shapes"
-                      aria-label="Short visual station label"
+                      aria-label="Short station note"
                     />
-                    <button onClick={placeVisualLabel}>PLACE LABEL →</button>
+                    <button onClick={placeVisualLabel}>PLACE NOTE →</button>
                   </div>
                 ) : null}
 
@@ -9794,154 +9620,11 @@ export default function Home() {
 
         <aside className="right-rail">
           <section id="daily-updates" className="retro-window operations-window">
-            <div className="window-title">PLANNER UPDATES <span>{unresolvedUpdateCount} to review</span></div>
+            <div className="window-title">COACH WORKSPACE <span>PRIVATE SHARED RAIL</span></div>
             <div className="operations-demo-strip">
-              <b>LOCAL PLANNER ASSISTANT</b>
-              <span>Local rules check this lesson’s timing, missing plans, explicit safety/setup notes, and linked schedule advisories. The separate Codex Intake below accepts only strict review drafts; it never applies one automatically.</span>
+              <b>REMINDERS + SKILLS + CLASS CONTEXT</b>
+              <span>Use the Coach Workspace rail for owner-approved reminders, skill cards, and roster context. This planner keeps local plans and schedules private to this browser.</span>
             </div>
-            <section className="planner-intake-panel" aria-label="Codex Planner intake">
-              <div className="planner-intake-heading">
-                <div><b>CODEX INTAKE</b><span>STRICT CONTRACT · PREVIEW + APPLY</span></div>
-                <strong>{pendingLessonDrafts.length + pendingAnnouncementSuggestions.length} PENDING</strong>
-              </div>
-              <p className="planner-intake-note">A skill or sanitized crawl can place a keyless suggestion here. Exact class/date checks run again in this browser. Nothing changes until you tap Apply.</p>
-              {pendingLessonDrafts.map((draft) => {
-                const compatibility = lessonDraftCompatibility(
-                  draft,
-                  {
-                    lessonDate: activeLessonPlan.date,
-                    classId: activeLessonPlan.classId,
-                    className: activePlanClassName,
-                  },
-                  lessonPhases.map((phase) => ({ phaseId: phase.id, title: phase.title, time: phase.time })),
-                );
-                return (
-                  <article key={draft.id} className={`planner-intake-card ${compatibility.status}`}>
-                    <div className="planner-intake-card-meta"><span>LESSON DRAFT · {draft.source}</span><time>{draft.target.lessonDate}</time></div>
-                    <strong>{draft.target.className}</strong>
-                    {compatibility.status === "ready" ? (
-                      <div className="planner-intake-preview">
-                        {draft.details.announcements !== undefined ? <div><b>ANNOUNCEMENTS WILL BECOME</b><pre>{draft.details.announcements || "EMPTY"}</pre></div> : null}
-                        {draft.details.goals !== undefined ? <div><b>GOALS WILL BECOME</b><pre>{draft.details.goals || "EMPTY"}</pre></div> : null}
-                        {draft.phases.map((phase) => <div key={phase.phaseId}><b>{phase.time} · {phase.title}</b>{phase.text !== undefined ? <pre>{phase.text.join("\n") || "EMPTY TEXT PLAN"}</pre> : null}{phase.note !== undefined ? <pre>NOTE: {phase.note || "EMPTY"}</pre> : null}</div>)}
-                      </div>
-                    ) : <p className="planner-intake-blocked">{compatibility.message} Open the exact saved lesson before applying it.</p>}
-                    {mode === "EDIT" && !isPastActivePlan ? <div className="planner-intake-actions">
-                      <button type="button" onClick={() => decideIntakeItem(draft.id, "dismissed")}>DISMISS</button>
-                      <button type="button" disabled={compatibility.status !== "ready"} onClick={() => applyPlannerLessonDraft(draft)}>APPLY DRAFT</button>
-                    </div> : null}
-                  </article>
-                );
-              })}
-              {pendingAnnouncementSuggestions.map((suggestion) => {
-                const applies = announcementApplies(
-                  suggestion,
-                  activeLessonPlan.classId,
-                  activePlanClassName,
-                  activeLessonPlan.date,
-                );
-                return (
-                  <article key={suggestion.id} className={`planner-intake-card announcement ${applies ? "ready" : "target-mismatch"}`}>
-                    <div className="planner-intake-card-meta"><span>CLASS ANNOUNCEMENT · {suggestion.source}</span><time>{suggestion.effectiveStart}–{suggestion.effectiveEnd}</time></div>
-                    <strong>{suggestion.className}</strong>
-                    <p>{suggestion.text}</p>
-                    <small>SOURCE: {suggestion.sourceRef}</small>
-                    {!applies ? <p className="planner-intake-blocked">This announcement’s saved class identity no longer exists. Dismiss it if that target is stale.</p> : null}
-                    {mode === "EDIT" && !isPastActivePlan ? <div className="planner-intake-actions">
-                      <button type="button" onClick={() => decideIntakeItem(suggestion.id, "dismissed")}>DISMISS</button>
-                      <button type="button" disabled={!applies} onClick={() => applyPlannerAnnouncement(suggestion)}>APPLY ANNOUNCEMENT</button>
-                    </div> : null}
-                  </article>
-                );
-              })}
-              {!pendingLessonDrafts.length && !pendingAnnouncementSuggestions.length ? <p className="planner-intake-empty">NO MATCHING CODEX DRAFTS OR CLASS ANNOUNCEMENTS.</p> : null}
-            </section>
-            <section className="reminder-manager" aria-label="Your local reminders">
-              <div className="reminder-manager-head">
-                <div><b>YOUR REMINDERS</b><span>RECURRING + TEMPORARY · LOCAL TO THIS BROWSER</span></div>
-                <button type="button" disabled={isPastActivePlan} onClick={openReminderForm}>+ ADD REMINDER</button>
-              </div>
-              {activeReminders.length ? <div className="reminder-list">
-                {activeReminders.map(({ template, occurrence, isRollForward }) => {
-                  const isDone = occurrence.state === "completed";
-                  return (
-                    <div key={template.id} className={`reminder-row ${isDone ? "completed" : ""}`}>
-                      <label>
-                        <input type="checkbox" disabled={isPastActivePlan} checked={isDone} onChange={(event) => setReminderTaskDone(template.id, event.target.checked)} />
-                        <span className="task-copy">
-                          <strong>{template.title}</strong>
-                          <small>{template.detail ?? (template.cadence === "recurring" ? "Your recurring local reminder." : "Your temporary local reminder.")}</small>
-                        </span>
-                      </label>
-                      <div className="reminder-row-actions">
-                        <em>{template.cadence.toUpperCase()}</em>
-                        <button className="reminder-edit-button" type="button" disabled={isPastActivePlan} onClick={() => openReminderEdit(template)} aria-label={`Edit reminder: ${template.title}`}>EDIT</button>
-                        <button type="button" disabled={isPastActivePlan} onClick={() => removeReminder(template.id)} aria-label={`Remove reminder: ${template.title}`}>REMOVE</button>
-                      </div>
-                      {template.cadence === "temporary" && template.rollForwardUntilCompleted ? <span className="task-roll-forward">{isDone ? "Completed locally · it will not roll forward." : isRollForward ? "Past its original end date · still here until completed." : "Rolls forward until completed after its end date."}</span> : null}
-                    </div>
-                  );
-                })}
-              </div> : <p className="reminder-empty">No personal reminders apply to this lesson yet. Add one for every class, this class, or only this lesson.</p>}
-              {isReminderFormOpen && !isPastActivePlan ? <form className="reminder-form" onSubmit={(event) => { event.preventDefault(); saveReminder(); }}>
-                <label>
-                  REMINDER
-                  <input required maxLength={240} value={reminderTitleDraft} onChange={(event) => setReminderTitleDraft(event.currentTarget.value)} placeholder="e.g. Confirm spotting coverage" />
-                </label>
-                <label>
-                  DETAILS (OPTIONAL)
-                  <textarea maxLength={2000} value={reminderDetailDraft} onChange={(event) => setReminderDetailDraft(event.currentTarget.value)} placeholder="Short note for future-you…" />
-                </label>
-                <div className="reminder-form-grid">
-                  <label>
-                    APPLIES TO
-                    <select value={reminderScopeDraft} onChange={(event) => setReminderScopeDraft(event.currentTarget.value === "all_classes" || event.currentTarget.value === "lesson" || event.currentTarget.value === "phase" ? event.currentTarget.value : "classes")}>
-                      <option value="all_classes">EVERY CLASS</option>
-                      <option value="classes" disabled={!activeLessonPlan.classId && editingReminder?.scope.kind !== "classes"}>{editingReminder?.scope.kind === "classes" ? "SAVED CLASS SELECTION" : "THIS CLASS"}</option>
-                      <option value="lesson">THIS LESSON ONLY</option>
-                      {editingReminder?.scope.kind === "phase" ? <option value="phase">SAVED PHASE</option> : null}
-                    </select>
-                  </label>
-                  {reminderScopeDraft !== "lesson" ? <>
-                    <label>
-                      TYPE
-                      <select value={reminderCadenceDraft} onChange={(event) => setReminderCadenceDraft(event.currentTarget.value === "temporary" ? "temporary" : "recurring")}>
-                        <option value="recurring">RECURRING</option>
-                        <option value="temporary">TEMPORARY</option>
-                      </select>
-                    </label>
-                    <label>
-                      START DATE
-                      <input required type="date" value={reminderStartDateDraft} onChange={(event) => setReminderStartDateDraft(event.currentTarget.value)} />
-                    </label>
-                    {reminderCadenceDraft === "temporary" ? <label>
-                      END DATE (BLANK = THIS DATE ONLY)
-                      <input type="date" min={reminderStartDateDraft || undefined} value={reminderEndDateDraft} onChange={(event) => setReminderEndDateDraft(event.currentTarget.value)} />
-                    </label> : <label>
-                      END DATE (OPTIONAL)
-                      <input type="date" min={reminderStartDateDraft || undefined} value={reminderEndDateDraft} onChange={(event) => setReminderEndDateDraft(event.currentTarget.value)} />
-                    </label>}
-                  </> : null}
-                </div>
-                {reminderScopeDraft === "lesson" ? <p className="reminder-form-help">One-time reminder for this saved lesson. It will not repeat or roll forward.</p> : reminderCadenceDraft === "temporary" ? <>
-                  <label className="reminder-check">
-                    <input type="checkbox" checked={reminderRollForwardDraft} onChange={(event) => setReminderRollForwardDraft(event.currentTarget.checked)} />
-                    OPTIONAL: KEEP SHOWING AFTER THE END DATE UNTIL I COMPLETE IT
-                  </label>
-                  <p className="reminder-form-help">Temporary reminders stop on the end date unless you explicitly enable roll-forward.</p>
-                </> : <p className="reminder-form-help">Recurring reminders appear on every matching lesson from the start date through the optional end date.</p>}
-                <div className="reminder-form-actions"><button type="submit">{editingReminder ? "UPDATE REMINDER" : "SAVE REMINDER"}</button><button type="button" onClick={closeReminderForm}>CANCEL</button></div>
-              </form> : null}
-              {reminderStorage.templates.length ? <details className="saved-reminders">
-                <summary>{reminderStorage.templates.length} SAVED REMINDER{reminderStorage.templates.length === 1 ? "" : "S"} · MANAGE</summary>
-                <div>
-                  {reminderStorage.templates.map((template) => <article key={template.id}>
-                    <span><b>{template.title}</b><small>{template.cadence.toUpperCase()} · {template.scope.kind === "all_classes" ? "EVERY CLASS" : template.scope.kind === "classes" ? "SELECTED CLASS" : template.scope.kind === "phase" ? "SAVED PHASE" : "THIS SAVED LESSON"} · {template.startDate}{template.endDate ? `–${template.endDate}` : " onward"}</small></span>
-                    <div className="saved-reminder-actions"><button className="reminder-edit-button" type="button" disabled={isPastActivePlan} onClick={() => openReminderEdit(template)} aria-label={`Edit saved reminder: ${template.title}`}>EDIT</button><button type="button" disabled={isPastActivePlan} onClick={() => removeReminder(template.id)} aria-label={`Remove saved reminder: ${template.title}`}>REMOVE</button></div>
-                  </article>)}
-                </div>
-              </details> : null}
-            </section>
             <div className="task-demo-heading">BUILT-IN STARTER CHECKLIST</div>
             <div className="task-list" aria-label="Local demo tasks">
               {operationTasks.map((task) => {
@@ -9963,43 +9646,6 @@ export default function Home() {
                 );
               })}
             </div>
-            <div className={`safety-callout ${safetyAcknowledged ? "acknowledged" : ""}`}><b>⚠ READY CHECK</b><span>Second coach is needed before spotting progressions. Acknowledge this before marking the lesson Ready.</span>{mode === "EDIT" ? <button onClick={acknowledgeSafetyForReady} disabled={safetyAcknowledged}>{safetyAcknowledged ? "ACKNOWLEDGED ✓" : "ACKNOWLEDGE"}</button> : null}</div>
-            <section className={`updates-inbox ${unresolvedUpdateCount ? "has-pending" : ""}`} aria-label="Local planner update inbox">
-              <div className={`updates-inbox-header ${unresolvedUpdateCount ? "pending-shake" : ""}`}>
-                <div><b>UPDATE INBOX</b><span>DECISIONS STAY WITH THIS REVISION</span></div>
-                <strong>{unresolvedUpdateCount ? `${unresolvedUpdateCount} OPEN` : "ALL REVIEWED"}</strong>
-              </div>
-              <p className="updates-inbox-note">Generated from this browser’s current plan and imported local schedule only. Alerts are advisory and do not reserve equipment or change the schedule.</p>
-              <div className="update-stack">
-                {assistantUpdates.length ? assistantUpdates.map((update) => {
-                  const decision = updateDecisionByRevision[revisionKey(update)];
-                  return (
-                    <article key={revisionKey(update)} className={`update-card ${update.priority.toLocaleLowerCase()}`}>
-                      <div className="update-card-meta"><span>{update.priority} · {update.source}</span><span>REV {update.revisionId.split("-").at(-1)?.toUpperCase()}</span></div>
-                      <strong>{update.title}</strong>
-                      <p>{update.summary}</p>
-                      {mode === "EDIT" ? <div className="update-decisions" aria-label={`Decision for ${update.title}`}>
-                        {updateDecisionOptions.map((option) => (
-                          <button
-                            key={option.value}
-                            className={`decision-button ${decision === option.value ? `selected ${option.value.toLocaleLowerCase()}` : ""}`}
-                            aria-pressed={decision === option.value}
-                            onClick={() => recordUpdateDecision(update, option.value)}
-                          >
-                            {option.label}
-                          </button>
-                        ))}
-                      </div> : null}
-                      <small className="update-decision-state">
-                        {decision
-                          ? `LOCAL DECISION FOR ${update.revisionId.toUpperCase()}: ${decision}`
-                          : `NO LOCAL DECISION FOR ${update.revisionId.toUpperCase()}`}
-                      </small>
-                    </article>
-                  );
-                }) : <p className="updates-inbox-empty">NO LOCAL PLANNER UPDATES RIGHT NOW.</p>}
-              </div>
-            </section>
           </section>
 
           <section className="retro-window attendance-window">
