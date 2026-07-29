@@ -178,8 +178,6 @@ import {
   type PlannerLessonDraft,
 } from "./planner-intake";
 import { parsePlannerOperationsV4 } from "./planner-operations";
-import { LessonPlannerAppSync } from "./lesson-planner-app-sync";
-import { hasCompletedLessonPlannerAppSync } from "./lesson-planner-app-sync-storage";
 import {
   addLocalStationBoardSpot,
   effectiveStationBoardSpots,
@@ -2616,10 +2614,6 @@ function LegacyLessonDocument({
 }
 
 export default function Home() {
-  const validateLessonForAppSync = useCallback(
-    (value: unknown) => restoreLesson(value) !== null,
-    [],
-  );
   const [lessonToday, setLessonToday] = useState(localLessonPlanDate);
   const [activePhaseId, setActivePhaseId] = useState("l3-f2");
   const [mode, setMode] = useState<"EDIT" | "VIEW">("EDIT");
@@ -3260,29 +3254,6 @@ export default function Home() {
   const isActivePhasePlacementMode = mode === "EDIT" && pendingZonePlacement?.phaseId === activePhase.id;
   const placementAllowsText = pendingZonePlacement?.kind !== "visual-label";
   const shouldShowTextLane = activePhase.mode !== "VISUAL";
-
-  useEffect(() => {
-    const provideSafePlannerMigration = (event: Event) => {
-      const request = event as CustomEvent<{ accept?: (candidate: unknown) => void }>;
-      if (typeof request.detail?.accept !== "function") return;
-      request.detail.accept({
-        source: "lesson-planner-local-v1",
-        reminders: reminderStorage.templates.map((reminder) => ({
-          id: reminder.id,
-          title: reminder.title,
-          kind: reminder.cadence === "temporary" ? "temporary" : "recurring",
-        })),
-        ideas: allLibraryItems.map((idea) => ({
-          id: idea.id,
-          title: idea.title,
-          tags: idea.tags,
-          notes: idea.description,
-        })),
-      });
-    };
-    window.addEventListener("coach-workspace-request-migration", provideSafePlannerMigration);
-    return () => window.removeEventListener("coach-workspace-request-migration", provideSafePlannerMigration);
-  }, [allLibraryItems, reminderStorage]);
 
   useEffect(() => {
     if (!isTimerRunning || timerSeconds <= 0) return;
@@ -4904,8 +4875,7 @@ export default function Home() {
   }, [rememberSharedPlannerWorkspace]);
 
   useEffect(() => {
-    if (hasCompletedLessonPlannerAppSync(window.localStorage)
-      || new URLSearchParams(window.location.search).get("library") === "1"
+    if (new URLSearchParams(window.location.search).get("library") === "1"
       || !hasLoadedLocalLesson
       || !hasLoadedLocalClasses
       || !hasLoadedSafeSchedule
@@ -8344,10 +8314,6 @@ export default function Home() {
         {mode === "EDIT" && !isPastActivePlan ? <button className={isClassManagerOpen ? "active class-manager-trigger" : "class-manager-trigger"} onClick={openClassImportManager}>+ IMPORT CLASS</button> : null}
         <button onClick={openLibraryWindow} aria-label="Open the Idea Library in a new window">LIBRARY <b>{allLibraryItems.length} IDEAS</b></button>
         {mode === "VIEW" ? <button className="view-new-idea-nav" onClick={() => setIsAddingIdea((open) => !open)}>{isAddingIdea ? "CLOSE NEW IDEA" : "+ NEW IDEA"}</button> : null}
-        <LessonPlannerAppSync
-          validateLesson={validateLessonForAppSync}
-          onStatus={setSharedPlannerSyncStatus}
-        />
         <div className="mode-switch" aria-label="Lesson mode">
           {(["EDIT", "VIEW"] as const).map((entry) => (
             <button key={entry} className={mode === entry ? "selected" : ""} onClick={() => setLessonMode(entry)} disabled={entry === "EDIT" && isPastActivePlan}>{entry}</button>
