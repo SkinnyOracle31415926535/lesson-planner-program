@@ -21,12 +21,10 @@ import {
 } from "./gym-layout";
 import {
   attendance,
-  operationTasks,
   phaseData,
   scheduleDayAdvisoryDemo,
   zoneCatalog,
   type AttendanceStatus,
-  type DemoOperationTask,
   type LessonCard,
   IDEA_LEVELS,
   type IdeaLevel,
@@ -161,6 +159,18 @@ import {
   type LibraryTransferBundleV1,
 } from "./library-transfer";
 import {
+  clearIdeaLibraryRestoreGuard,
+  clearPlannerWorkspaceRestoreGuard,
+  createPlannerBackupBundle,
+  hasIdeaLibraryRestoreGuard,
+  hasPlannerWorkspaceRestoreGuard,
+  parsePlannerBackupJson,
+  plannerBackupFilename,
+  plannerBackupSummary,
+  restorePlannerBackup,
+  type PlannerBackupBundleV1,
+} from "./planner-backup";
+import {
   PLANNER_INTAKE_PROJECTS,
   addPlannerIntakeItem,
   announcementApplies,
@@ -194,7 +204,6 @@ import {
   type StationBoardSourceSpot,
 } from "./station-board-overrides";
 import {
-  LOCAL_CLASS_SCHEDULE_JSON_EXAMPLE,
   appendLocalClassScheduleImport,
   emptyLocalClassStorage,
   isLocalClassStorage,
@@ -207,6 +216,16 @@ import {
   type LocalClassImportParseResult,
   type LocalClassStorage,
 } from "./local-classes";
+import {
+  addPlannerChecklistItem,
+  parsePlannerChecklist,
+  PLANNER_CHECKLIST_STORAGE_KEY,
+  removePlannerChecklistItem,
+  starterPlannerChecklist,
+  updatePlannerChecklistItem,
+  type PlannerChecklist,
+} from "./planner-checklist";
+import { classScheduleImportPrompt, fullScheduleImportPrompt } from "./planner-import-prompts";
 import { isPastLessonPlanDate, localLessonPlanDate } from "./lesson-plan-dates";
 import {
   addLessonPlan,
@@ -318,7 +337,6 @@ import {
   personalAlternateScheduleScopeLabel,
 } from "./personal-alternate-schedule";
 import { type PlannerUpdate } from "./planner-updates";
-import { summer2026SafeScheduleFixture } from "../fixtures/summer-2026-safe-schedule-fixture";
 import {
   copyLessonBoardSnapshot,
   createLessonBoardSnapshot,
@@ -594,6 +612,19 @@ type LibraryTransferImportState =
     message: string;
   };
 
+type PlannerBackupImportState =
+  | {
+    kind: "ready";
+    fileName: string;
+    fileSize: number;
+    bundle: PlannerBackupBundleV1;
+  }
+  | {
+    kind: "error";
+    fileName: string;
+    message: string;
+  };
+
 type PreparedCustomBoardImport = {
   board: CustomBoard;
   photo: StoredAreaPhoto;
@@ -641,7 +672,13 @@ type EventEditorGroup = {
 
 type UpdateDecision = "IMPORTANT" | "LATER" | "REJECTED";
 
-type PlannerTaskDisplay = Pick<DemoOperationTask, "id" | "title" | "kind" | "detail" | "rollForwardCopy">;
+type PlannerTaskDisplay = {
+  id: string;
+  title: string;
+  kind: "CHECKLIST" | "RECURRING" | "TEMPORARY";
+  detail: string;
+  rollForwardCopy?: string;
+};
 
 type StoredOperations = {
   version: 4;
@@ -2626,6 +2663,8 @@ export default function Home() {
   const editIdeaCameraInputRef = useRef<HTMLInputElement | null>(null);
   const editIdeaMediaInputRef = useRef<HTMLInputElement | null>(null);
   const libraryTransferInputRef = useRef<HTMLInputElement | null>(null);
+  const classImportInputRef = useRef<HTMLInputElement | null>(null);
+  const plannerBackupInputRef = useRef<HTMLInputElement | null>(null);
   const customBoardImportInputRef = useRef<HTMLInputElement | null>(null);
   const libraryStackRef = useRef<HTMLDivElement | null>(null);
   const libraryPinchRef = useRef<LibraryPinchState>({ active: false, startDistance: 0, startRowHeight: LIBRARY_ROW_HEIGHT_DEFAULT });
@@ -2649,6 +2688,10 @@ export default function Home() {
   const [lessonPlanIndex, setLessonPlanIndex] = useState<LessonPlanIndex | null>(null);
   const hasLessonPlanIndex = lessonPlanIndex !== null;
   const [planShelf, setPlanShelf] = useState<PlanShelf>(null);
+  const [isPlannerBackupOpen, setIsPlannerBackupOpen] = useState(false);
+  const [plannerBackupImport, setPlannerBackupImport] = useState<PlannerBackupImportState | null>(null);
+  const [isExportingPlannerBackup, setIsExportingPlannerBackup] = useState(false);
+  const [isRestoringPlannerBackup, setIsRestoringPlannerBackup] = useState(false);
   const [futurePlanDate, setFuturePlanDate] = useState(() => localLessonPlanDate());
   const [futurePlanClassId, setFuturePlanClassId] = useState<string | null>(null);
   const [futurePlanClassChosen, setFuturePlanClassChosen] = useState(false);
@@ -2682,6 +2725,21 @@ export default function Home() {
   const [isClassManagerOpen, setIsClassManagerOpen] = useState(false);
   const [classImportRaw, setClassImportRaw] = useState("");
   const [classImportPreview, setClassImportPreview] = useState<LocalClassImportParseResult | null>(null);
+  const [plannerChecklist, setPlannerChecklist] = useState<PlannerChecklist>(() => {
+    if (typeof window === "undefined") return starterPlannerChecklist();
+    try {
+      const stored = window.localStorage.getItem(PLANNER_CHECKLIST_STORAGE_KEY);
+      if (!stored) return starterPlannerChecklist();
+      return parsePlannerChecklist(JSON.parse(stored) as unknown) ?? starterPlannerChecklist();
+    } catch {
+      return starterPlannerChecklist();
+    }
+  });
+  const [checklistTitleDraft, setChecklistTitleDraft] = useState("");
+  const [checklistDetailDraft, setChecklistDetailDraft] = useState("");
+  const [editingChecklistId, setEditingChecklistId] = useState<string | null>(null);
+  const [editingChecklistTitle, setEditingChecklistTitle] = useState("");
+  const [editingChecklistDetail, setEditingChecklistDetail] = useState("");
   const [removeClassCandidate, setRemoveClassCandidate] = useState<LocalClass | null>(null);
   const [safeScheduleStorageState, setSafeScheduleStorageState] = useState<SafeScheduleStorage>(emptySafeScheduleStorage);
   const [hasLoadedSafeSchedule, setHasLoadedSafeSchedule] = useState(false);
@@ -2859,7 +2917,7 @@ export default function Home() {
     [reminderLesson, reminderStorage],
   );
   const plannerTasks = useMemo<PlannerTaskDisplay[]>(() => [
-    ...operationTasks,
+    ...plannerChecklist.items.map((task) => ({ ...task, kind: "CHECKLIST" as const })),
     ...activeReminders.map(({ template, isRollForward }) => ({
       id: template.id,
       title: template.title,
@@ -2876,7 +2934,7 @@ export default function Home() {
           : "Rolls forward until completed after its selected end date." }
         : {}),
     })),
-  ], [activeReminders]);
+  ], [activeReminders, plannerChecklist.items]);
   const activeLocalClass = useMemo(
     () => localClassById(classStorage, activeLessonPlan.classId),
     [activeLessonPlan.classId, classStorage],
@@ -4034,6 +4092,14 @@ export default function Home() {
 
   useEffect(() => {
     try {
+      window.localStorage.setItem(PLANNER_CHECKLIST_STORAGE_KEY, JSON.stringify(plannerChecklist));
+    } catch {
+      // The checklist stays available for this open lesson if storage is unavailable.
+    }
+  }, [plannerChecklist]);
+
+  useEffect(() => {
+    try {
       const stored = window.localStorage.getItem(LOCAL_SAFE_SCHEDULE_STORAGE_KEY);
       if (stored) {
         const normalized = normalizeSafeScheduleStorage(JSON.parse(stored) as unknown);
@@ -4505,6 +4571,7 @@ export default function Home() {
 
   const loadPublicIdeaLibraryCopy = useCallback(() => {
     void (async () => {
+      clearIdeaLibraryRestoreGuard(window.localStorage);
       setSharedIdeaLibrarySyncStatus("LOADING RYAN’S IDEA LIBRARY");
       try {
         const remote = await fetchSharedIdeaLibrary();
@@ -4526,8 +4593,19 @@ export default function Home() {
   useEffect(() => {
     if (!hasLoadedLibraryPreferences
       || !sharedIdeaLibraryMediaReady
-      || !sharedIdeaLibraryStationsReady
-      || sharedIdeaLibrarySyncStartedRef.current) return;
+      || !sharedIdeaLibraryStationsReady) return;
+    if (hasIdeaLibraryRestoreGuard(window.localStorage)) {
+      sharedIdeaLibrarySyncReadyRef.current = false;
+      sharedIdeaLibrarySyncConflictRef.current = true;
+      const restoreGuardTimer = window.setTimeout(() => {
+        setIsSharedIdeaLibrarySyncReady(false);
+        setHasSharedIdeaLibrarySyncConflict(true);
+        setSharedIdeaLibrarySyncStatus("LOCAL BACKUP ACTIVE · SYNC PAUSED");
+        setNotice("FULL BACKUP ACTIVE · IDEA LIBRARY SYNC IS PAUSED UNTIL YOU CHOOSE LOAD SHARED IDEAS");
+      }, 0);
+      return () => window.clearTimeout(restoreGuardTimer);
+    }
+    if (sharedIdeaLibrarySyncStartedRef.current) return;
 
     sharedIdeaLibrarySyncStartedRef.current = true;
     let active = true;
@@ -4856,6 +4934,7 @@ export default function Home() {
 
   const loadPublicSharedCopy = useCallback(() => {
     void (async () => {
+      clearPlannerWorkspaceRestoreGuard(window.localStorage);
       setSharedPlannerSyncStatus("LOADING RYAN’S WORKSPACE");
       try {
         const remoteWorkspace = await loadSharedPlannerWorkspace();
@@ -4882,10 +4961,21 @@ export default function Home() {
       || !hasLoadedOperations
       || !hasLoadedCustomBoards
       || !hasLoadedStationBoardOverrides
-      || !hasLessonPlanIndex
-      || sharedPlannerSyncStartedRef.current) {
+      || !hasLessonPlanIndex) {
       return;
     }
+    if (hasPlannerWorkspaceRestoreGuard(window.localStorage)) {
+      sharedPlannerSyncReadyRef.current = false;
+      sharedPlannerSyncConflictRef.current = true;
+      const restoreGuardTimer = window.setTimeout(() => {
+        setIsSharedPlannerSyncReady(false);
+        setHasSharedPlannerSyncConflict(true);
+        setSharedPlannerSyncStatus("LOCAL BACKUP ACTIVE · SYNC PAUSED");
+        setNotice("FULL BACKUP ACTIVE · SHARED PLANNER SYNC IS PAUSED UNTIL YOU CHOOSE LOAD SHARED COPY");
+      }, 0);
+      return () => window.clearTimeout(restoreGuardTimer);
+    }
+    if (sharedPlannerSyncStartedRef.current) return;
 
     sharedPlannerSyncStartedRef.current = true;
     let active = true;
@@ -7655,8 +7745,57 @@ export default function Home() {
       [activeLessonPlan.id]: { ...current[activeLessonPlan.id], [taskId]: isDone },
     }));
     if (taskId === LEGACY_RECURRING_TASK_ID) setTodoDone(isDone);
-    const task = operationTasks.find((candidate) => candidate.id === taskId);
+    const task = plannerChecklist.items.find((candidate) => candidate.id === taskId);
     setNotice(`${task?.title.toUpperCase() ?? "TASK"} ${isDone ? "MARKED COMPLETE" : "REOPENED"} · SAVED TO RYAN’S WORKSPACE`);
+  }
+
+  function checklistItemId() {
+    const random = typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID().replace(/-/g, "")
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    return `checklist-${random}`;
+  }
+
+  function addChecklistItem() {
+    const next = addPlannerChecklistItem(plannerChecklist, {
+      id: checklistItemId(),
+      title: checklistTitleDraft,
+      detail: checklistDetailDraft || "Your local checklist item.",
+    });
+    if (!next) {
+      setNotice("NAME THE CHECKLIST ITEM BEFORE SAVING IT");
+      return;
+    }
+    setPlannerChecklist(next);
+    setChecklistTitleDraft("");
+    setChecklistDetailDraft("");
+    setNotice("CHECKLIST ITEM ADDED · IT STARTS OPEN ON EACH LESSON");
+  }
+
+  function startChecklistEdit(item: PlannerChecklist["items"][number]) {
+    setEditingChecklistId(item.id);
+    setEditingChecklistTitle(item.title);
+    setEditingChecklistDetail(item.detail);
+  }
+
+  function saveChecklistEdit() {
+    if (!editingChecklistId) return;
+    const next = updatePlannerChecklistItem(plannerChecklist, editingChecklistId, editingChecklistTitle, editingChecklistDetail);
+    if (!next) {
+      setNotice("CHECKLIST ITEM NEEDS A NAME AND DETAIL");
+      return;
+    }
+    setPlannerChecklist(next);
+    setEditingChecklistId(null);
+    setNotice("CHECKLIST ITEM UPDATED · SAVED IN THIS BROWSER");
+  }
+
+  function removeChecklistItem(itemId: string) {
+    const next = removePlannerChecklistItem(plannerChecklist, itemId);
+    if (!next) return;
+    setPlannerChecklist(next);
+    if (editingChecklistId === itemId) setEditingChecklistId(null);
+    setNotice("CHECKLIST ITEM REMOVED · COMPLETED LESSON RECORDS STAY INTACT");
   }
 
   function recordUpdateDecision(update: Pick<PlannerUpdate, "id" | "revisionId">, decision: UpdateDecision) {
@@ -7667,6 +7806,92 @@ export default function Home() {
   function resetLibrarySearch() {
     setLibrarySearch("");
     setLibraryFilter("all");
+  }
+
+  function openPlannerBackupPanel() {
+    setPlanShelf(null);
+    setIsClassManagerOpen(false);
+    setRemoveClassCandidate(null);
+    setPlannerBackupImport(null);
+    setIsPlannerBackupOpen((current) => !current);
+  }
+
+  async function exportPlannerBackup() {
+    setIsExportingPlannerBackup(true);
+    try {
+      const bundle = await createPlannerBackupBundle(window.localStorage);
+      const summary = plannerBackupSummary(bundle);
+      const json = JSON.stringify(bundle, null, 2);
+      const url = URL.createObjectURL(new Blob([json], { type: "application/json;charset=utf-8" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = plannerBackupFilename();
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setNotice(`${summary.localRecordCount} PLANNER RECORDS EXPORTED · ${summary.areaPhotoCount + summary.ideaMediaCount} ATTACHMENT${summary.areaPhotoCount + summary.ideaMediaCount === 1 ? "" : "S"} INCLUDED`);
+    } catch (error) {
+      setNotice(`FULL BACKUP NOT CREATED · ${(error instanceof Error ? error.message : "THE LOCAL DATA COULD NOT BE READ").toUpperCase()}`);
+    } finally {
+      setIsExportingPlannerBackup(false);
+    }
+  }
+
+  async function previewPlannerBackupRestore(file: File | null) {
+    if (!file) return;
+    try {
+      const parsed = parsePlannerBackupJson(await file.text(), file.size);
+      if (!parsed.ok) {
+        setPlannerBackupImport({ kind: "error", fileName: file.name, message: parsed.error });
+        setNotice(`BACKUP RESTORE BLOCKED · ${parsed.error.toUpperCase()}`);
+        return;
+      }
+      setPlannerBackupImport({ kind: "ready", fileName: file.name, fileSize: file.size, bundle: parsed.value });
+      const summary = plannerBackupSummary(parsed.value);
+      setNotice(`FULL BACKUP READY · ${summary.localRecordCount} PLANNER RECORDS · ${summary.areaPhotoCount + summary.ideaMediaCount} ATTACHMENTS`);
+    } catch {
+      const message = "The selected file could not be read.";
+      setPlannerBackupImport({ kind: "error", fileName: file.name, message });
+      setNotice("BACKUP RESTORE BLOCKED · THE SELECTED FILE COULD NOT BE READ");
+    } finally {
+      if (plannerBackupInputRef.current) plannerBackupInputRef.current.value = "";
+    }
+  }
+
+  async function applyPlannerBackupRestore() {
+    if (plannerBackupImport?.kind !== "ready") return;
+    if (sharedPlannerSyncInProgressRef.current || sharedIdeaLibrarySyncInProgressRef.current) {
+      setNotice("WAIT FOR THE CURRENT SHARED SAVE TO FINISH BEFORE RESTORING A BACKUP");
+      return;
+    }
+    setIsRestoringPlannerBackup(true);
+    sharedPlannerSyncReadyRef.current = false;
+    sharedPlannerSyncConflictRef.current = true;
+    sharedIdeaLibrarySyncReadyRef.current = false;
+    sharedIdeaLibrarySyncConflictRef.current = true;
+    setIsSharedPlannerSyncReady(false);
+    setIsSharedIdeaLibrarySyncReady(false);
+    setSharedPlannerSyncStatus("RESTORING LOCAL BACKUP");
+    setSharedIdeaLibrarySyncStatus("RESTORING LOCAL BACKUP");
+    try {
+      await restorePlannerBackup(window.localStorage, plannerBackupImport.bundle);
+      setSharedPlannerSyncStatus("LOCAL BACKUP ACTIVE · SYNC PAUSED");
+      setSharedIdeaLibrarySyncStatus("LOCAL BACKUP ACTIVE · SYNC PAUSED");
+      setNotice("FULL BACKUP RESTORED · LOCAL COPY ACTIVE · RESTARTING PLANNER");
+      window.setTimeout(() => window.location.reload(), 80);
+    } catch (error) {
+      sharedPlannerSyncConflictRef.current = false;
+      sharedPlannerSyncStartedRef.current = false;
+      sharedIdeaLibrarySyncConflictRef.current = false;
+      sharedIdeaLibrarySyncStartedRef.current = false;
+      setHasSharedPlannerSyncConflict(false);
+      setHasSharedIdeaLibrarySyncConflict(false);
+      setSharedPlannerSyncRetry((attempt) => attempt + 1);
+      setSharedIdeaLibrarySyncRetry((attempt) => attempt + 1);
+      setNotice(`BACKUP RESTORE STOPPED · ${(error instanceof Error ? error.message : "THE BACKUP COULD NOT BE SAVED").toUpperCase()}`);
+      setIsRestoringPlannerBackup(false);
+    }
   }
 
   function exportIdeaLibrary() {
@@ -7735,6 +7960,7 @@ export default function Home() {
   function openClassImportManager() {
     setClassImportPreview(null);
     setPlanShelf(null);
+    setIsPlannerBackupOpen(false);
     setIsClassManagerOpen(true);
   }
 
@@ -7780,12 +8006,37 @@ export default function Home() {
       : "CLASS CLEARED FROM THIS LESSON · SAMPLE ROSTER STAYS AS A LOCAL FALLBACK");
   }
 
-  function previewClassScheduleImport() {
-    const preview = parseLocalClassScheduleImport(classImportRaw);
-    setClassImportPreview(preview);
-    setNotice(preview.ok
-      ? `${preview.value.class.name.toUpperCase()} IS READY TO IMPORT AS A NEW LOCAL CLASS`
-      : preview.error.toUpperCase());
+  async function copyJsonImportPrompt(label: string, prompt: string) {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(prompt);
+      setNotice(`${label} REQUEST COPIED · SAVE THE AI JSON, THEN CHOOSE IT HERE`);
+    } catch {
+      window.prompt(`${label} REQUEST · COPY THIS TEXT`, prompt);
+      setNotice(`${label} REQUEST IS READY TO COPY · SAVE THE AI JSON, THEN CHOOSE IT HERE`);
+    }
+  }
+
+  async function previewClassScheduleFile(file: File | null) {
+    if (!file) {
+      setClassImportPreview(null);
+      return;
+    }
+    try {
+      const raw = await file.text();
+      const preview = parseLocalClassScheduleImport(raw);
+      setClassImportRaw(raw);
+      setClassImportPreview(preview);
+      setNotice(preview.ok
+        ? `${preview.value.class.name.toUpperCase()} IS READY TO IMPORT AS A NEW LOCAL CLASS`
+        : preview.error.toUpperCase());
+    } catch {
+      setClassImportRaw("");
+      setClassImportPreview({ ok: false, error: "The selected class JSON file could not be read." });
+      setNotice("CLASS IMPORT BLOCKED · THE SELECTED FILE COULD NOT BE READ");
+    } finally {
+      if (classImportInputRef.current) classImportInputRef.current.value = "";
+    }
   }
 
   function applyClassScheduleImport() {
@@ -7857,23 +8108,6 @@ export default function Home() {
     setOpenAreaSelectionByKey({});
     setSafeScheduleImportPreview(null);
     setNotice(`${next.bundle?.schedule.timeBlocks.length ?? 0} FULL-SCHEDULE BLOCKS SAVED${synchronized ? ` · ${synchronized.template.phases.length} ACTIVE LESSON PHASE${synchronized.template.phases.length === 1 ? "" : "S"} SYNCED` : " · LINK EACH LOCAL CLASS TO ITS EXACT GROUP"}`);
-  }
-
-  function loadSummer2026LocalSchedule() {
-    if (!hasLoadedSafeSchedule) {
-      setNotice("WAIT FOR THIS BROWSER'S LOCAL SCHEDULE STORAGE TO FINISH LOADING");
-      return;
-    }
-    try {
-      const next = replaceSafeScheduleBundle(safeScheduleStorageState, summer2026SafeScheduleFixture);
-      if (!persistSafeScheduleStorage(next)) return;
-      const synchronized = syncActiveLessonForScheduleChange(next);
-      setOpenAreaSelectionByKey({});
-      setSafeScheduleImportPreview(null);
-      setNotice(`${summer2026SafeScheduleFixture.schedule.timeBlocks.length} SUMMER 2026 BLOCKS LOADED LOCALLY${synchronized ? ` · ${synchronized.template.phases.length} ACTIVE LESSON PHASE${synchronized.template.phases.length === 1 ? "" : "S"} SYNCED` : " · LINK EACH CLASS TO ITS EXACT GROUP"} · ${summer2026SafeScheduleFixture.schedule.collisionWarnings.warningCount} ADVISORY WARNINGS REMAIN`);
-    } catch {
-      setNotice("THE BUILT-IN SUMMER 2026 COPY COULD NOT BE LOADED · YOUR CURRENT LOCAL SCHEDULE STAYS UNCHANGED");
-    }
   }
 
   function linkLocalClassToSafeSchedule(classId: string, group: string | null) {
@@ -8149,6 +8383,19 @@ export default function Home() {
         <b>{isLibraryWindow ? "VIEW · EDIT · DRAFT · FAVORITE · ARCHIVE · RESTORE" : "PLACE → THEN TAP A HIGHLIGHTED STATION"}</b>
         <span>{isLibraryWindow ? "Use Drafts for Ideas you still want to edit. Changes sync only for Ryan in the planner window." : "Pinch this list out for details, or in to compact it. One finger still scrolls; normal size shows five ideas."}</span>
       </div>
+      <section className="library-transfer" aria-label="Import and export the Idea Library as JSON">
+        <div className="library-transfer-heading"><b>IDEA LIBRARY JSON</b><span>Transfer ideas between devices. Attachments stay in a full Planner backup.</span></div>
+        <div className="library-transfer-actions">
+          <button type="button" onClick={exportIdeaLibrary}>EXPORT IDEAS JSON</button>
+          <input ref={libraryTransferInputRef} className="planner-backup-file-input" type="file" accept=".json,application/json" tabIndex={-1} aria-hidden="true" onChange={(event) => { void previewIdeaLibraryImport(event.currentTarget.files?.[0] ?? null); }} />
+          <button type="button" onClick={() => libraryTransferInputRef.current?.click()}>IMPORT IDEAS JSON</button>
+        </div>
+        {libraryTransferImport?.kind === "ready" ? (
+          <div className="library-transfer-preview"><strong>READY: {libraryTransferImport.fileName}</strong><span>{libraryTransferImport.newCount} new idea{libraryTransferImport.newCount === 1 ? "" : "s"} · {libraryTransferImport.duplicateCount} already here</span><p>Import adds only unseen idea IDs. Existing ideas and attachments are never replaced.</p><div><button type="button" onClick={applyIdeaLibraryImport}>MERGE IDEAS</button><button type="button" onClick={() => setLibraryTransferImport(null)}>CANCEL</button></div></div>
+        ) : libraryTransferImport?.kind === "error" ? (
+          <div className="library-transfer-preview error"><strong>CAN’T IMPORT {libraryTransferImport.fileName}</strong><span>{libraryTransferImport.message}</span><button type="button" onClick={() => setLibraryTransferImport(null)}>CLEAR</button></div>
+        ) : null}
+      </section>
       <button className="new-idea-trigger" onClick={() => setIsAddingIdea((open) => !open)}>{isAddingIdea ? "CLOSE NEW IDEA" : "+ NEW IDEA"}</button>
       {newIdeaForm}
       <label className="library-search">
@@ -8313,6 +8560,7 @@ export default function Home() {
         }}>+ LESSON PLAN</button>
         {mode === "EDIT" && !isPastActivePlan ? <button className={isClassManagerOpen ? "active class-manager-trigger" : "class-manager-trigger"} onClick={openClassImportManager}>+ IMPORT CLASS</button> : null}
         <button onClick={openLibraryWindow} aria-label="Open the Idea Library in a new window">LIBRARY <b>{allLibraryItems.length} IDEAS</b></button>
+        <button className={isPlannerBackupOpen ? "active planner-backup-trigger" : "planner-backup-trigger"} onClick={openPlannerBackupPanel}>BACKUP / RESTORE</button>
         {mode === "VIEW" ? <button className="view-new-idea-nav" onClick={() => setIsAddingIdea((open) => !open)}>{isAddingIdea ? "CLOSE NEW IDEA" : "+ NEW IDEA"}</button> : null}
         <div className="mode-switch" aria-label="Lesson mode">
           {(["EDIT", "VIEW"] as const).map((entry) => (
@@ -8320,6 +8568,55 @@ export default function Home() {
           ))}
         </div>
       </nav>
+
+      {isPlannerBackupOpen ? (
+        <section className="planner-backup retro-window" aria-label="Full Lesson Planner backup and restore">
+          <div className="window-title">FULL BACKUP / RESTORE <span>DATED LOCAL JSON</span><button type="button" onClick={() => { setIsPlannerBackupOpen(false); setPlannerBackupImport(null); }} aria-label="Close full backup and restore">×</button></div>
+          <div className="planner-backup-body">
+            <div className="planner-backup-heading">
+              <b>KEEP A COMPLETE LOCAL COPY</b>
+              <span>Exports planner records, saved classes, reminders, preferences, photo/video attachments, and pixel stations into one dated JSON file.</span>
+            </div>
+            <div className="planner-backup-actions">
+              <button type="button" onClick={() => { void exportPlannerBackup(); }} disabled={isExportingPlannerBackup || isRestoringPlannerBackup}>{isExportingPlannerBackup ? "CREATING FULL BACKUP…" : "EXPORT FULL BACKUP (.JSON)"}</button>
+              <input
+                ref={plannerBackupInputRef}
+                className="planner-backup-file-input"
+                type="file"
+                accept=".json,application/json"
+                tabIndex={-1}
+                aria-hidden="true"
+                onChange={(event) => { void previewPlannerBackupRestore(event.currentTarget.files?.[0] ?? null); }}
+              />
+              <button type="button" onClick={() => plannerBackupInputRef.current?.click()} disabled={isExportingPlannerBackup || isRestoringPlannerBackup}>CHOOSE BACKUP TO RESTORE</button>
+            </div>
+            {plannerBackupImport?.kind === "ready" ? (() => {
+              const summary = plannerBackupSummary(plannerBackupImport.bundle);
+              const attachmentCount = summary.areaPhotoCount + summary.ideaMediaCount;
+              return (
+                <section className="planner-backup-preview ready" aria-label="Ready full backup restore">
+                  <b>READY: {plannerBackupImport.fileName}</b>
+                  <span>{Math.ceil(plannerBackupImport.fileSize / 1024)} KB · exported {new Date(plannerBackupImport.bundle.exportedAt).toLocaleString()}</span>
+                  <span>{summary.localRecordCount} planner records · {attachmentCount} attachment{attachmentCount === 1 ? "" : "s"} · {summary.stationSetupCount} pixel station{summary.stationSetupCount === 1 ? "" : "s"}</span>
+                  <p>Restore replaces the Planner data in this browser and reloads. Shared sync stays paused afterward so this backup cannot be overwritten or uploaded automatically.</p>
+                  <div>
+                    <button type="button" onClick={() => { void applyPlannerBackupRestore(); }} disabled={isRestoringPlannerBackup}>{isRestoringPlannerBackup ? "RESTORING…" : "RESTORE THIS BACKUP & RELOAD"}</button>
+                    <button type="button" onClick={() => setPlannerBackupImport(null)} disabled={isRestoringPlannerBackup}>CANCEL</button>
+                  </div>
+                </section>
+              );
+            })() : plannerBackupImport?.kind === "error" ? (
+              <section className="planner-backup-preview error" aria-label="Invalid full backup">
+                <b>CAN’T RESTORE {plannerBackupImport.fileName}</b>
+                <span>{plannerBackupImport.message}</span>
+                <button type="button" onClick={() => setPlannerBackupImport(null)}>CLEAR</button>
+              </section>
+            ) : (
+              <p className="planner-backup-help">Choose a previously exported <code>lesson-planner-full-backup</code> JSON file to review it before restoring. Nothing is replaced until you press the final restore button.</p>
+            )}
+          </div>
+        </section>
+      ) : null}
 
       {mode === "EDIT" && isClassManagerOpen ? (
         <section className="class-manager retro-window" aria-label="Import and manage local classes">
@@ -8369,12 +8666,11 @@ export default function Home() {
           ) : null}
 
           <section className="class-import-panel" aria-label="Import a shared class schedule as JSON">
-            <div className="class-import-heading"><div><b>IMPORT CLASS + SCHEDULE</b><span>JSON ONLY · imports add a new shared class and never overwrite an existing roster, schedule, or lesson phase.</span></div><button type="button" onClick={() => { setClassImportRaw(LOCAL_CLASS_SCHEDULE_JSON_EXAMPLE); setClassImportPreview(null); }}>LOAD EXAMPLE</button></div>
-            <label>PASTE JSON<textarea value={classImportRaw} onChange={(event) => { setClassImportRaw(event.target.value); setClassImportPreview(null); }} placeholder={LOCAL_CLASS_SCHEDULE_JSON_EXAMPLE} spellCheck={false} /></label>
-            <div className="class-import-actions"><button type="button" onClick={previewClassScheduleImport}>PREVIEW JSON</button>{classImportPreview?.ok ? <button type="button" onClick={applyClassScheduleImport}>APPLY AS NEW SHARED CLASS</button> : null}</div>
+            <div className="class-import-heading"><div><b>IMPORT CLASS + SCHEDULE</b><span>COPY THE FORMAT REQUEST, SAVE THE AI JSON, THEN CHOOSE IT HERE. Imports add a new class and never overwrite an existing roster, schedule, or lesson phase.</span></div></div>
+            <div className="class-import-actions"><button type="button" onClick={() => { void copyJsonImportPrompt("CLASS + SCHEDULE JSON", classScheduleImportPrompt()); }}>COPY CLASS + SCHEDULE JSON REQUEST</button><input ref={classImportInputRef} className="planner-backup-file-input" type="file" accept=".json,application/json" tabIndex={-1} aria-hidden="true" onChange={(event) => { void previewClassScheduleFile(event.currentTarget.files?.[0] ?? null); }} /><button type="button" onClick={() => classImportInputRef.current?.click()}>CHOOSE CLASS JSON</button>{classImportPreview?.ok ? <button type="button" onClick={applyClassScheduleImport}>APPLY AS NEW SHARED CLASS</button> : null}</div>
             {classImportPreview ? classImportPreview.ok ? (
               <div className="class-import-preview ok"><b>READY: {classImportPreview.value.class.name}</b><span>{classImportPreview.value.class.students.length} students · {classImportPreview.value.class.schedule.length} schedule blocks · choose APPLY to save a separate shared class.</span></div>
-            ) : <div className="class-import-preview error"><b>CHECK JSON</b><span>{classImportPreview.error}</span></div> : <p className="class-import-help">Use the example’s <code>version</code>, <code>class</code>, <code>students</code>, and <code>schedule</code> fields. SQL is intentionally not run inside the planner.</p>}
+            ) : <div className="class-import-preview error"><b>CHECK JSON</b><span>{classImportPreview.error}</span></div> : <p className="class-import-help">The copy request contains the supported version 1 format. The Planner reads only the selected JSON file; it never sends Planner records to an AI service.</p>}
           </section>
 
           <section className="class-import-panel safe-schedule-import-panel" aria-label="Import the privacy-safe full gym schedule as JSON">
@@ -8406,10 +8702,10 @@ export default function Home() {
               </div>
             ) : <p className="class-import-help">Choose <code>lesson-planner-safe-schedule.json</code>. The complete file is validated before anything replaces the current shared schedule.</p>}
             <div className="class-import-actions">
-              <button type="button" onClick={loadSummer2026LocalSchedule}>{safeScheduleBundle?.schedule.scheduleId === "summer_2026" ? "RELOAD SUMMER 2026 SHARED COPY" : "LOAD SUMMER 2026 SHARED COPY"}</button>
+              <button type="button" onClick={() => { void copyJsonImportPrompt("FULL GYM SCHEDULE JSON", fullScheduleImportPrompt()); }}>COPY FULL GYM SCHEDULE JSON REQUEST</button>
               {safeScheduleImportPreview?.result.ok ? <button type="button" onClick={applySafeScheduleImport}>{safeScheduleBundle ? "REPLACE SHARED SCHEDULE" : "APPLY FULL SCHEDULE"}</button> : null}
             </div>
-            <p className="class-import-help">The included Summer 2026 copy is shared across Ryan&apos;s planner and is advisory only. It retains the source&apos;s accepted-as-is status and unresolved review warnings; it never reserves equipment or changes the source vault.</p>
+            <p className="class-import-help">The request describes the privacy-safe schedule format only. The selected file remains advisory: it never reserves equipment or changes the source vault.</p>
           </section>
         </section>
       ) : null}
@@ -9596,27 +9892,22 @@ export default function Home() {
               <b>REMINDERS + SKILLS + CLASS CONTEXT</b>
               <span>Use the Coach Workspace rail for owner-approved reminders, skill cards, and roster context. This planner keeps local plans and schedules private to this browser.</span>
             </div>
-            <div className="task-demo-heading">BUILT-IN STARTER CHECKLIST</div>
-            <div className="task-list" aria-label="Local demo tasks">
-              {operationTasks.map((task) => {
+            <div className="task-demo-heading">YOUR CHECKLIST <span>EDITABLE · PER LESSON</span></div>
+            <div className="task-list" aria-label="Your checklist tasks">
+              {plannerChecklist.items.map((task) => {
                 const isDone = operationTaskIsDone(task.id);
+                const isEditing = editingChecklistId === task.id;
                 return (
-                  <label key={task.id} className={`task-row ${isDone ? "completed" : ""}`}>
-                    <input type="checkbox" checked={isDone} onChange={(event) => setOperationTaskDone(task.id, event.target.checked)} />
-                    <span className="task-copy">
-                      <strong>{task.title}</strong>
-                      <small>{task.detail}</small>
-                    </span>
-                    <em>{task.kind}</em>
-                    {task.rollForwardCopy ? (
-                      <span className="task-roll-forward">
-                        {isDone ? "Completed locally · will not roll forward." : task.rollForwardCopy}
-                      </span>
-                    ) : null}
-                  </label>
+                  isEditing ? <form key={task.id} className="checklist-edit" onSubmit={(event) => { event.preventDefault(); saveChecklistEdit(); }}><label>ITEM<input value={editingChecklistTitle} onChange={(event) => setEditingChecklistTitle(event.target.value)} maxLength={140} autoFocus /></label><label>DETAIL<input value={editingChecklistDetail} onChange={(event) => setEditingChecklistDetail(event.target.value)} maxLength={280} /></label><div><button type="submit">SAVE</button><button type="button" onClick={() => setEditingChecklistId(null)}>CANCEL</button><button type="button" className="checklist-remove" onClick={() => removeChecklistItem(task.id)}>REMOVE</button></div></form> : <div key={task.id} className={`task-row ${isDone ? "completed" : ""}`}><input type="checkbox" checked={isDone} onChange={(event) => setOperationTaskDone(task.id, event.target.checked)} aria-label={`Mark ${task.title} ${isDone ? "incomplete" : "complete"}`} /><span className="task-copy"><strong>{task.title}</strong><small>{task.detail}</small></span><em>CHECKLIST</em><button type="button" className="checklist-edit-trigger" onClick={() => startChecklistEdit(task)}>EDIT</button></div>
                 );
               })}
             </div>
+            <form className="checklist-create" onSubmit={(event) => { event.preventDefault(); addChecklistItem(); }}>
+              <b>ADD CHECKLIST ITEM</b>
+              <label>ITEM<input value={checklistTitleDraft} onChange={(event) => setChecklistTitleDraft(event.target.value)} maxLength={140} placeholder="Set up vault runway" /></label>
+              <label>DETAIL<input value={checklistDetailDraft} onChange={(event) => setChecklistDetailDraft(event.target.value)} maxLength={280} placeholder="Optional coaching reminder" /></label>
+              <button type="submit">+ ADD ITEM</button>
+            </form>
           </section>
 
           <section className="retro-window attendance-window">

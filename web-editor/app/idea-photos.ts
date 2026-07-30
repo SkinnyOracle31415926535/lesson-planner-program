@@ -128,6 +128,35 @@ export async function loadIdeaMedia(mediaId: string): Promise<StoredIdeaMedia | 
   }
 }
 
+/** Reads every browser-local Idea attachment for a complete planner backup. */
+export async function listIdeaMedia(): Promise<StoredIdeaMedia[]> {
+  const database = await ideaPhotoDatabase();
+  try {
+    const transaction = database.transaction(IDEA_PHOTO_STORE_NAME, "readonly");
+    const media = await requestResult(transaction.objectStore(IDEA_PHOTO_STORE_NAME).getAll());
+    await transactionDone(transaction);
+    return (media as StoredIdeaMedia[]).map((entry) => ({
+      ...entry,
+      kind: entry.kind ?? (entry.mimeType.startsWith("video/") ? "video" : "image"),
+    }));
+  } finally {
+    database.close();
+  }
+}
+
+/** Restores Idea attachments from a validated full planner backup without deleting unrelated local media. */
+export async function restoreIdeaMedia(media: readonly StoredIdeaMedia[]): Promise<void> {
+  const database = await ideaPhotoDatabase();
+  try {
+    const transaction = database.transaction(IDEA_PHOTO_STORE_NAME, "readwrite");
+    const store = transaction.objectStore(IDEA_PHOTO_STORE_NAME);
+    media.forEach((entry) => store.put(entry));
+    await transactionDone(transaction);
+  } finally {
+    database.close();
+  }
+}
+
 /** Removes only the Blob record with this ID; unrelated Idea media remains intact. */
 export async function removeIdeaMedia(mediaId: string): Promise<void> {
   const database = await ideaPhotoDatabase();

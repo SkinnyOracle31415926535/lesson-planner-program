@@ -216,6 +216,32 @@ export async function loadCustomBoardPhoto(photoId: string): Promise<StoredAreaP
   return shared;
 }
 
+/** Reads every browser-local photo-area image for a complete planner backup. */
+export async function listCustomBoardPhotos(): Promise<StoredAreaPhoto[]> {
+  const database = await photoDatabase();
+  try {
+    const transaction = database.transaction(PHOTO_STORE_NAME, "readonly");
+    const photos = await requestResult(transaction.objectStore(PHOTO_STORE_NAME).getAll());
+    await transactionDone(transaction);
+    return photos as StoredAreaPhoto[];
+  } finally {
+    database.close();
+  }
+}
+
+/** Restores photo-area images from a validated full planner backup without deleting unrelated local photos. */
+export async function restoreCustomBoardPhotos(photos: readonly StoredAreaPhoto[]): Promise<void> {
+  const database = await photoDatabase();
+  try {
+    const transaction = database.transaction(PHOTO_STORE_NAME, "readwrite");
+    const store = transaction.objectStore(PHOTO_STORE_NAME);
+    photos.forEach((photo) => store.put(photo));
+    await transactionDone(transaction);
+  } finally {
+    database.close();
+  }
+}
+
 export async function removeCustomBoardPhoto(photoId: string): Promise<void> {
   const database = await photoDatabase();
   try {
