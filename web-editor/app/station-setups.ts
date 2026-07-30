@@ -118,6 +118,32 @@ export async function loadStationSetup(id: string): Promise<StationSetup | null>
   try { const tx = db.transaction(STORE_NAME, "readonly"); const value = await requestResult(tx.objectStore(STORE_NAME).get(id)); await transactionDone(tx); return isStationSetup(value) ? value : null; } finally { db.close(); }
 }
 
+/** Reads every browser-local pixel station for a complete planner backup. */
+export async function listStationSetups(): Promise<StationSetup[]> {
+  const db = await database();
+  try {
+    const tx = db.transaction(STORE_NAME, "readonly");
+    const values = await requestResult(tx.objectStore(STORE_NAME).getAll());
+    await transactionDone(tx);
+    return (values as unknown[]).filter(isStationSetup);
+  } finally {
+    db.close();
+  }
+}
+
+/** Restores pixel stations from a validated full planner backup without deleting unrelated local stations. */
+export async function restoreStationSetups(setups: readonly StationSetup[]): Promise<void> {
+  const db = await database();
+  try {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    setups.forEach((setup) => store.put(setup));
+    await transactionDone(tx);
+  } finally {
+    db.close();
+  }
+}
+
 export async function removeStationSetup(id: string): Promise<void> {
   const db = await database();
   try { const tx = db.transaction(STORE_NAME, "readwrite"); tx.objectStore(STORE_NAME).delete(id); await transactionDone(tx); } finally { db.close(); }
