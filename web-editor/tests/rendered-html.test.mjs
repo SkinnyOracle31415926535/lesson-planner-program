@@ -79,3 +79,12 @@ test("the Idea Library edit form exposes the Station Maker", async () => {
   assert.match(editorMedia, /openLibraryEditStationMaker/);
   assert.match(editorMedia, /"EDIT STATION" : "MAKE STATION"/);
 });
+
+test("full-detail Idea cards show events and mats", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+
+  assert.match(page, /className="library-item-facts"/);
+  assert.match(page, /<b>EVENTS<\/b>/);
+  assert.match(page, /<b>MATS<\/b>/);
+  assert.match(page, /--library-facts-height/);
+});

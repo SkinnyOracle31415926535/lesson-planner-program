@@ -358,7 +358,7 @@ const BUILT_IN_ZONE_IDS = zoneCatalog.map((zone) => zone.id);
 const INITIAL_DEMO_GEM_IDS: string[] = [];
 const LIBRARY_ROW_HEIGHT_MIN = 56;
 const LIBRARY_ROW_HEIGHT_DEFAULT = 66;
-const LIBRARY_ROW_HEIGHT_MAX = 118;
+const LIBRARY_ROW_HEIGHT_MAX = 174;
 const LIBRARY_ROW_HEIGHT_STEP = 18;
 const LEGACY_RECURRING_TASK_ID = "set-bar-station-mats";
 const TODAY_LESSON_PLAN_ID = "legacy-current";
@@ -674,7 +674,7 @@ function libraryRowHeightFromStorage(value: string | null): number | null {
 
 function libraryDetailLevel(rowHeight: number): "COMPACT" | "DETAILS" | "FULL DETAILS" {
   if (rowHeight < 86) return "COMPACT";
-  if (rowHeight < 110) return "DETAILS";
+  if (rowHeight < 168) return "DETAILS";
   return "FULL DETAILS";
 }
 
@@ -2882,8 +2882,9 @@ export default function Home() {
   }, []);
   const setLibraryRowHeightVisual = useCallback((value: number) => {
     const next = clampLibraryRowHeight(value);
-    const descriptionProgress = Math.max(0, Math.min(1, (next - 82) / (LIBRARY_ROW_HEIGHT_MAX - 82)));
-    const extraProgress = Math.max(0, Math.min(1, (next - 100) / (LIBRARY_ROW_HEIGHT_MAX - 100)));
+    const descriptionProgress = Math.max(0, Math.min(1, (next - 82) / (120 - 82)));
+    const extraProgress = Math.max(0, Math.min(1, (next - 100) / (120 - 100)));
+    const factsProgress = Math.max(0, Math.min(1, (next - 120) / (LIBRARY_ROW_HEIGHT_MAX - 120)));
     libraryRowHeightRef.current = next;
     const stack = libraryStackRef.current;
     if (stack) {
@@ -2892,6 +2893,8 @@ export default function Home() {
       stack.style.setProperty("--library-description-opacity", String(descriptionProgress));
       stack.style.setProperty("--library-extra-height", `${Math.round(extraProgress * 18)}px`);
       stack.style.setProperty("--library-extra-opacity", String(extraProgress));
+      stack.style.setProperty("--library-facts-height", `${Math.round(factsProgress * 46)}px`);
+      stack.style.setProperty("--library-facts-opacity", String(factsProgress));
     }
     return next;
   }, []);
@@ -8651,6 +8654,8 @@ export default function Home() {
           const tags = card.tags.slice(0, 2).join(" · ");
           const levels = card.levels?.length ? `L${card.levels.join(" · L")}` : "";
           const extraDetail = card.safety ? `⚠ ${card.safety}` : card.skills.slice(0, 3).join(" · ");
+          const events = card.events.length ? card.events.join(" · ") : "NONE LISTED";
+          const mats = card.mats?.length ? card.mats.join(" · ") : "NONE LISTED";
           const isUnavailable = Boolean(card.isRemoved || card.isArchived);
           const stationSetup = card.stationSetupId ? stationSetupsById[card.stationSetupId] : null;
           const libraryPhotoUrl = libraryRowHeight >= 110 && card.mediaKind === "image" && card.mediaId
@@ -8664,6 +8669,12 @@ export default function Home() {
                 <span className="library-item-state" title={[state, levels, tags].filter(Boolean).join(" · ")}>{[state, levels, tags].filter(Boolean).join(" · ")}</span>
                 <p className="library-item-description">{card.description}</p>
                 {extraDetail ? <span className="library-item-extra">{card.safety ? extraDetail : `SKILLS · ${extraDetail}`}</span> : null}
+                {libraryDetailLevel(libraryRowHeight) === "FULL DETAILS" ? (
+                  <div className="library-item-facts">
+                    <span title={`Events: ${events}`}><b>EVENTS</b> {events}</span>
+                    <span title={`Mats: ${mats}`}><b>MATS</b> {mats}</span>
+                  </div>
+                ) : null}
               </div>
               {card.stationSetupId ? <StationPreview setup={stationSetup} label={card.title} /> : libraryPhotoUrl ? <figure className="library-item-photo"><img src={libraryPhotoUrl} alt={`Reference photo for ${card.title}`} /></figure> : null}
               <div className="library-actions" aria-label={`Actions for ${card.title}`}>

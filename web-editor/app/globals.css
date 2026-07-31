@@ -161,6 +161,7 @@ button { cursor: pointer; touch-action:manipulation; -webkit-tap-highlight-color
 .library-results-summary { margin:0 7px; padding:5px 6px; display:grid; gap:2px; background:#f8f8f8; border:2px inset var(--window); color:var(--navy); }
 .library-results-summary b { font:900 9px ui-monospace,monospace; }
 .library-results-summary span { color:#3c3c3c; font-size:9px; font-weight:700; line-height:1.2; }
+.library-stack { --library-facts-height:0px; --library-facts-opacity:0; }
 .library-item-copy { min-width:0; display:grid; align-content:start; gap:2px; }
 .library-item.has-library-photo { grid-template-columns:minmax(0,1fr) 72px 110px; }
 .library-item-photo { min-width:0; height:calc(var(--idea-row-height) - 10px); margin:0; align-self:start; overflow:hidden; background:#4eb9e4; border:1px solid var(--navy); }
@@ -171,6 +172,9 @@ button { cursor: pointer; touch-action:manipulation; -webkit-tap-highlight-color
 .library-item-state { min-width:0; overflow:hidden; color:#3b5260; text-overflow:ellipsis; white-space:nowrap; font:800 7px/1.15 ui-monospace,monospace; letter-spacing:.01em; }
 .library-item-description { max-height:var(--library-description-height); margin:0; overflow:hidden; color:#343434; opacity:var(--library-description-opacity); font:700 8px/1.2 Arial,sans-serif; -webkit-box-orient:vertical; -webkit-line-clamp:3; display:-webkit-box; }
 .library-item-extra { max-height:var(--library-extra-height); overflow:hidden; color:#315463; opacity:var(--library-extra-opacity); white-space:nowrap; text-overflow:ellipsis; font:800 7px/1.2 ui-monospace,monospace; }
+.library-item-facts { max-height:var(--library-facts-height); display:grid; gap:2px; overflow:hidden; opacity:var(--library-facts-opacity); color:#233f4b; font:800 7px/1.2 ui-monospace,monospace; }
+.library-item-facts span { min-width:0; display:-webkit-box; overflow:hidden; white-space:normal; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+.library-item-facts b { margin-right:4px; color:var(--navy); }
 .library-actions { width:110px; display:grid; align-content:start; grid-template-columns:20px minmax(0,1fr) minmax(0,1fr) 20px; grid-template-rows:25px 25px; gap:3px; }
 .gem-toggle, .library-utility, .library-empty button { min-width:0; border-top:2px solid var(--white); border-left:2px solid var(--white); border-bottom:2px solid var(--black); border-right:2px solid var(--black); background:#f0f0f0; color:var(--black); font:900 7px/1 ui-monospace,monospace; padding:0; }
 .library-actions > button { width:100%; height:100%; max-width:100%; min-height:0; overflow:hidden; white-space:nowrap; }
