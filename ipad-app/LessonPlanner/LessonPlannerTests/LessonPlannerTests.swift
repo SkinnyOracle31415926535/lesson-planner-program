@@ -272,6 +272,91 @@ struct LessonPlannerTests {
         #expect(reloadedStore.libraryCards(in: .relevant).contains(where: { $0.id == idea.id }))
     }
 
+    @Test @MainActor func legacyIdeaCardsDecodeWithSafeDetailDefaults() async throws {
+        let legacyData = Data(
+            """
+            {
+              "id": "legacy-card",
+              "kind": "DRILL",
+              "title": "Legacy shape drill",
+              "detail": "Saved before the detailed library fields existed.",
+              "tags": ["floor", "L3–L4"]
+            }
+            """.utf8
+        )
+
+        let card = try JSONDecoder().decode(PlanningCard.self, from: legacyData)
+
+        #expect(card.kind == .drill)
+        #expect(card.levels == ["L3–L4"])
+        #expect(card.skills.isEmpty)
+        #expect(card.events.isEmpty)
+        #expect(card.mats.isEmpty)
+        #expect(card.variantCount == 1)
+        #expect(!card.hasPhotoAttachment)
+        #expect(!card.hasStationSetup)
+        #expect(card.mediaAndStationIndicator == "NO PHOTO OR STATION SETUP")
+    }
+
+    @Test @MainActor func warmUpIdeasAndNormalizedTagsPersistWithDetailedFields() async throws {
+        let storeURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("lesson-planner-warm-up-library-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: storeURL) }
+
+        let store = PlannerStore(persistenceURL: storeURL)
+
+        #expect(PlanningCardKind.allCases.contains(.warmUp))
+        #expect(store.libraryTagSuggestions.contains(where: {
+            $0.caseInsensitiveCompare("warmup") == .orderedSame
+        }))
+        #expect(store.normalizedLibraryTags(["warm-up", "Warm Up", "floor"]) == ["warmup", "floor"])
+
+        let added = try #require(store.addLibraryCard(
+            kind: .warmUp,
+            title: "Coach-added warm-up",
+            detail: "Prepare ankles and landing shapes.",
+            tags: ["Warm Up", "warm-up", "L3"]
+        ))
+
+        #expect(added.kind == .warmUp)
+        // Existing saved spellings win for equivalent suggestions: the fixture
+        // already stores this level tag as `L3+`.
+        #expect(added.tags == ["warmup", "L3+"])
+        #expect(added.matchesLibrarySearch("warm_up"))
+
+        let updated = try #require(store.updateLibraryCard(
+            id: added.id,
+            kind: .warmUp,
+            title: "Coach-added warm-up",
+            detail: "Prepare ankles and landing shapes before bars.",
+            tags: ["warm-up", "BARS"],
+            levels: ["L3", "L4"],
+            skills: ["Landing shape", "Ankle prep"],
+            events: ["BARS"],
+            mats: ["Panel mat"],
+            safetyRequirement: "Keep travel lanes clear.",
+            variantCount: 3
+        ))
+
+        #expect(updated.kind == .warmUp)
+        #expect(updated.tags == ["warmup", "bars"])
+        #expect(updated.levels == ["L3", "L4"])
+        #expect(updated.skills == ["Landing shape", "Ankle prep"])
+        #expect(updated.events == ["BARS"])
+        #expect(updated.mats == ["Panel mat"])
+        #expect(updated.safetyRequirement == "Keep travel lanes clear.")
+        #expect(updated.variantCount == 3)
+
+        let reloadedStore = PlannerStore(persistenceURL: storeURL)
+        let reloaded = try #require(
+            reloadedStore.libraryCards(in: .relevant).first(where: { $0.id == added.id })
+        )
+        #expect(reloaded.kind == .warmUp)
+        #expect(reloaded.tags == ["warmup", "bars"])
+        #expect(reloaded.events == ["BARS"])
+        #expect(reloaded.variantCount == 3)
+    }
+
     @Test func selectedZoneLayoutsUseDurableAnchorsAndCompositeUnions() async throws {
         let pbHBLayout = GymLayoutAnchorRegistry.layout(forLocalZoneID: "pb-hb")
         let ringsPommelLayout = GymLayoutAnchorRegistry.layout(forLocalZoneID: "sr-ph")

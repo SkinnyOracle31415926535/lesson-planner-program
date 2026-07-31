@@ -27,18 +27,13 @@ test("shared planner and Idea Library reads require the configured owner", async
   }
 });
 
-test("Lesson Planner sync loads on demand and preserves concurrent local edits", async () => {
-  const sync = await read("app/lesson-planner-app-sync.tsx");
-  const snapshot = sync.indexOf("const before = new Map");
-  const idleWait = sync.indexOf("await waitForEditorIdle()", snapshot);
-  const lockedApply = sync.indexOf("await withStorageLock", idleWait);
-  const recheck = sync.indexOf("window.localStorage.getItem(key) !== before.get(key)", lockedApply);
-  assert.ok(snapshot >= 0 && snapshot < idleWait && idleWait < lockedApply && lockedApply < recheck);
-  assert.match(sync, /clientScriptPromise = null/);
-  assert.match(sync, /setupPromise = null/);
-  assert.match(sync, /showModal\(\);[\s\S]*?void initializeSync\(\);/);
-  assert.doesNotMatch(
-    sync,
-    /useEffect\(\(\) => \{[\s\S]{0,300}?setupClient\(validateLesson\)/,
-  );
+test("Lesson Planner's built-in workspace sync waits for local state and pauses concurrent edits", async () => {
+  const page = await read("app/page.tsx");
+  const localStateGate = page.indexOf("!hasLoadedLocalLesson");
+  const remoteLoad = page.indexOf("const remoteWorkspace = await loadSharedPlannerWorkspace()", localStateGate);
+  const conflictPause = page.indexOf("pauseSharedPlannerSync();", remoteLoad);
+  assert.ok(localStateGate >= 0 && localStateGate < remoteLoad && remoteLoad < conflictPause);
+  assert.match(page, /if \(checkpoint\.fingerprint === remoteFingerprint\)/);
+  assert.match(page, /if \(sharedPlannerSyncConflictRef\.current\) return "paused"/);
+  assert.match(page, /RYAN’S WORKSPACE CHANGED ELSEWHERE · YOUR LOCAL CHANGES ARE KEPT/);
 });

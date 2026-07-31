@@ -6,7 +6,10 @@
 import Foundation
 
 enum PlanningCardKind: String, CaseIterable, Identifiable, Codable {
+    case skill = "SKILL"
     case drill = "DRILL"
+    case routine = "ROUTINE"
+    case warmUp = "WARM_UP"
     case activity = "ACTIVITY"
     case reference = "REFERENCE"
 
@@ -41,22 +44,118 @@ enum CardAccent: String, Codable {
 
 struct PlanningCard: Identifiable, Hashable, Codable {
     let id: String
-    let kind: PlanningCardKind
-    let title: String
-    let detail: String
-    let tags: [String]
-    let accent: CardAccent
+    var kind: PlanningCardKind
+    var title: String
+    var detail: String
+    var tags: [String]
+    var accent: CardAccent
     /// Gems are an explicitly coach-controlled signal. They never change
     /// automatically based on an algorithm or import.
     var isGem: Bool
-    let safetyRequirement: String?
+    var safetyRequirement: String?
+    /// These metadata fields mirror the fuller Idea Library contract while
+    /// retaining safe defaults for ideas saved by older prototype builds.
+    var levels: [String]
+    var skills: [String]
+    var events: [String]
+    var mats: [String]
+    var variantCount: Int
+    /// The native prototype has no private media importer yet. These flags
+    /// are deliberately just truthful availability indicators, not stand-ins
+    /// for actual photo or station data.
+    var hasPhotoAttachment: Bool
+    var hasStationSetup: Bool
+
+    init(
+        id: String,
+        kind: PlanningCardKind,
+        title: String,
+        detail: String,
+        tags: [String],
+        accent: CardAccent? = nil,
+        isGem: Bool,
+        safetyRequirement: String?,
+        levels: [String] = [],
+        skills: [String] = [],
+        events: [String] = [],
+        mats: [String] = [],
+        variantCount: Int = 1,
+        hasPhotoAttachment: Bool = false,
+        hasStationSetup: Bool = false
+    ) {
+        self.id = id
+        self.kind = kind
+        self.title = title
+        self.detail = detail
+        self.tags = tags
+        self.accent = accent ?? kind.defaultAccent
+        self.isGem = isGem
+        self.safetyRequirement = safetyRequirement
+        self.levels = levels.isEmpty ? Self.inferredLevels(from: tags) : levels
+        self.skills = skills
+        self.events = events
+        self.mats = mats
+        self.variantCount = max(1, variantCount)
+        self.hasPhotoAttachment = hasPhotoAttachment
+        self.hasStationSetup = hasStationSetup
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, kind, title, detail, tags, accent, isGem, safetyRequirement
+        case levels, skills, events, mats, variantCount, hasPhotoAttachment, hasStationSetup
+    }
+
+    /// Existing local lesson files predate the richer Idea Library fields.
+    /// Decode them with conservative derived metadata rather than rejecting
+    /// or rewriting a saved card merely because the app learned new fields.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        kind = try container.decode(PlanningCardKind.self, forKey: .kind)
+        title = try container.decode(String.self, forKey: .title)
+        detail = try container.decode(String.self, forKey: .detail)
+        tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
+        accent = try container.decodeIfPresent(CardAccent.self, forKey: .accent) ?? kind.defaultAccent
+        isGem = try container.decodeIfPresent(Bool.self, forKey: .isGem) ?? false
+        safetyRequirement = try container.decodeIfPresent(String.self, forKey: .safetyRequirement)
+        levels = try container.decodeIfPresent([String].self, forKey: .levels)
+            ?? Self.inferredLevels(from: tags)
+        skills = try container.decodeIfPresent([String].self, forKey: .skills) ?? []
+        events = try container.decodeIfPresent([String].self, forKey: .events) ?? []
+        mats = try container.decodeIfPresent([String].self, forKey: .mats) ?? []
+        variantCount = max(1, try container.decodeIfPresent(Int.self, forKey: .variantCount) ?? 1)
+        hasPhotoAttachment = try container.decodeIfPresent(Bool.self, forKey: .hasPhotoAttachment) ?? false
+        hasStationSetup = try container.decodeIfPresent(Bool.self, forKey: .hasStationSetup) ?? false
+    }
+
+    static func inferredLevels(from tags: [String]) -> [String] {
+        tags.filter { tag in
+            let uppercased = tag.uppercased()
+            return uppercased.hasPrefix("L") && uppercased.dropFirst().first?.isNumber == true
+        }
+    }
+}
+
+extension PlanningCardKind {
+    var defaultAccent: CardAccent {
+        switch self {
+        case .skill, .drill:
+            return .cyan
+        case .routine, .activity:
+            return .green
+        case .warmUp:
+            return .pink
+        case .reference:
+            return .yellow
+        }
+    }
 }
 
 extension PlanningCard {
     /// These concise categories are intentionally derived from the tags in
     /// the small prototype catalog. A richer production importer can replace
     /// this with normalized event metadata without changing the UI contract.
-    var libraryEvent: String {
+    private var inferredLibraryEvent: String {
         let normalizedTags = tags.map { $0.uppercased() }
         if normalizedTags.contains(where: { $0.contains("HB") || $0.contains("PB") || $0.contains("BAR") }) {
             return "BARS"
@@ -73,17 +172,50 @@ extension PlanningCard {
         return "GENERAL"
     }
 
+    var libraryEvents: [String] {
+        let explicitEvents = events
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() }
+            .filter { !$0.isEmpty }
+        return explicitEvents.isEmpty ? [inferredLibraryEvent] : explicitEvents
+    }
+
+    var libraryEvent: String {
+        libraryEvents.first ?? "GENERAL"
+    }
+
+    var libraryLevels: [String] {
+        let explicitLevels = levels
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() }
+            .filter { !$0.isEmpty }
+        let inferredLevels = Self.inferredLevels(from: tags).map { $0.uppercased() }
+        let values = explicitLevels.isEmpty ? inferredLevels : explicitLevels
+        return values.isEmpty ? ["ALL LEVELS"] : values
+    }
+
     var libraryLevel: String {
-        tags.first(where: { tag in
-            let uppercased = tag.uppercased()
-            return uppercased.hasPrefix("L") && uppercased.dropFirst().first?.isNumber == true
-        })?.uppercased() ?? "ALL LEVELS"
+        libraryLevels.first ?? "ALL LEVELS"
+    }
+
+    var mediaAndStationIndicator: String {
+        switch (hasPhotoAttachment, hasStationSetup) {
+        case (true, true):
+            return "PHOTO + STATION SETUP"
+        case (true, false):
+            return "PHOTO ATTACHED"
+        case (false, true):
+            return "STATION SETUP SAVED"
+        case (false, false):
+            return "NO PHOTO OR STATION SETUP"
+        }
     }
 
     func matchesLibrarySearch(_ query: String) -> Bool {
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedQuery.isEmpty else { return true }
-        let searchableText = ([title, detail, kind.rawValue, libraryEvent, libraryLevel] + tags)
+        let searchableText = (
+            [title, detail, kind.rawValue, libraryEvent, libraryLevel, safetyRequirement ?? ""]
+                + tags + levels + skills + events + mats
+        )
             .joined(separator: " ")
         return searchableText.localizedCaseInsensitiveContains(trimmedQuery)
     }
@@ -784,17 +916,118 @@ enum LessonDemoData {
     static let events: [LessonEvent] = LessonEvent.migratedFromLegacyPhases(phases)
 
     static let activeShelf: [PlanningCard] = [
-        PlanningCard(id: "line-challenge", kind: .activity, title: "Line Challenge", detail: "Quick rules-only finish game.", tags: ["activity", "warmup", "L3+"], accent: .green, isGem: true, safetyRequirement: nil),
-        PlanningCard(id: "spotting-readiness", kind: .drill, title: "Spotting Readiness", detail: "Setup sequence with second-coach safety check.", tags: ["safety", "bars", "setup"], accent: .pink, isGem: false, safetyRequirement: "Requires second coach"),
-        PlanningCard(id: "shape-demo", kind: .reference, title: "Straight-body Demo", detail: "Private video placeholder · not imported.", tags: ["video", "shape", "demo"], accent: .yellow, isGem: false, safetyRequirement: nil)
+        PlanningCard(
+            id: "line-challenge",
+            kind: .activity,
+            title: "Line Challenge",
+            detail: "Quick rules-only finish game.",
+            tags: ["activity", "warmup", "L3+"],
+            accent: .green,
+            isGem: true,
+            safetyRequirement: nil,
+            levels: ["L3+"],
+            skills: ["Body shapes", "Listening"],
+            events: ["FLOOR"],
+            mats: ["Floor strip"],
+            variantCount: 2
+        ),
+        PlanningCard(
+            id: "joint-prep",
+            kind: .warmUp,
+            title: "Joint Prep Circuit",
+            detail: "Coach-led movement prep before the first rotation.",
+            tags: ["warm-up", "mobility", "L3+"],
+            accent: .pink,
+            isGem: false,
+            safetyRequirement: "Use clear travel lanes.",
+            levels: ["L3+"],
+            skills: ["Mobility", "Landing shapes"],
+            events: ["GENERAL"],
+            mats: ["Open floor"],
+            variantCount: 3
+        ),
+        PlanningCard(
+            id: "spotting-readiness",
+            kind: .drill,
+            title: "Spotting Readiness",
+            detail: "Setup sequence with second-coach safety check.",
+            tags: ["safety", "bars", "setup"],
+            accent: .pink,
+            isGem: false,
+            safetyRequirement: "Requires second coach",
+            levels: ["ALL LEVELS"],
+            skills: ["Spotting setup"],
+            events: ["BARS"],
+            mats: ["Bar landing mat", "Panel mat"],
+            variantCount: 1,
+            hasStationSetup: true
+        ),
+        PlanningCard(
+            id: "shape-demo",
+            kind: .reference,
+            title: "Straight-body Demo",
+            detail: "Private video placeholder · not imported.",
+            tags: ["video", "shape", "demo"],
+            accent: .yellow,
+            isGem: false,
+            safetyRequirement: nil,
+            levels: ["ALL LEVELS"],
+            skills: ["Straight body"],
+            events: ["GENERAL"],
+            mats: [],
+            variantCount: 1
+        )
     ]
 
     /// Archive is a separate shelf on purpose: record keeping is preserved,
     /// but old ideas do not crowd the day-to-day Relevant shelf.
     static let archivedLibrary: [PlanningCard] = [
-        PlanningCard(id: "archive-vault-shapes", kind: .drill, title: "Vault Run Shapes", detail: "Short approach rhythm with a controlled freeze at the board.", tags: ["vault", "L3", "archive"], accent: .cyan, isGem: false, safetyRequirement: nil),
-        PlanningCard(id: "archive-floor-corners", kind: .activity, title: "Floor Corner Quest", detail: "Rules-only group game: collect a point for each named shape.", tags: ["floor", "game", "L3–L4", "archive"], accent: .green, isGem: false, safetyRequirement: nil),
-        PlanningCard(id: "archive-bar-setup", kind: .reference, title: "Bar Setup Checklist", detail: "Reference card for equipment order and coach checks.", tags: ["bars", "setup", "archive"], accent: .yellow, isGem: true, safetyRequirement: "Coach verifies setup")
+        PlanningCard(
+            id: "archive-vault-shapes",
+            kind: .drill,
+            title: "Vault Run Shapes",
+            detail: "Short approach rhythm with a controlled freeze at the board.",
+            tags: ["vault", "L3", "archive"],
+            accent: .cyan,
+            isGem: false,
+            safetyRequirement: nil,
+            levels: ["L3"],
+            skills: ["Approach rhythm", "Board shape"],
+            events: ["VAULT"],
+            mats: ["Runway", "Board mat"],
+            variantCount: 2
+        ),
+        PlanningCard(
+            id: "archive-floor-corners",
+            kind: .activity,
+            title: "Floor Corner Quest",
+            detail: "Rules-only group game: collect a point for each named shape.",
+            tags: ["floor", "game", "L3–L4", "archive"],
+            accent: .green,
+            isGem: false,
+            safetyRequirement: nil,
+            levels: ["L3–L4"],
+            skills: ["Body shapes"],
+            events: ["FLOOR"],
+            mats: ["Floor strip"],
+            variantCount: 4
+        ),
+        PlanningCard(
+            id: "archive-bar-setup",
+            kind: .reference,
+            title: "Bar Setup Checklist",
+            detail: "Reference card for equipment order and coach checks.",
+            tags: ["bars", "setup", "archive"],
+            accent: .yellow,
+            isGem: true,
+            safetyRequirement: "Coach verifies setup",
+            levels: ["ALL LEVELS"],
+            skills: ["Equipment setup"],
+            events: ["BARS"],
+            mats: ["Bar landing mat"],
+            variantCount: 1,
+            hasStationSetup: true
+        )
     ]
 
     static let attendance: [AttendancePerson] = [

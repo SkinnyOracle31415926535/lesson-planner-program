@@ -1,8 +1,7 @@
 import type { LibraryItem, LibraryVariant } from "./lesson-data";
 import {
-  STATION_CANVAS,
-  STATION_SETUP_VERSION,
-  type StationObject,
+  copyStationSetup,
+  migrateStationSetup,
   type StationSetup,
 } from "./station-setups";
 import type { StoredIdeaMedia } from "./idea-photos";
@@ -75,11 +74,8 @@ export type SharedIdeaLibrarySaveResult =
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,199}$/;
 const ITEM_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$/;
 const TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T/;
-const CARD_KINDS = ["SKILL", "DRILL", "ROUTINE", "ACTIVITY", "REFERENCE"] as const;
+const CARD_KINDS = ["SKILL", "DRILL", "ROUTINE", "ACTIVITY", "REFERENCE", "WARM_UP"] as const;
 const CARD_ACCENTS = ["cyan", "green", "yellow", "pink"] as const;
-const STATION_ASSETS = ["panel", "folded-panel", "wedge", "block", "landing", "strip", "barrel", "beam"] as const;
-const STATION_COLORS = ["blue", "pink", "yellow", "green", "purple"] as const;
-const STATION_OBJECT_KINDS = ["equipment", "label", "arrow"] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -237,30 +233,9 @@ function isSharedIdeaLibraryPreferences(value: unknown): value is SharedIdeaLibr
   return !value.draftIdeaIds.some((id) => archived.has(id) || removed.has(id));
 }
 
-function isStationObject(value: unknown): value is StationObject {
-  if (!isRecord(value) || !hasOnlyKeys(value, ["id", "kind", "assetId", "color", "text", "x", "y", "width", "height", "rotation", "zIndex"])) return false;
-  if (!isIdentifier(value.id)
-    || !(STATION_OBJECT_KINDS as readonly string[]).includes(value.kind as string)
-    || !isFiniteNumber(value.x, 0, STATION_CANVAS.width)
-    || !isFiniteNumber(value.y, 0, STATION_CANVAS.height)
-    || !isFiniteNumber(value.width, 1, STATION_CANVAS.width)
-    || !isFiniteNumber(value.height, 1, STATION_CANVAS.height)
-    || !isFiniteNumber(value.rotation, -3600, 3600)
-    || !isFiniteInteger(value.zIndex, -10_000, 10_000)) return false;
-  if (value.assetId !== undefined && !(STATION_ASSETS as readonly string[]).includes(value.assetId as string)) return false;
-  if (value.color !== undefined && !(STATION_COLORS as readonly string[]).includes(value.color as string)) return false;
-  if (value.text !== undefined && !isText(value.text, 2_000)) return false;
-  return value.x + value.width <= STATION_CANVAS.width && value.y + value.height <= STATION_CANVAS.height;
-}
-
 export function isSharedIdeaStationSetup(value: unknown): value is StationSetup {
-  if (!isRecord(value) || !hasOnlyKeys(value, ["id", "version", "canvas", "objects", "createdAt", "updatedAt"])) return false;
-  if (!isIdentifier(value.id) || value.version !== STATION_SETUP_VERSION || !isRecord(value.canvas)
-    || value.canvas.width !== STATION_CANVAS.width || value.canvas.height !== STATION_CANVAS.height || value.canvas.grid !== STATION_CANVAS.grid
-    || !Array.isArray(value.objects) || value.objects.length < 1 || value.objects.length > 500 || !value.objects.every(isStationObject)
-    || !isTimestamp(value.createdAt) || !isTimestamp(value.updatedAt)) return false;
-  const ids = value.objects.map((object) => object.id);
-  return new Set(ids).size === ids.length;
+  const setup = migrateStationSetup(value);
+  return setup !== null && setup.objects.length >= 1 && setup.objects.length <= 500;
 }
 
 function copyLibraryItem(item: LibraryItem): LibraryItem {
@@ -276,14 +251,6 @@ function copyLibraryItem(item: LibraryItem): LibraryItem {
     coachingCues: [...item.coachingCues],
     variants: item.variants.map((variant) => ({ ...variant, instructions: [...variant.instructions], sourceRefs: [...variant.sourceRefs] })),
     sourceRefs: [...item.sourceRefs],
-  };
-}
-
-function copyStationSetup(setup: StationSetup): StationSetup {
-  return {
-    ...setup,
-    canvas: { ...setup.canvas },
-    objects: setup.objects.map((object) => ({ ...object })),
   };
 }
 
@@ -311,8 +278,13 @@ export function parseSharedIdeaLibraryState(value: unknown): SharedIdeaLibrarySt
   if (!isRecord(value) || !hasOnlyKeys(value, ["version", "preferences", "stationSetups"])
     || value.version !== SHARED_IDEA_LIBRARY_STATE_VERSION
     || !isSharedIdeaLibraryPreferences(value.preferences)
-    || !Array.isArray(value.stationSetups) || value.stationSetups.length > 10_000 || !value.stationSetups.every(isSharedIdeaStationSetup)) return null;
-  const stationIds = value.stationSetups.map((setup) => setup.id);
+    || !Array.isArray(value.stationSetups) || value.stationSetups.length > 10_000) return null;
+  // v1 pixel layouts remain valid shared records, but are copied as legacy
+  // layouts rather than having their coordinates misrepresented as meters.
+  const stationSetups = value.stationSetups.map(migrateStationSetup);
+  if (stationSetups.some((setup) => !setup) || stationSetups.some((setup) => setup && (setup.objects.length < 1 || setup.objects.length > 500))) return null;
+  const migratedStationSetups = stationSetups.filter((setup): setup is StationSetup => setup !== null);
+  const stationIds = migratedStationSetups.map((setup) => setup.id);
   if (new Set(stationIds).size !== stationIds.length) return null;
   const cards = [...value.preferences.customCards, ...Object.values(value.preferences.itemOverridesById)];
   const referencedStations = new Set(cards.flatMap((card) => card.stationSetupId ? [card.stationSetupId] : []));
@@ -331,7 +303,7 @@ export function parseSharedIdeaLibraryState(value: unknown): SharedIdeaLibrarySt
       itemOverridesById: Object.fromEntries(Object.entries(preferences.itemOverridesById).map(([id, card]) => [id, copyLibraryItem(card)])),
       removedIdeaIds: [...preferences.removedIdeaIds],
     },
-    stationSetups: value.stationSetups.map(copyStationSetup),
+    stationSetups: migratedStationSetups.map(copyStationSetup),
   });
 }
 

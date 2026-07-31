@@ -80,12 +80,15 @@ test("the Idea Library edit form exposes the Station Maker", async () => {
   assert.match(editorMedia, /"EDIT STATION" : "MAKE STATION"/);
 });
 
-test("full-detail Idea cards show events and mats", async () => {
+test("full-detail Idea cards show the complete coaching details", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
 
   assert.match(page, /className="library-item-facts"/);
   assert.match(page, /<b>EVENTS<\/b>/);
   assert.match(page, /<b>MATS<\/b>/);
+  assert.match(page, /SKILLS · \{skills\}/);
+  assert.match(page, /⚠ \{safety\}/);
+  assert.match(page, /<b>ATTACHMENT<\/b>/);
   assert.match(page, /--library-facts-height/);
 });
 
@@ -95,7 +98,36 @@ test("Idea card values expose focused double-click editors", async () => {
   assert.match(page, /type LibraryQuickEditField/);
   assert.match(page, /className="library-quick-edit-target"/);
   assert.match(page, /onDoubleClick=/);
+  assert.match(page, /onPointerUp=/);
+  assert.match(page, /Double-click or double-tap to edit/);
   assert.match(page, /className="idea-detail-dialog retro-window library-quick-edit-dialog"/);
   assert.match(page, /Only \{libraryQuickEditLabels\[libraryQuickEdit\.field\]\.toLowerCase\(\)\} will change/);
   assert.match(page, /SAVE \{libraryQuickEditLabels\[libraryQuickEdit\.field\]\}/);
+});
+
+test("Idea Library keeps reusable tags and warm-ups as first-class data", async () => {
+  const [page, data, transfer] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/lesson-data.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/library-transfer.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /function IdeaTagPicker/);
+  assert.match(page, /SHOW ALL TAGS/);
+  assert.match(page, /ADD CUSTOM TAG/);
+  assert.match(page, /value="WARM_UP"/);
+  assert.match(data, /"WARM_UP"/);
+  assert.match(transfer, /value\.kind === "WARM_UP"/);
+});
+
+test("past lessons preserve recoverable revisions before editing or restoring", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+
+  assert.match(page, /version: 9/);
+  assert.match(page, /EDIT PAST LESSON/);
+  assert.match(page, /SAVE ORIGINAL \+ EDIT/);
+  assert.match(page, /REVISION HISTORY/);
+  assert.match(page, /restorePastLessonRevision/);
+  assert.match(page, /copyLessonBoardSnapshot\(current\.boardSnapshot\)/);
+  assert.match(page, /legacy-unavailable/);
 });

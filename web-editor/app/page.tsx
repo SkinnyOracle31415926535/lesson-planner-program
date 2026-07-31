@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import {
   anchorForPanel,
   anchorStyleForViewport,
@@ -34,6 +34,13 @@ import {
   type LibraryVariant,
   type ZonePanel,
 } from "./lesson-data";
+import {
+  ideaTagKey,
+  ideaTagOptions,
+  normalizeIdeaTags,
+  toggleIdeaTag,
+  type IdeaTagOption,
+} from "./idea-tags";
 import {
   addCustomStationSpot,
   boxesOverlap,
@@ -378,8 +385,7 @@ type LessonDocumentDetails = {
   reflection: string;
 };
 
-type StoredLesson = {
-  version: 8;
+type StoredLessonContent = {
   phases: LessonPhase[];
   todoDone: boolean;
   isReady: boolean;
@@ -396,6 +402,48 @@ type StoredLesson = {
   visualLabelLayoutByCardId: Record<string, VisualLabelLayout>;
   /** Detached board/photo metadata and spot overrides frozen with this lesson. */
   boardSnapshot: LessonBoardSnapshot;
+};
+
+type LessonScheduleSnapshotBlock = {
+  start: string;
+  end: string;
+  event: string;
+  areas: string[];
+};
+
+/** Safe, detached context for a past lesson; it never includes rosters or media bytes. */
+type LessonScheduleSnapshot = {
+  capturedAt: string;
+  source: "safe-schedule" | "local-class" | "none" | "legacy-unavailable";
+  date: string;
+  classId: string | null;
+  className: string;
+  sourceId?: string;
+  scheduleId?: string;
+  revision?: string;
+  scheduleGroup?: string;
+  resolvedWeek?: ScheduleWeek;
+  blocks: LessonScheduleSnapshotBlock[];
+};
+
+type LessonRevision = {
+  id: string;
+  createdAt: string;
+  action: "past-edit" | "restore";
+  /** Content only: revisions can never recursively contain another history. */
+  snapshot: StoredLessonContent;
+  scheduleSnapshot: LessonScheduleSnapshot | null;
+};
+
+type StoredLesson = StoredLessonContent & {
+  version: 9;
+  revisions: LessonRevision[];
+  scheduleSnapshot: LessonScheduleSnapshot | null;
+};
+
+/** The prior lesson shape before durable past-lesson revisions were added. */
+type StoredLessonV8 = StoredLessonContent & {
+  version: 8;
 };
 
 /** The prior lesson shape before document details and Ready acknowledgement were saved. */
@@ -806,6 +854,128 @@ function editableList(values: string[]): string {
 
 function parseEditableList(value: string): string[] {
   return [...new Set(value.split(/[\n,]/).map((entry) => entry.trim()).filter(Boolean))];
+}
+
+/** Compact reusable tag control for new, full, and focused Idea editors. */
+function IdeaTagPicker({
+  value,
+  onChange,
+  options,
+  label = "TAGS",
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: readonly IdeaTagOption[];
+  label?: string;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const [search, setSearch] = useState("");
+  const [customTag, setCustomTag] = useState("");
+  const selected = normalizeIdeaTags(value);
+  const selectedKeys = new Set(selected.map(ideaTagKey));
+  const optionsByKey = new Map(options.map((option) => [option.key, option]));
+  selected.forEach((tag) => {
+    const key = ideaTagKey(tag);
+    if (!optionsByKey.has(key)) optionsByKey.set(key, { key, label: tag, count: 0 });
+  });
+  const allOptions = [...optionsByKey.values()];
+  const query = search.trim().toLocaleLowerCase();
+  const visibleOptions = (showAll
+    ? allOptions.filter((option) => !query || option.label.toLocaleLowerCase().includes(query))
+    : allOptions.filter((option) => !selectedKeys.has(option.key)).slice(0, 5));
+  const changeTags = (tags: readonly string[]) => onChange(editableList(normalizeIdeaTags(tags)));
+  const addCustomTag = () => {
+    const next = normalizeIdeaTags([customTag]);
+    if (!next.length) return;
+    changeTags(toggleIdeaTag(selected, next[0]));
+    setCustomTag("");
+  };
+
+  return (
+    <fieldset className={`idea-tag-picker${showAll ? " expanded" : ""}`}>
+      <legend>{label} <small>choose reusable tags or add one</small></legend>
+      <div className="idea-tag-selected" aria-live="polite">
+        {selected.length ? selected.map((tag) => (
+          <button key={ideaTagKey(tag)} type="button" onClick={() => changeTags(toggleIdeaTag(selected, tag))} aria-label={`Remove tag ${tag}`}>
+            {tag} <span aria-hidden="true">×</span>
+          </button>
+        )) : <span>NO TAGS SELECTED</span>}
+      </div>
+      <div className="idea-tag-options" aria-label={`${label} choices`}>
+        {showAll ? <label className="idea-tag-search"><span>FIND TAG</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="floor, warm-up…" /></label> : null}
+        {visibleOptions.length ? visibleOptions.map((option) => {
+          const isSelected = selectedKeys.has(option.key);
+          return <button key={option.key} type="button" className={isSelected ? "selected" : ""} aria-pressed={isSelected} onClick={() => changeTags(toggleIdeaTag(selected, option.label))}>{option.label}</button>;
+        }) : <span>{showAll ? "NO TAGS MATCH" : "NO SAVED TAGS YET"}</span>}
+      </div>
+      <div className="idea-tag-actions">
+        <button type="button" onClick={() => { setShowAll((current) => !current); setSearch(""); }}>{showAll ? "SHOW FEWER TAGS" : "SHOW ALL TAGS"}</button>
+        <label><span>ADD CUSTOM TAG</span><input value={customTag} onChange={(event) => setCustomTag(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addCustomTag(); } }} placeholder="e.g. relay" maxLength={80} /></label>
+        <button type="button" disabled={!normalizeIdeaTags(customTag).length} onClick={addCustomTag}>ADD TAG</button>
+      </div>
+    </fieldset>
+  );
+}
+
+/**
+ * The compact Library surface is designed for a mouse on Mac and direct touch
+ * on iPad. Browsers do not consistently synthesize `dblclick` for two taps, so
+ * detect the touch gesture explicitly while retaining keyboard and mouse use.
+ */
+function LibraryQuickEditButton({
+  card,
+  field,
+  onOpen,
+  children,
+  className,
+  ariaLabel,
+  title,
+  ariaHidden,
+  tabIndex,
+}: {
+  card: LibraryItem;
+  field: LibraryQuickEditField;
+  onOpen: (card: LibraryItem, field: LibraryQuickEditField) => void;
+  children: ReactNode;
+  className: string;
+  ariaLabel: string;
+  title: string;
+  ariaHidden?: boolean;
+  tabIndex?: number;
+}) {
+  const lastTouchUpAt = useRef(0);
+  const open = (event: { stopPropagation: () => void }) => {
+    event.stopPropagation();
+    onOpen(card, field);
+  };
+  const onPointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType !== "touch") return;
+    const now = event.timeStamp;
+    const isDoubleTap = now - lastTouchUpAt.current <= 460;
+    lastTouchUpAt.current = now;
+    if (!isDoubleTap) return;
+    event.preventDefault();
+    open(event);
+  };
+  return (
+    <button
+      type="button"
+      className={className}
+      aria-label={ariaLabel}
+      aria-hidden={ariaHidden}
+      tabIndex={tabIndex}
+      title={`${title} · Double-click or double-tap to edit`}
+      onDoubleClick={open}
+      onPointerUp={onPointerUp}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        open(event);
+      }}
+    >
+      {children}
+    </button>
+  );
 }
 
 function libraryEditDraftFor(card: LibraryItem): LibraryEditDraft {
@@ -1241,7 +1411,7 @@ function isLessonDocumentDetails(value: unknown): value is LessonDocumentDetails
 
 function makeBlankStoredLesson(classId: string | null = null, goals = ""): StoredLesson {
   return {
-    version: 8,
+    version: 9,
     phases: makeInitialLesson(),
     todoDone: false,
     isReady: false,
@@ -1252,6 +1422,8 @@ function makeBlankStoredLesson(classId: string | null = null, goals = ""): Store
     visualAnchorByCardId: {},
     visualLabelLayoutByCardId: {},
     boardSnapshot: emptyLessonBoardSnapshot(),
+    revisions: [],
+    scheduleSnapshot: null,
   };
 }
 
@@ -1506,11 +1678,13 @@ function hasUniquePhaseIds(phases: LessonPhase[]): boolean {
   return new Set(phases.map((phase) => phase.id)).size === phases.length;
 }
 
-function isStoredLesson(value: unknown): value is StoredLesson {
+const MAX_LESSON_REVISIONS = 40;
+const MAX_LESSON_DOCUMENT_BYTES = 900 * 1024;
+
+function isStoredLessonContent(value: unknown): value is StoredLessonContent {
   if (!value || typeof value !== "object") return false;
-  const candidate = value as Partial<StoredLesson>;
-  return candidate.version === 8
-    && Array.isArray(candidate.phases)
+  const candidate = value as Partial<StoredLessonContent>;
+  return Array.isArray(candidate.phases)
     && candidate.phases.length > 0
     && candidate.phases.every(isLessonPhase)
     && hasUniquePhaseIds(candidate.phases)
@@ -1523,6 +1697,96 @@ function isStoredLesson(value: unknown): value is StoredLesson {
     && isVisualAnchorRecord(candidate.visualAnchorByCardId)
     && isVisualLabelLayoutRecord(candidate.visualLabelLayoutByCardId)
     && isLessonBoardSnapshot(candidate.boardSnapshot);
+}
+
+function isLessonScheduleSnapshot(value: unknown): value is LessonScheduleSnapshot {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Partial<LessonScheduleSnapshot>;
+  const optionalText = (entry: unknown) => entry === undefined || typeof entry === "string";
+  return typeof candidate.capturedAt === "string"
+    && Number.isFinite(Date.parse(candidate.capturedAt))
+    && (candidate.source === "safe-schedule" || candidate.source === "local-class" || candidate.source === "none" || candidate.source === "legacy-unavailable")
+    && typeof candidate.date === "string"
+    && /^\d{4}-\d{2}-\d{2}$/.test(candidate.date)
+    && (candidate.classId === null || typeof candidate.classId === "string")
+    && typeof candidate.className === "string"
+    && optionalText(candidate.sourceId)
+    && optionalText(candidate.scheduleId)
+    && optionalText(candidate.revision)
+    && optionalText(candidate.scheduleGroup)
+    && (candidate.resolvedWeek === undefined || candidate.resolvedWeek === "Odd" || candidate.resolvedWeek === "Even")
+    && Array.isArray(candidate.blocks)
+    && candidate.blocks.every((block) => Boolean(block)
+      && typeof block.start === "string"
+      && typeof block.end === "string"
+      && typeof block.event === "string"
+      && Array.isArray(block.areas)
+      && block.areas.every((area) => typeof area === "string"));
+}
+
+function copyLessonScheduleSnapshot(snapshot: LessonScheduleSnapshot | null): LessonScheduleSnapshot | null {
+  if (!snapshot) return null;
+  return {
+    ...snapshot,
+    blocks: snapshot.blocks.map((block) => ({ ...block, areas: [...block.areas] })),
+  };
+}
+
+function copyStoredLessonContent(content: StoredLessonContent): StoredLessonContent {
+  return {
+    phases: content.phases.map(normalizeLessonPhase),
+    todoDone: content.todoDone,
+    isReady: content.isReady,
+    safetyAcknowledged: content.safetyAcknowledged,
+    documentDetails: copyLessonDocumentDetails(content.documentDetails),
+    classId: content.classId,
+    attendanceById: { ...content.attendanceById },
+    visualAnchorByCardId: { ...content.visualAnchorByCardId },
+    visualLabelLayoutByCardId: Object.fromEntries(Object.entries(content.visualLabelLayoutByCardId).map(([id, layout]) => [id, { ...layout }])),
+    boardSnapshot: copyLessonBoardSnapshot(content.boardSnapshot),
+  };
+}
+
+function isLessonRevision(value: unknown): value is LessonRevision {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Partial<LessonRevision>;
+  if (typeof candidate.id !== "string"
+    || !candidate.id
+    || typeof candidate.createdAt !== "string"
+    || !Number.isFinite(Date.parse(candidate.createdAt))
+    || (candidate.action !== "past-edit" && candidate.action !== "restore")
+    || !isStoredLessonContent(candidate.snapshot)
+    || (candidate.scheduleSnapshot !== null && !isLessonScheduleSnapshot(candidate.scheduleSnapshot))) {
+    return false;
+  }
+  const snapshotRecord = candidate.snapshot as unknown as Record<string, unknown>;
+  return !("version" in snapshotRecord) && !("revisions" in snapshotRecord) && !("scheduleSnapshot" in snapshotRecord);
+}
+
+function copyLessonRevision(revision: LessonRevision): LessonRevision {
+  return {
+    ...revision,
+    snapshot: copyStoredLessonContent(revision.snapshot),
+    scheduleSnapshot: copyLessonScheduleSnapshot(revision.scheduleSnapshot),
+  };
+}
+
+function isStoredLesson(value: unknown): value is StoredLesson {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<StoredLesson>;
+  return candidate.version === 9
+    && Array.isArray(candidate.revisions)
+    && candidate.revisions.length <= MAX_LESSON_REVISIONS
+    && candidate.revisions.every(isLessonRevision)
+    && new Set(candidate.revisions.map((revision) => revision.id)).size === candidate.revisions.length
+    && (candidate.scheduleSnapshot === null || isLessonScheduleSnapshot(candidate.scheduleSnapshot))
+    && isStoredLessonContent(candidate);
+}
+
+function isStoredLessonV8(value: unknown): value is StoredLessonV8 {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<StoredLessonV8>;
+  return candidate.version === 8 && isStoredLessonContent(candidate);
 }
 
 function isStoredLessonV7(value: unknown): value is StoredLessonV7 {
@@ -1635,9 +1899,29 @@ function restoreLesson(value: unknown): RestoredLesson | null {
       classId: value.classId,
       attendanceById: { ...makeDefaultAttendance(), ...value.attendanceById },
       visualAnchorByCardId: { ...value.visualAnchorByCardId },
-      visualLabelLayoutByCardId: { ...value.visualLabelLayoutByCardId },
+      visualLabelLayoutByCardId: Object.fromEntries(Object.entries(value.visualLabelLayoutByCardId).map(([id, layout]) => [id, { ...layout }])),
       boardSnapshot: copyLessonBoardSnapshot(value.boardSnapshot),
+      revisions: value.revisions.map(copyLessonRevision),
+      scheduleSnapshot: copyLessonScheduleSnapshot(value.scheduleSnapshot),
       migrated: false,
+    };
+  }
+
+  if (isStoredLessonV8(value)) {
+    return {
+      phases: value.phases.map(normalizeLessonPhase),
+      todoDone: value.todoDone,
+      isReady: value.isReady,
+      safetyAcknowledged: value.safetyAcknowledged,
+      documentDetails: copyLessonDocumentDetails(value.documentDetails),
+      classId: value.classId,
+      attendanceById: { ...makeDefaultAttendance(), ...value.attendanceById },
+      visualAnchorByCardId: { ...value.visualAnchorByCardId },
+      visualLabelLayoutByCardId: Object.fromEntries(Object.entries(value.visualLabelLayoutByCardId).map(([id, layout]) => [id, { ...layout }])),
+      boardSnapshot: copyLessonBoardSnapshot(value.boardSnapshot),
+      revisions: [],
+      scheduleSnapshot: null,
+      migrated: true,
     };
   }
 
@@ -1653,6 +1937,8 @@ function restoreLesson(value: unknown): RestoredLesson | null {
       visualAnchorByCardId: { ...value.visualAnchorByCardId },
       visualLabelLayoutByCardId: { ...value.visualLabelLayoutByCardId },
       boardSnapshot: copyLessonBoardSnapshot(value.boardSnapshot),
+      revisions: [],
+      scheduleSnapshot: null,
       migrated: true,
     };
   }
@@ -1669,6 +1955,8 @@ function restoreLesson(value: unknown): RestoredLesson | null {
       visualAnchorByCardId: { ...value.visualAnchorByCardId },
       visualLabelLayoutByCardId: { ...value.visualLabelLayoutByCardId },
       boardSnapshot: null,
+      revisions: [],
+      scheduleSnapshot: null,
       migrated: true,
     };
   }
@@ -1685,6 +1973,8 @@ function restoreLesson(value: unknown): RestoredLesson | null {
       visualAnchorByCardId: { ...value.visualAnchorByCardId },
       visualLabelLayoutByCardId: { ...value.visualLabelLayoutByCardId },
       boardSnapshot: null,
+      revisions: [],
+      scheduleSnapshot: null,
       migrated: true,
     };
   }
@@ -1701,6 +1991,8 @@ function restoreLesson(value: unknown): RestoredLesson | null {
       visualAnchorByCardId: { ...value.visualAnchorByCardId },
       visualLabelLayoutByCardId: {},
       boardSnapshot: null,
+      revisions: [],
+      scheduleSnapshot: null,
       migrated: true,
     };
   }
@@ -1717,6 +2009,8 @@ function restoreLesson(value: unknown): RestoredLesson | null {
       visualAnchorByCardId: {},
       visualLabelLayoutByCardId: {},
       boardSnapshot: null,
+      revisions: [],
+      scheduleSnapshot: null,
       migrated: true,
     };
   }
@@ -1733,6 +2027,8 @@ function restoreLesson(value: unknown): RestoredLesson | null {
       visualAnchorByCardId: {},
       visualLabelLayoutByCardId: {},
       boardSnapshot: null,
+      revisions: [],
+      scheduleSnapshot: null,
       migrated: true,
     };
   }
@@ -1749,6 +2045,8 @@ function restoreLesson(value: unknown): RestoredLesson | null {
       visualAnchorByCardId: {},
       visualLabelLayoutByCardId: {},
       boardSnapshot: null,
+      revisions: [],
+      scheduleSnapshot: null,
       migrated: true,
     };
   }
@@ -1777,17 +2075,19 @@ function storedLessonWithBoardSnapshot(
   boardSnapshot: LessonBoardSnapshot,
 ): StoredLesson {
   return {
-    version: 8,
+    version: 9,
     phases: restored.phases,
     todoDone: restored.todoDone,
     isReady: restored.isReady,
     safetyAcknowledged: restored.safetyAcknowledged,
     documentDetails: copyLessonDocumentDetails(restored.documentDetails),
     classId: restored.classId,
-    attendanceById: restored.attendanceById,
-    visualAnchorByCardId: restored.visualAnchorByCardId,
-    visualLabelLayoutByCardId: restored.visualLabelLayoutByCardId,
-    boardSnapshot,
+    attendanceById: { ...restored.attendanceById },
+    visualAnchorByCardId: { ...restored.visualAnchorByCardId },
+    visualLabelLayoutByCardId: Object.fromEntries(Object.entries(restored.visualLabelLayoutByCardId).map(([id, layout]) => [id, { ...layout }])),
+    boardSnapshot: copyLessonBoardSnapshot(boardSnapshot),
+    revisions: restored.revisions.map(copyLessonRevision),
+    scheduleSnapshot: copyLessonScheduleSnapshot(restored.scheduleSnapshot),
   };
 }
 
@@ -2764,6 +3064,12 @@ export default function Home() {
   const [pendingZonePlacement, setPendingZonePlacement] = useState<PendingZonePlacement | null>(null);
   const [lessonPhases, setLessonPhases] = useState<LessonPhase[]>(makeInitialLesson);
   const [activeBoardSnapshot, setActiveBoardSnapshot] = useState<LessonBoardSnapshot | null>(null);
+  const [lessonRevisions, setLessonRevisions] = useState<LessonRevision[]>([]);
+  const [lessonScheduleSnapshot, setLessonScheduleSnapshot] = useState<LessonScheduleSnapshot | null>(null);
+  const [isRevisingPastPlan, setIsRevisingPastPlan] = useState(false);
+  const [isPastRevisionConfirmOpen, setIsPastRevisionConfirmOpen] = useState(false);
+  const [revisionReview, setRevisionReview] = useState<LessonRevision | null>(null);
+  const [revisionRestoreCandidate, setRevisionRestoreCandidate] = useState<LessonRevision | null>(null);
   const [attendanceById, setAttendanceById] = useState<Record<string, AttendanceStatus>>(makeDefaultAttendance);
   const [activeClassId, setActiveClassId] = useState<string | null>(null);
   const [classStorage, setClassStorage] = useState<LocalClassStorage>(emptyLocalClassStorage);
@@ -2921,7 +3227,12 @@ export default function Home() {
     libraryRowHeightRef.current = next;
     const stack = libraryStackRef.current;
     if (stack) {
+      const libraryStationPreviewHeight = Math.min(48, Math.max(0, next - 14));
       stack.style.setProperty("--idea-row-height", `${next}px`);
+      stack.style.setProperty("--station-preview-height", `${next - 10}px`);
+      stack.style.setProperty("--station-preview-width", `${(next - 10) * 1.5}px`);
+      stack.style.setProperty("--library-station-preview-height", `${libraryStationPreviewHeight}px`);
+      stack.style.setProperty("--library-station-preview-width", `${libraryStationPreviewHeight * 1.5}px`);
       stack.style.setProperty("--library-description-height", `${Math.round(descriptionProgress * 34)}px`);
       stack.style.setProperty("--library-description-opacity", String(descriptionProgress));
       stack.style.setProperty("--library-extra-height", `${Math.round(extraProgress * 18)}px`);
@@ -2959,6 +3270,7 @@ export default function Home() {
   );
   const activeLessonDateLabel = formatLessonPlanDate(activeLessonPlan.date);
   const isPastActivePlan = isPastLessonPlanDate(activeLessonPlan.date, lessonToday);
+  const isPastPlanReadOnly = isPastActivePlan && !isRevisingPastPlan;
   const operationTaskDoneById = operationTaskDoneByPlanId[activeLessonPlan.id] ?? {};
   const reminderLesson = useMemo(() => ({
     planId: activeLessonPlan.id,
@@ -3284,6 +3596,10 @@ export default function Home() {
     () => customLibraryCards.map(copyLibraryItem),
     [customLibraryCards],
   );
+  const libraryTagOptions = useMemo(
+    () => ideaTagOptions([...allLibraryItems, ...Object.values(itemOverridesById)]),
+    [allLibraryItems, itemOverridesById],
+  );
   // The visible shelf currently contains custom cards, but hidden overrides can
   // still own an attachment or station setup and must travel with the library.
   const sharedIdeaLibraryCards = useMemo(
@@ -3389,12 +3705,12 @@ export default function Home() {
   }, [isTimerRunning, timerSeconds]);
 
   useEffect(() => {
-    if (!hasLoadedLocalLesson || !isPastActivePlan) return;
+    if (!hasLoadedLocalLesson || !isPastActivePlan || isRevisingPastPlan) return;
     clearTransientLessonPlanControls();
     lessonModeRef.current = "VIEW";
     setMode("VIEW");
     setNotice(`${formatLessonPlanDate(activeLessonPlan.date)} IS A PAST SNAPSHOT · READ-ONLY`);
-  }, [activeLessonPlan.date, hasLoadedLocalLesson, isPastActivePlan]);
+  }, [activeLessonPlan.date, hasLoadedLocalLesson, isPastActivePlan, isRevisingPastPlan]);
 
   useEffect(() => {
     try {
@@ -3452,6 +3768,9 @@ export default function Home() {
         setVisualAnchorByCardId(restored.visualAnchorByCardId);
         setVisualLabelLayoutByCardId(restored.visualLabelLayoutByCardId);
         setActiveBoardSnapshot(restored.boardSnapshot);
+        setLessonRevisions(restored.revisions);
+        setLessonScheduleSnapshot(restored.scheduleSnapshot);
+        setIsRevisingPastPlan(false);
         setActivePhaseId(restored.phases[0]?.id ?? "l3-f2");
         setFuturePlanDate(localLessonPlanDate());
         setFuturePlanClassId(planWithClass.classId);
@@ -3475,26 +3794,21 @@ export default function Home() {
       || !hasLoadedCustomBoards
       || !hasLoadedStationBoardOverrides
       || hydratedPlanId !== activeLessonPlan.id
-      || isPastActivePlan) return;
-    const savedLesson: StoredLesson = {
-      version: 8,
-      phases: lessonPhases,
-      todoDone,
-      isReady,
-      safetyAcknowledged,
-      documentDetails: lessonDocumentDetails,
-      classId: activeLessonPlan.classId,
-      attendanceById,
-      visualAnchorByCardId,
-      visualLabelLayoutByCardId,
-      boardSnapshot: createLessonBoardSnapshot(lessonPhases, customBoards, stationBoardOverrides),
-    };
+      || (isPastActivePlan && !isRevisingPastPlan)) return;
+    const savedLesson = currentLessonSnapshot();
+    if (new TextEncoder().encode(JSON.stringify(savedLesson)).length > MAX_LESSON_DOCUMENT_BYTES) {
+      setNotice("LESSON REVISION IS TOO LARGE TO SAVE SAFELY · EXPORT A BACKUP BEFORE ADDING ANOTHER HISTORY ENTRY");
+      return;
+    }
     try {
       const storageKey = activeLessonPlan.storage === "legacy"
         ? LOCAL_LESSON_STORAGE_KEY
         : lessonPlanStorageKey(activeLessonPlan.id);
       window.localStorage.setItem(storageKey, JSON.stringify(savedLesson));
       setActiveBoardSnapshot(savedLesson.boardSnapshot);
+      if (!isPastActivePlan && !lessonScheduleSnapshot) {
+        setLessonScheduleSnapshot(copyLessonScheduleSnapshot(savedLesson.scheduleSnapshot));
+      }
       setLessonPlanIndex((current) => {
         const updatedPlan = { ...activeLessonPlan, updatedAt: new Date().toISOString() };
         const next = indexWithLessonPlan(current, updatedPlan, activeLessonPlan.id);
@@ -3508,21 +3822,28 @@ export default function Home() {
     } catch {
       setNotice("LESSON PLAN IS ACTIVE · BROWSER CACHE IS UNAVAILABLE, SO PRIVATE SYNC MAY RETRY");
     }
-  }, [activeLessonPlan, attendanceById, customBoards, hasLoadedCustomBoards, hasLoadedLocalLesson, hasLoadedStationBoardOverrides, hydratedPlanId, isPastActivePlan, isReady, lessonDocumentDetails, lessonPhases, safetyAcknowledged, stationBoardOverrides, todoDone, visualAnchorByCardId, visualLabelLayoutByCardId]);
+  }, [activeLessonPlan, attendanceById, customBoards, hasLoadedCustomBoards, hasLoadedLocalLesson, hasLoadedStationBoardOverrides, hydratedPlanId, isPastActivePlan, isReady, isRevisingPastPlan, lessonDocumentDetails, lessonPhases, lessonRevisions, lessonScheduleSnapshot, safetyAcknowledged, stationBoardOverrides, todoDone, visualAnchorByCardId, visualLabelLayoutByCardId]);
 
   function currentLessonSnapshot(): StoredLesson {
+    const boardSnapshot = isPastActivePlan
+      ? copyLessonBoardSnapshot(activeBoardSnapshot ?? emptyLessonBoardSnapshot())
+      : createLessonBoardSnapshot(lessonPhases, customBoards, stationBoardOverrides);
     return {
-      version: 8,
-      phases: lessonPhases,
+      version: 9,
+      phases: lessonPhases.map(normalizeLessonPhase),
       todoDone,
       isReady,
       safetyAcknowledged,
-      documentDetails: lessonDocumentDetails,
+      documentDetails: copyLessonDocumentDetails(lessonDocumentDetails),
       classId: activeLessonPlan.classId,
-      attendanceById,
-      visualAnchorByCardId,
-      visualLabelLayoutByCardId,
-      boardSnapshot: createLessonBoardSnapshot(lessonPhases, customBoards, stationBoardOverrides),
+      attendanceById: { ...attendanceById },
+      visualAnchorByCardId: { ...visualAnchorByCardId },
+      visualLabelLayoutByCardId: Object.fromEntries(Object.entries(visualLabelLayoutByCardId).map(([id, layout]) => [id, { ...layout }])),
+      boardSnapshot,
+      revisions: lessonRevisions.map(copyLessonRevision),
+      scheduleSnapshot: isPastActivePlan
+        ? copyLessonScheduleSnapshot(lessonScheduleSnapshot)
+        : captureCurrentScheduleSnapshot(),
     };
   }
 
@@ -3636,7 +3957,7 @@ export default function Home() {
       setNotice("LOCAL BOARD SNAPSHOTS ARE STILL LOADING · TRY AGAIN IN A MOMENT");
       return null;
     }
-    if (isPastActivePlan) return lessonPlanIndex;
+    if (isPastPlanReadOnly) return lessonPlanIndex;
     const savedCurrentPlan = { ...activeLessonPlan, updatedAt: new Date().toISOString() };
     const nextIndex = indexWithPlan(lessonPlanIndex, savedCurrentPlan, activeLessonPlan.id);
     if (!nextIndex) {
@@ -3680,6 +4001,9 @@ export default function Home() {
     setEditingIdeaMediaFile(null);
     setRemoveEditingIdeaMedia(false);
     setRemoveCandidate(null);
+    setIsPastRevisionConfirmOpen(false);
+    setRevisionReview(null);
+    setRevisionRestoreCandidate(null);
     setBoardToolById({});
     setSelectedCustomSpotByBoardId({});
     setSelectedCustomLabelByBoardId({});
@@ -3715,6 +4039,9 @@ export default function Home() {
     setVisualAnchorByCardId(restored.visualAnchorByCardId);
     setVisualLabelLayoutByCardId(restored.visualLabelLayoutByCardId);
     setActiveBoardSnapshot(restored.boardSnapshot);
+    setLessonRevisions(restored.revisions);
+    setLessonScheduleSnapshot(restored.scheduleSnapshot);
+    setIsRevisingPastPlan(false);
     setActivePhaseId(restored.phases[0]?.id ?? "l3-f2");
     setFuturePlanDate(plan.date < lessonToday ? lessonToday : plan.date);
     setFuturePlanClassId(plan.classId);
@@ -3780,7 +4107,7 @@ export default function Home() {
       const needsBoardSnapshotUpgrade = restored.boardSnapshot === null || scheduleWasSynchronized;
       const frozenBoardSnapshot = needsBoardSnapshotUpgrade
         ? createLessonBoardSnapshot(restored.phases, customBoards, stationBoardOverrides)
-        : restored.boardSnapshot;
+        : copyLessonBoardSnapshot(restored.boardSnapshot);
       const frozenRestored: RestoredLesson = { ...restored, boardSnapshot: frozenBoardSnapshot };
       let boardSnapshotPersistenceFailed = false;
       if (!stored || needsBoardSnapshotUpgrade) {
@@ -3933,7 +4260,7 @@ export default function Home() {
   }
 
   function syncCurrentLessonSchedule() {
-    if (activePlanIsReadOnly()) return;
+    if (activePlanIsReadOnly() || pastRevisionLocksSharedDefinitions()) return;
     if (!activeLessonPlan.classId) {
       setNotice("SELECT A LOCAL CLASS BEFORE SYNCING THIS LESSON'S SCHEDULE");
       return;
@@ -4558,7 +4885,7 @@ export default function Home() {
     }).catch(() => {
       if (active) {
         setLoadedIdeaStationSignature(sharedIdeaStationSignature);
-        setNotice("IDEA LIBRARY RESTORED · ONE OR MORE PIXEL STATIONS ARE UNAVAILABLE ON THIS DEVICE");
+        setNotice("IDEA LIBRARY RESTORED · ONE OR MORE SAVED STATIONS ARE UNAVAILABLE ON THIS DEVICE");
       }
     });
     return () => { active = false; };
@@ -4584,7 +4911,7 @@ export default function Home() {
     setRemovedIdeaIds([...preferences.removedIdeaIds]);
     setStationSetupsById(Object.fromEntries(next.stationSetups.map((setup) => [setup.id, setup])));
     if (stationResults.some((result) => result.status === "rejected")) {
-      setNotice("RYAN’S IDEA LIBRARY LOADED · PIXEL STATIONS WILL RETRY SAVING TO THIS DEVICE");
+      setNotice("RYAN’S IDEA LIBRARY LOADED · SAVED STATIONS WILL RETRY SAVING TO THIS DEVICE");
     }
   }, []);
 
@@ -4620,7 +4947,7 @@ export default function Home() {
     if (!changed) return false;
     setCustomLibraryCards(nextCards);
     setItemOverridesById(nextOverrides);
-    setNotice("A MISSING PIXEL STATION WAS DETACHED · THE REST OF THE IDEA LIBRARY CAN NOW SYNC");
+    setNotice("A MISSING STATION WAS DETACHED · THE REST OF THE IDEA LIBRARY CAN NOW SYNC");
     return true;
   }, [customLibraryCards, itemOverridesById, stationSetupsById]);
 
@@ -4687,7 +5014,7 @@ export default function Home() {
       sharedIdeaLibrarySyncReadyRef.current = true;
       setIsSharedIdeaLibrarySyncReady(true);
       setSharedIdeaLibrarySyncStatus("RYAN’S IDEA LIBRARY LOADED · ONLINE");
-      setNotice("RYAN’S IDEA LIBRARY LOADED · IDEAS, REFERENCE MEDIA, AND PIXEL STATIONS ARE READY ON THIS LINK");
+      setNotice("RYAN’S IDEA LIBRARY LOADED · IDEAS, REFERENCE MEDIA, AND SCALED STATIONS ARE READY ON THIS LINK");
     };
     const beginTimer = window.setTimeout(() => {
       void (async () => {
@@ -4732,7 +5059,7 @@ export default function Home() {
               created.workspace,
               fingerprint,
               "PRIVATE IDEA SYNC · ONLINE",
-              "RYAN’S IDEA LIBRARY READY · IDEAS, REFERENCE MEDIA, AND PIXEL STATIONS SYNC ACROSS YOUR DEVICES",
+              "RYAN’S IDEA LIBRARY READY · IDEAS, REFERENCE MEDIA, AND SCALED STATIONS SYNC ACROSS YOUR DEVICES",
             );
             return;
           }
@@ -4754,7 +5081,7 @@ export default function Home() {
               remote,
               remoteFingerprint,
               "PRIVATE IDEA SYNC · ONLINE",
-              "RYAN’S IDEA LIBRARY LOADED · IDEAS, REFERENCE MEDIA, AND PIXEL STATIONS ARE AVAILABLE ACROSS YOUR DEVICES",
+              "RYAN’S IDEA LIBRARY LOADED · IDEAS, REFERENCE MEDIA, AND SCALED STATIONS ARE AVAILABLE ACROSS YOUR DEVICES",
             );
             return;
           }
@@ -5310,9 +5637,199 @@ export default function Home() {
   }, [hasLoadedReminders, reminderStorage]);
 
   function activePlanIsReadOnly() {
-    if (!isPastActivePlan) return false;
-    setNotice("PAST LESSON SNAPSHOT IS READ-ONLY · OPEN TODAY OR A FUTURE PLAN TO EDIT");
+    if (!isPastPlanReadOnly) return false;
+    setNotice("PAST LESSON SNAPSHOT IS READ-ONLY · CHOOSE EDIT PAST LESSON TO CREATE A RECOVERABLE REVISION");
     return true;
+  }
+
+  function pastRevisionLocksSharedDefinitions() {
+    if (!isPastActivePlan) return false;
+    setNotice("PAST REVISION KEEPS SHARED CLASS, SCHEDULE, PHOTO-AREA, AND STATION DEFINITIONS LOCKED");
+    return true;
+  }
+
+  function scheduleSnapshotTime(totalMinutes: number): string {
+    const bounded = Math.max(0, Math.min(1439, Math.round(totalMinutes)));
+    return `${String(Math.floor(bounded / 60)).padStart(2, "0")}:${String(bounded % 60).padStart(2, "0")}`;
+  }
+
+  /** Capture schedule context while a plan is still current; past plans never refresh it. */
+  function captureCurrentScheduleSnapshot(): LessonScheduleSnapshot {
+    const capturedAt = new Date().toISOString();
+    const base = {
+      capturedAt,
+      date: activeLessonPlan.date,
+      classId: activeLessonPlan.classId,
+      className: activePlanClassName,
+    };
+    if (safeScheduleBundle && safeScheduleDay?.status === "ready") {
+      return {
+        ...base,
+        source: "safe-schedule",
+        sourceId: safeScheduleBundle.schedule.sourceId,
+        scheduleId: safeScheduleBundle.schedule.scheduleId,
+        revision: safeScheduleBundle.schedule.revision,
+        scheduleGroup: safeScheduleDay.group ?? undefined,
+        resolvedWeek: safeScheduleDay.resolvedWeek ?? undefined,
+        blocks: safeScheduleDay.groupBlocks.map((block) => ({
+          start: scheduleSnapshotTime(block.startMinute),
+          end: scheduleSnapshotTime(block.endMinute),
+          event: block.eventLabel,
+          areas: [...block.equipment],
+        })),
+      };
+    }
+    if (activeLocalClass) {
+      return {
+        ...base,
+        source: "local-class",
+        sourceId: activeLocalClass.id,
+        revision: activeLocalClass.updatedAt,
+        scheduleGroup: activeLocalClass.group,
+        blocks: localScheduleBlocks.map((block) => ({
+          start: block.start,
+          end: block.end,
+          event: block.event,
+          areas: [...(block.areas ?? [])],
+        })),
+      };
+    }
+    return { ...base, source: "none", blocks: [] };
+  }
+
+  function legacyUnavailableScheduleSnapshot(): LessonScheduleSnapshot {
+    return {
+      capturedAt: new Date().toISOString(),
+      source: "legacy-unavailable",
+      date: activeLessonPlan.date,
+      classId: activeLessonPlan.classId,
+      className: activePlanClassName,
+      blocks: [],
+    };
+  }
+
+  function storedLessonContent(lesson: StoredLesson): StoredLessonContent {
+    const { version: _version, revisions: _revisions, scheduleSnapshot: _scheduleSnapshot, ...content } = lesson;
+    return copyStoredLessonContent(content);
+  }
+
+  function revisionId(action: LessonRevision["action"]): string {
+    return `lesson-revision-${action}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function persistPastLessonRevision(savedLesson: StoredLesson): boolean {
+    const serialized = JSON.stringify(savedLesson);
+    if (new TextEncoder().encode(serialized).length > MAX_LESSON_DOCUMENT_BYTES) {
+      setNotice("THIS REVISION WOULD EXCEED THE SAFE LESSON SIZE · EXPORT A FULL BACKUP BEFORE ADDING MORE HISTORY");
+      return false;
+    }
+    const savedCurrentPlan = { ...activeLessonPlan, updatedAt: new Date().toISOString() };
+    const nextIndex = indexWithPlan(lessonPlanIndex, savedCurrentPlan, activeLessonPlan.id);
+    if (!nextIndex) {
+      setNotice("THE PAST LESSON WAS NOT CHANGED · ITS CLASS AND DATE NO LONGER FORM A VALID SAVED PLAN");
+      return false;
+    }
+    try {
+      window.localStorage.setItem(storageKeyForLessonPlan(savedCurrentPlan), serialized);
+      window.localStorage.setItem(LOCAL_LESSON_PLAN_INDEX_STORAGE_KEY, JSON.stringify(nextIndex));
+      setLessonPlanIndex(nextIndex);
+      return true;
+    } catch {
+      setNotice("THE PAST LESSON STAYS READ-ONLY · BROWSER STORAGE COULD NOT PRESERVE ITS ORIGINAL VERSION");
+      return false;
+    }
+  }
+
+  function beginPastLessonRevision() {
+    if (!isPastActivePlan || isRevisingPastPlan) return;
+    const current = currentLessonSnapshot();
+    const scheduleSnapshot = current.scheduleSnapshot ?? legacyUnavailableScheduleSnapshot();
+    const revision: LessonRevision = {
+      id: revisionId("past-edit"),
+      createdAt: new Date().toISOString(),
+      action: "past-edit",
+      snapshot: storedLessonContent(current),
+      scheduleSnapshot: copyLessonScheduleSnapshot(scheduleSnapshot),
+    };
+    const revisions = [...lessonRevisions.map(copyLessonRevision), revision];
+    if (revisions.length > MAX_LESSON_REVISIONS) {
+      setNotice("REVISION HISTORY IS FULL · EXPORT A FULL BACKUP BEFORE STARTING ANOTHER PAST-LESSON EDIT");
+      return;
+    }
+    const savedLesson: StoredLesson = {
+      ...current,
+      revisions,
+      scheduleSnapshot: copyLessonScheduleSnapshot(scheduleSnapshot),
+    };
+    if (!persistPastLessonRevision(savedLesson)) return;
+    // A past revision may change lesson-local content, but never the shared
+    // board definitions or station anchors. Drop any live board editor state
+    // before making the lesson editable.
+    clearTransientLessonPlanControls();
+    setLessonRevisions(revisions);
+    setLessonScheduleSnapshot(copyLessonScheduleSnapshot(scheduleSnapshot));
+    setActiveBoardSnapshot(copyLessonBoardSnapshot(current.boardSnapshot));
+    setIsPastRevisionConfirmOpen(false);
+    setIsRevisingPastPlan(true);
+    lessonModeRef.current = "EDIT";
+    setMode("EDIT");
+    setNotice("REVISING PAST LESSON · ORIGINAL VERSION, BOARD, AND SCHEDULE CONTEXT ARE PRESERVED");
+  }
+
+  function restorePastLessonRevision() {
+    const target = revisionRestoreCandidate;
+    if (!target || !isPastActivePlan || !isRevisingPastPlan) return;
+    const current = currentLessonSnapshot();
+    const outgoingSchedule = current.scheduleSnapshot ?? legacyUnavailableScheduleSnapshot();
+    const revisions = [
+      ...lessonRevisions.map(copyLessonRevision),
+      {
+        id: revisionId("restore"),
+        createdAt: new Date().toISOString(),
+        action: "restore" as const,
+        snapshot: storedLessonContent(current),
+        scheduleSnapshot: copyLessonScheduleSnapshot(outgoingSchedule),
+      },
+    ];
+    if (revisions.length > MAX_LESSON_REVISIONS) {
+      setNotice("REVISION HISTORY IS FULL · EXPORT A FULL BACKUP BEFORE RESTORING A VERSION");
+      return;
+    }
+    const restoredContent = copyStoredLessonContent(target.snapshot);
+    const savedLesson: StoredLesson = {
+      ...restoredContent,
+      version: 9,
+      // A past revision cannot reassign its immutable plan identity.
+      classId: activeLessonPlan.classId,
+      revisions,
+      scheduleSnapshot: copyLessonScheduleSnapshot(target.scheduleSnapshot),
+    };
+    if (!persistPastLessonRevision(savedLesson)) return;
+    setLessonPhases(restoredContent.phases);
+    setTodoDone(restoredContent.todoDone);
+    setIsReady(restoredContent.isReady);
+    setSafetyAcknowledged(restoredContent.safetyAcknowledged);
+    setLessonDocumentDetails(restoredContent.documentDetails);
+    setAttendanceById(restoredContent.attendanceById);
+    setVisualAnchorByCardId(restoredContent.visualAnchorByCardId);
+    setVisualLabelLayoutByCardId(restoredContent.visualLabelLayoutByCardId);
+    setActiveBoardSnapshot(restoredContent.boardSnapshot);
+    setLessonRevisions(revisions);
+    setLessonScheduleSnapshot(copyLessonScheduleSnapshot(target.scheduleSnapshot));
+    setActivePhaseId(restoredContent.phases[0]?.id ?? "");
+    setRevisionRestoreCandidate(null);
+    setRevisionReview(null);
+    setNotice("PAST LESSON VERSION RESTORED · THE VERSION YOU REPLACED WAS SAVED AS A NEW RECOVERY POINT");
+  }
+
+  function finishPastLessonRevision() {
+    if (!isPastActivePlan || !isRevisingPastPlan) return;
+    setIsRevisingPastPlan(false);
+    lessonModeRef.current = "VIEW";
+    setMode("VIEW");
+    setRevisionReview(null);
+    setRevisionRestoreCandidate(null);
+    setNotice("PAST LESSON REVISION FINISHED · HISTORY IS SAVED AND THE SNAPSHOT IS VIEW-ONLY AGAIN");
   }
 
   function updateActivePhase(updater: (phase: LessonPhase) => LessonPhase) {
@@ -5733,6 +6250,10 @@ export default function Home() {
 
   function toggleZonePanelForActivePhase(catalogZone: ZonePanel) {
     if (activePlanIsReadOnly()) return;
+    if (isPastActivePlan) {
+      setNotice("PAST REVISIONS KEEP THEIR FROZEN PHOTO-AREA SETUP · EDIT PHASE CONTENT WITHOUT CHANGING SHARED BOARDS");
+      return;
+    }
     const zoneId = catalogZone.id;
 
     const selectedZone = activePhase.zones.find((zone) => zone.id === zoneId);
@@ -5768,6 +6289,7 @@ export default function Home() {
   }
 
   function useSuggestedPhotoAreasForActivePhase() {
+    if (isPastActivePlan) return;
     if (!suggestedActivePhotoAreas.length) return;
     const suggestedIds = new Set(suggestedActivePhotoAreas.map((zone) => zone.id));
     updateActivePhase((phase) => {
@@ -5821,6 +6343,11 @@ export default function Home() {
     destinationAnchorId?: VisualAnchorId,
   ) {
     if (activePlanIsReadOnly()) return;
+    if (isPastActivePlan && destinationZoneId) {
+      setPendingZonePlacement(null);
+      setNotice("PAST REVISIONS CAN ADD TO THE TEXT PLAN, BUT KEEP THEIR FROZEN VISUAL BOARD ANCHORS UNCHANGED");
+      return;
+    }
     const targetPhase = lessonPhases.find((phase) => phase.id === phaseId);
     if (!targetPhase) {
       setPendingZonePlacement(null);
@@ -5921,11 +6448,13 @@ export default function Home() {
     setSelectedBuiltInLabelByZoneId({});
     setPendingZonePlacement({ card: copyCard(card), phaseId: activePhase.id, kind: "idea" });
     setPlacedCard(null);
-    setNotice(`PLACE ${card.title.toUpperCase()} · TAP A HIGHLIGHTED STATION OR THE TEXT PLAN · NO SNAPSHOT EXISTS YET`);
+    setNotice(isPastActivePlan
+      ? `PLACE ${card.title.toUpperCase()} · TAP THE TEXT PLAN · FROZEN STATION BOARDS CANNOT ACCEPT NEW SNAPSHOTS`
+      : `PLACE ${card.title.toUpperCase()} · TAP A HIGHLIGHTED STATION OR THE TEXT PLAN · NO SNAPSHOT EXISTS YET`);
   }
 
   function placeVisualLabel() {
-    if (mode !== "EDIT" || activePhase.mode === "TEXT") return;
+    if (mode !== "EDIT" || activePhase.mode === "TEXT" || isPastActivePlan) return;
     const title = visualLabelDraft.trim();
     if (!title) {
       setNotice("TYPE A SHORT VISUAL LABEL BEFORE CHOOSING ITS STATION SPOT");
@@ -6005,7 +6534,7 @@ export default function Home() {
   }
 
   function setCustomBoardTool(boardId: string, nextTool: BoardTool) {
-    if (mode !== "EDIT") return;
+    if (mode !== "EDIT" || isPastActivePlan) return;
     setBoardToolById((current) => ({
       ...current,
       [boardId]: current[boardId] === nextTool ? "none" : nextTool,
@@ -6023,7 +6552,7 @@ export default function Home() {
   }
 
   function setBuiltInBoardTool(zoneId: string, nextTool: BoardTool) {
-    if (mode !== "EDIT") return;
+    if (mode !== "EDIT" || isPastActivePlan) return;
     const boardId = builtInBoardKey(zoneId);
     setBoardToolById((current) => ({
       ...current,
@@ -6051,6 +6580,7 @@ export default function Home() {
     spot: EffectiveStationBoardSpot,
     patch: Partial<Pick<EffectiveStationBoardSpot, "name" | "x" | "y">>,
   ) {
+    if (isPastActivePlan) return;
     setStationBoardOverrides((current) => {
       const overrides = stationBoardSpotOverridesFor(current, zoneId);
       const next = spot.origin === "local"
@@ -6066,6 +6596,7 @@ export default function Home() {
     stationSpots: EffectiveStationBoardSpot[],
     spotId: string,
   ) {
+    if (isPastActivePlan) return;
     const suppliedSpot = sourceStationSpots(layout).find((spot) => spot.id === spotId);
     const revisedStationSpots = suppliedSpot
       ? stationSpots.map((spot) => (spot.id === spotId ? { ...spot, x: suppliedSpot.x, y: suppliedSpot.y } : spot))
@@ -6088,6 +6619,7 @@ export default function Home() {
   }
 
   function removeBuiltInLocalSpot(zoneId: string, spotId: string) {
+    if (isPastActivePlan) return;
     const usedByCard = lessonPhases.some((phase) => phase.zones.some((zone) => (
       zone.id === zoneId && zone.cards.some((card) => visualAnchorByCardId[card.id] === spotId)
     )));
@@ -6225,6 +6757,7 @@ export default function Home() {
     nextLayout: VisualLabelLayout,
     showConflictNotice = true,
   ): boolean {
+    if (isPastActivePlan) return false;
     const target = resolveVisualAnchors(zone, visualAnchorByCardId, undefined, stationSpots).find((entry) => entry.card.id === cardId);
     const spot = target ? stationSpots.find((candidate) => candidate.id === target.id) : undefined;
     if (!target || !spot) return false;
@@ -6259,7 +6792,7 @@ export default function Home() {
     zone: ZonePanel,
     layout: GymPanelLayout,
   ) {
-    if (mode !== "EDIT" || builtInBoardTool(zone.id) !== "spots") return;
+    if (mode !== "EDIT" || isPastActivePlan || builtInBoardTool(zone.id) !== "spots") return;
     if (event.target instanceof Element && event.target.closest("button")) return;
     const point = boardCanvasPoint(event.clientX, event.clientY, event.currentTarget);
     if (layout.referenceBoard && !isPointInsideStationBoardFrame(point, layout.referenceBoard)) {
@@ -6289,7 +6822,7 @@ export default function Home() {
     zoneId: string,
     spotId: string,
   ) {
-    if (mode !== "EDIT" || builtInBoardTool(zoneId) !== "spots") return;
+    if (mode !== "EDIT" || isPastActivePlan || builtInBoardTool(zoneId) !== "spots") return;
     event.preventDefault();
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -6303,7 +6836,7 @@ export default function Home() {
     zone: ZonePanel,
     cardId: string,
   ) {
-    if (mode !== "EDIT" || builtInBoardTool(zone.id) !== "labels") return;
+    if (mode !== "EDIT" || isPastActivePlan || builtInBoardTool(zone.id) !== "labels") return;
     event.preventDefault();
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -6390,6 +6923,7 @@ export default function Home() {
     layout: GymPanelLayout,
     stationSpots: EffectiveStationBoardSpot[],
   ) {
+    if (isPastActivePlan) return;
     const drag = builtInBoardDragRef.current;
     if (!drag || drag.zoneId !== zone.id || drag.pointerId !== event.pointerId) return;
     const point = drag.kind === "label"
@@ -6437,11 +6971,12 @@ export default function Home() {
   }
 
   function updateCustomBoard(boardId: string, updater: (board: CustomBoard) => CustomBoard) {
+    if (isPastActivePlan) return;
     setCustomBoards((boards) => boards.map((board) => board.id === boardId ? updater(board) : board));
   }
 
   function adjustCustomBoardPhotoScale(board: CustomBoard, direction: "smaller" | "larger") {
-    if (activePlanIsReadOnly()) return;
+    if (activePlanIsReadOnly() || isPastActivePlan) return;
     const currentScale = customBoardPhotoScale(board);
     const nextScale = direction === "larger"
       ? incrementCustomBoardPhotoScale(currentScale)
@@ -6486,7 +7021,7 @@ export default function Home() {
   }
 
   function updateCustomBoardDetails(boardId: string, title: string, eventName: string) {
-    if (activePlanIsReadOnly()) return;
+    if (activePlanIsReadOnly() || isPastActivePlan) return;
     const board = currentCustomBoardById.get(boardId);
     if (!board) return;
     const timestamp = new Date().toISOString();
@@ -6499,7 +7034,7 @@ export default function Home() {
   }
 
   function startEditingBuiltInArea(zone: ZonePanel) {
-    if (activePlanIsReadOnly()) return;
+    if (activePlanIsReadOnly() || isPastActivePlan) return;
     const source = zoneCatalog.find((candidate) => candidate.id === zone.id);
     if (!source) return;
     setEditingArea({ kind: "built-in", id: source.id });
@@ -6514,7 +7049,7 @@ export default function Home() {
   }
 
   function startEditingCustomBoard(board: CustomBoard) {
-    if (activePlanIsReadOnly()) return;
+    if (activePlanIsReadOnly() || isPastActivePlan) return;
     setEditingArea({ kind: "custom", id: board.id });
     setAreaTitleDraft(board.title);
     setAreaAliasDraft(board.eventName ?? "");
@@ -6536,7 +7071,7 @@ export default function Home() {
   }
 
   function saveBuiltInAreaDetails(zone: ZonePanel) {
-    if (activePlanIsReadOnly()) return;
+    if (activePlanIsReadOnly() || isPastActivePlan) return;
     const source = zoneCatalog.find((candidate) => candidate.id === zone.id);
     if (!source) return;
     const revised = updateBuiltInAreaOverride(areaCatalog, source.id, {
@@ -6555,7 +7090,7 @@ export default function Home() {
   }
 
   function saveCustomBoardDetails(board: CustomBoard) {
-    if (activePlanIsReadOnly()) return;
+    if (activePlanIsReadOnly() || isPastActivePlan) return;
     const title = areaTitleDraft.trim() || board.title;
     updateCustomBoardDetails(board.id, title, areaAliasDraft);
     cancelEditingArea();
@@ -6563,6 +7098,7 @@ export default function Home() {
   }
 
   function openCustomBoardForSpotEditing(board: CustomBoard) {
+    if (isPastActivePlan) return;
     setLessonPhases((phases) => phases.map((phase) => {
       if (phase.id !== activePhase.id) return phase;
       const isOpenOnPhase = phase.zones.some((zone) => zone.customBoardId === board.id);
@@ -6589,7 +7125,7 @@ export default function Home() {
   }
 
   function startReplacingCustomBoardPhoto(board: CustomBoard, keepEventEditor = false) {
-    if (activePlanIsReadOnly()) return;
+    if (activePlanIsReadOnly() || isPastActivePlan) return;
     setReplacingCustomBoardId(board.id);
     setReplacementCustomBoardFile(null);
     if (!keepEventEditor) cancelEditingArea();
@@ -6602,6 +7138,7 @@ export default function Home() {
   }
 
   async function replaceCustomBoardPhoto(board: CustomBoard) {
+    if (activePlanIsReadOnly() || isPastActivePlan) return;
     const photo = replacementCustomBoardFile;
     if (!photo) {
       setNotice("CHOOSE A NEW AREA PHOTO BEFORE SAVING THE REPLACEMENT");
@@ -6640,7 +7177,7 @@ export default function Home() {
   }
 
   function startReplacingFloorPhotoArea(zoneId: FloorPhotoAreaId) {
-    if (activePlanIsReadOnly()) return;
+    if (activePlanIsReadOnly() || isPastActivePlan) return;
     setReplacingFloorPhotoAreaId(zoneId);
     setReplacementFloorPhotoFile(null);
     setRemovingArea(null);
@@ -6652,7 +7189,7 @@ export default function Home() {
   }
 
   async function replaceFloorPhotoArea(zone: ZonePanel, zoneId: FloorPhotoAreaId) {
-    if (activePlanIsReadOnly()) return;
+    if (activePlanIsReadOnly() || isPastActivePlan) return;
     const photo = replacementFloorPhotoFile;
     if (!photo) {
       setNotice(`CHOOSE A ${zone.alias.toUpperCase()} PHOTO BEFORE SAVING`);
@@ -6694,7 +7231,7 @@ export default function Home() {
   }
 
   function restoreFloorPhotoCrop(zone: ZonePanel, zoneId: FloorPhotoAreaId) {
-    if (activePlanIsReadOnly()) return;
+    if (activePlanIsReadOnly() || isPastActivePlan) return;
     setFloorPhotoAreas((current) => {
       const { [zoneId]: _removed, ...remaining } = current.photosByZoneId;
       return floorPhotoAreaStorage(remaining);
@@ -6704,7 +7241,7 @@ export default function Home() {
   }
 
   function startRemovingArea(target: AreaEditTarget, keepEventEditor = false) {
-    if (activePlanIsReadOnly()) return;
+    if (activePlanIsReadOnly() || isPastActivePlan) return;
     setRemovingArea(target);
     if (!keepEventEditor) cancelEditingArea();
     setReplacingCustomBoardId(null);
@@ -6716,7 +7253,7 @@ export default function Home() {
   }
 
   async function confirmRemoveArea(target: AreaEditTarget, zone: ZonePanel) {
-    if (activePlanIsReadOnly()) return;
+    if (activePlanIsReadOnly() || isPastActivePlan) return;
     if (!isRemovingArea(target)) return;
     if (target.kind === "custom") {
       const removedBoard = currentCustomBoardById.get(target.id);
@@ -6759,7 +7296,7 @@ export default function Home() {
   }
 
   function restoreArea(target: AreaEditTarget, zone: ZonePanel) {
-    if (activePlanIsReadOnly()) return;
+    if (activePlanIsReadOnly() || isPastActivePlan) return;
     const revisedCatalog = target.kind === "built-in"
       ? setBuiltInAreaHidden(areaCatalog, target.id, false, BUILT_IN_ZONE_IDS)
       : setCustomBoardHidden(areaCatalog, target.id, false);
@@ -6768,7 +7305,7 @@ export default function Home() {
   }
 
   async function previewCustomBoardImport(files: FileList | null) {
-    if (mode !== "EDIT") return;
+    if (mode !== "EDIT" || isPastActivePlan) return;
     const selectedFiles = Array.from(files ?? []);
     const selectedFileName = selectedFiles.length === 1 ? selectedFiles[0].name : "SELECTED FILES";
     if (!selectedFiles.length) return;
@@ -6882,7 +7419,7 @@ export default function Home() {
   }
 
   async function applyCustomBoardImport() {
-    if (mode !== "EDIT" || isSavingCustomBoardImport || customBoardImport?.kind !== "ready") return;
+    if (mode !== "EDIT" || isPastActivePlan || isSavingCustomBoardImport || customBoardImport?.kind !== "ready") return;
     if (!hasLoadedCustomBoards) {
       setNotice("WAIT FOR THIS BROWSER'S LOCAL PHOTO AREAS TO FINISH LOADING");
       return;
@@ -6914,7 +7451,7 @@ export default function Home() {
   }
 
   async function saveNewCustomBoard() {
-    if (mode !== "EDIT") return;
+    if (mode !== "EDIT" || isPastActivePlan) return;
     const originPlanId = activeLessonPlanIdRef.current;
     const title = newCustomBoardTitle.trim();
     const photo = newCustomBoardFile;
@@ -6975,7 +7512,7 @@ export default function Home() {
   }
 
   function addCustomStationSpotAtPointer(event: React.PointerEvent<HTMLDivElement>, board: CustomBoard) {
-    if (mode !== "EDIT" || customBoardTool(board.id) !== "spots") return;
+    if (mode !== "EDIT" || isPastActivePlan || customBoardTool(board.id) !== "spots") return;
     if (event.target instanceof Element && event.target.closest("button")) return;
     const point = customBoardPhotoPoint(event.clientX, event.clientY, event.currentTarget);
     if (!isInsideCustomPhoto(point)) {
@@ -6994,7 +7531,7 @@ export default function Home() {
   }
 
   function beginCustomSpotDrag(event: React.PointerEvent<HTMLButtonElement>, boardId: string, spotId: string) {
-    if (mode !== "EDIT" || customBoardTool(boardId) !== "spots") return;
+    if (mode !== "EDIT" || isPastActivePlan || customBoardTool(boardId) !== "spots") return;
     event.preventDefault();
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -7088,7 +7625,7 @@ export default function Home() {
     zone: ZonePanel,
     cardId: string,
   ) {
-    if (mode !== "EDIT" || customBoardTool(board.id) !== "labels") return;
+    if (mode !== "EDIT" || isPastActivePlan || customBoardTool(board.id) !== "labels") return;
     event.preventDefault();
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -7098,7 +7635,7 @@ export default function Home() {
   }
 
   function moveCustomBoardDrag(event: React.PointerEvent<HTMLDivElement>, board: CustomBoard, zone: ZonePanel) {
-    if (mode !== "EDIT" || activePlanIsReadOnly()) return;
+    if (mode !== "EDIT" || activePlanIsReadOnly() || isPastActivePlan) return;
     const drag = customBoardDragRef.current;
     if (!drag || drag.boardId !== board.id || drag.pointerId !== event.pointerId) return;
     const point = customBoardPhotoPoint(event.clientX, event.clientY, event.currentTarget);
@@ -7149,6 +7686,7 @@ export default function Home() {
   }
 
   function removeCustomStationSpotFromBoard(board: CustomBoard, spotId: string) {
+    if (isPastActivePlan) return;
     const usedByCard = lessonPhases.some((phase) => phase.zones.some((zone) => (
       zone.customBoardId === board.id && zone.cards.some((card) => visualAnchorByCardId[card.id] === spotId)
     )));
@@ -7486,13 +8024,6 @@ export default function Home() {
     setLibraryQuickEdit({ item: copyLibraryItem(card), field, value: libraryQuickEditValue(card, field) });
   }
 
-  function openLibraryQuickEditFromKeyboard(event: ReactKeyboardEvent<HTMLButtonElement>, card: LibraryItem, field: LibraryQuickEditField) {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    event.preventDefault();
-    event.stopPropagation();
-    startLibraryQuickEdit(card, field);
-  }
-
   function saveLibraryQuickEdit() {
     if (!libraryQuickEdit) return;
     const { item, field, value } = libraryQuickEdit;
@@ -7512,7 +8043,7 @@ export default function Home() {
         .filter((level): level is IdeaLevel => IDEA_LEVELS.includes(level as IdeaLevel))
         .sort((first, second) => first - second);
     } else if (field === "tags") {
-      edited.tags = parseEditableList(value);
+      edited.tags = normalizeIdeaTags(value);
     } else if (field === "description") {
       edited.description = value.trim() || "Add the rules, coaching notes, or reference details when you are ready.";
     } else if (field === "safety") {
@@ -7542,14 +8073,14 @@ export default function Home() {
     }
     if (target === "new") {
       if (newIdeaStationSetup) {
-        setNotice("CLEAR THE PIXEL STATION BEFORE CHOOSING A PHOTO OR VIDEO · ONE ATTACHMENT PER IDEA");
+        setNotice("CLEAR THE STATION BEFORE CHOOSING A PHOTO OR VIDEO · ONE ATTACHMENT PER IDEA");
         return;
       }
       setNewIdeaMediaFile(file);
       return;
     }
     if (editingIdeaStationSetup || (editingLibraryItem?.stationSetupId && !removeEditingStation)) {
-      setNotice("REMOVE THE PIXEL STATION IN THIS EDIT BEFORE CHOOSING MEDIA · YOUR SAVED STATION STAYS UNTIL YOU SAVE");
+      setNotice("REMOVE THE STATION IN THIS EDIT BEFORE CHOOSING MEDIA · YOUR SAVED STATION STAYS UNTIL YOU SAVE");
       return;
     }
     setEditingIdeaMediaFile(file);
@@ -7600,7 +8131,7 @@ export default function Home() {
         description: libraryEditDraft.description.trim() || "Add the rules, coaching notes, or reference details when you are ready.",
         safety: libraryEditDraft.safety.trim() || undefined,
         mats: parseEditableList(libraryEditDraft.mats),
-        tags: parseEditableList(libraryEditDraft.tags),
+        tags: normalizeIdeaTags(libraryEditDraft.tags),
         events: parseEditableList(libraryEditDraft.events),
         skills: parseEditableList(libraryEditDraft.skills),
         goals: parseEditableList(libraryEditDraft.goals),
@@ -8146,6 +8677,7 @@ export default function Home() {
   }
 
   function openClassImportManager() {
+    if (pastRevisionLocksSharedDefinitions()) return;
     setClassImportPreview(null);
     setPlanShelf(null);
     setIsPlannerBackupOpen(false);
@@ -8164,7 +8696,7 @@ export default function Home() {
   }
 
   function selectClassForLesson(localClass: LocalClass | null) {
-    if (activePlanIsReadOnly()) return;
+    if (activePlanIsReadOnly() || pastRevisionLocksSharedDefinitions()) return;
     const nextClassId = localClass?.id ?? null;
     const existing = lessonPlanForIdentity(lessonPlanIndex, { date: activeLessonPlan.date, classId: nextClassId });
     if (existing && existing.id !== activeLessonPlan.id) {
@@ -8228,6 +8760,7 @@ export default function Home() {
   }
 
   function applyClassScheduleImport() {
+    if (pastRevisionLocksSharedDefinitions()) return;
     const preview = classImportPreview?.ok ? classImportPreview : parseLocalClassScheduleImport(classImportRaw);
     if (!preview.ok) {
       setClassImportPreview(preview);
@@ -8286,6 +8819,7 @@ export default function Home() {
   }
 
   function applySafeScheduleImport() {
+    if (pastRevisionLocksSharedDefinitions()) return;
     if (!hasLoadedSafeSchedule || !safeScheduleImportPreview?.result.ok) {
       setNotice("CHOOSE AND VALIDATE A SAFE SCHEDULE JSON FILE FIRST");
       return;
@@ -8299,6 +8833,7 @@ export default function Home() {
   }
 
   function linkLocalClassToSafeSchedule(classId: string, group: string | null) {
+    if (pastRevisionLocksSharedDefinitions()) return;
     const next = setSafeScheduleClassGroup(safeScheduleStorageState, classId, group);
     if (!next) {
       setNotice("SCHEDULE GROUP LINK WAS REJECTED · CHOOSE AN EXACT IMPORTED GROUP");
@@ -8315,12 +8850,14 @@ export default function Home() {
   }
 
   function openSafeScheduleWeekAnchor() {
+    if (pastRevisionLocksSharedDefinitions()) return;
     setScheduleWeekAnchorDate(activeLessonPlan.date);
     setScheduleWeekAnchorWeek(safeScheduleDay?.resolvedWeek ?? "Even");
     setIsScheduleWeekAnchorOpen(true);
   }
 
   function saveSafeScheduleWeekAnchor() {
+    if (pastRevisionLocksSharedDefinitions()) return;
     const next = setSafeScheduleWeekAnchor(
       safeScheduleStorageState,
       scheduleWeekAnchorDate,
@@ -8338,6 +8875,7 @@ export default function Home() {
   }
 
   function confirmRemoveLocalClass() {
+    if (pastRevisionLocksSharedDefinitions()) return;
     if (!removeClassCandidate) return;
     const removed = removeClassCandidate;
     const referencingPlans = lessonPlanIndex?.plans.filter((plan) => plan.classId === removed.id).length ?? 0;
@@ -8371,7 +8909,7 @@ export default function Home() {
 
   function openNewStationMaker() {
     if (newIdeaMediaFile) {
-      setNotice("CLEAR THE PHOTO OR VIDEO ATTACHMENT BEFORE MAKING A PIXEL STATION · ONE ATTACHMENT PER IDEA");
+      setNotice("CLEAR THE PHOTO OR VIDEO ATTACHMENT BEFORE MAKING A SCALED STATION · ONE ATTACHMENT PER IDEA");
       return;
     }
     setStationMakerTarget("new");
@@ -8382,7 +8920,7 @@ export default function Home() {
     if (!editingLibraryItem) return;
     const currentMedia = normalizedLibraryMedia(editingLibraryItem);
     if (editingIdeaMediaFile || (currentMedia.mediaId && !removeEditingIdeaMedia)) {
-      setNotice("REMOVE THE PHOTO OR VIDEO IN THIS EDIT BEFORE MAKING A PIXEL STATION · ONE ATTACHMENT PER IDEA");
+      setNotice("REMOVE THE PHOTO OR VIDEO IN THIS EDIT BEFORE MAKING A SCALED STATION · ONE ATTACHMENT PER IDEA");
       return;
     }
     if (editingIdeaStationSetup) {
@@ -8394,14 +8932,14 @@ export default function Home() {
       try {
         const setup = stationSetupsById[editingLibraryItem.stationSetupId] ?? await loadStationSetup(editingLibraryItem.stationSetupId);
         if (!setup) {
-          setNotice("THIS PIXEL STATION IS NOT AVAILABLE IN THIS BROWSER");
+          setNotice("THIS SAVED STATION IS NOT AVAILABLE IN THIS BROWSER");
           return;
         }
         setStationMakerTarget("edit");
         setStationMakerSetup(setup);
         return;
       } catch {
-        setNotice("THIS PIXEL STATION COULD NOT BE OPENED");
+        setNotice("THIS SAVED STATION COULD NOT BE OPENED");
         return;
       }
     }
@@ -8414,14 +8952,14 @@ export default function Home() {
     try {
       const setup = stationSetupsById[card.stationSetupId] ?? await loadStationSetup(card.stationSetupId);
       if (!setup) {
-        setNotice("THIS PIXEL STATION IS NOT AVAILABLE IN THIS BROWSER");
+        setNotice("THIS SAVED STATION IS NOT AVAILABLE IN THIS BROWSER");
         return;
       }
       setStationMakerTarget(card);
       setStationMakerSetup(setup);
       setDetailCard(null);
     } catch {
-      setNotice("THIS PIXEL STATION COULD NOT BE OPENED");
+      setNotice("THIS SAVED STATION COULD NOT BE OPENED");
     }
   }
 
@@ -8431,15 +8969,15 @@ export default function Home() {
     try {
       if (target === "new") {
         if (newIdeaMediaFile) {
-          setNotice("CLEAR THE PHOTO OR VIDEO ATTACHMENT BEFORE SAVING A PIXEL STATION · ONE ATTACHMENT PER IDEA");
+          setNotice("CLEAR THE PHOTO OR VIDEO ATTACHMENT BEFORE SAVING A SCALED STATION · ONE ATTACHMENT PER IDEA");
           return;
         }
         setNewIdeaStationSetup(setup);
-        setNotice("PIXEL STATION READY · SAVE THE IDEA TO SHARE IT IN RYAN’S LIBRARY");
+        setNotice("SCALED STATION READY · SAVE THE IDEA TO SHARE IT IN RYAN’S LIBRARY");
       } else if (target === "edit") {
         setEditingIdeaStationSetup(setup);
         setRemoveEditingStation(false);
-        setNotice("PIXEL STATION READY · TAP SAVE SHARED EDIT TO APPLY IT TO THIS IDEA");
+        setNotice("SCALED STATION READY · TAP SAVE SHARED EDIT TO APPLY IT TO THIS IDEA");
       } else {
         await saveStationSetup(setup);
         setStationSetupsById((current) => ({ ...current, [setup.id]: setup }));
@@ -8447,12 +8985,12 @@ export default function Home() {
         if (customLibraryCards.some((idea) => idea.id === target.id)) setCustomLibraryCards((ideas) => ideas.map(update));
         else setItemOverridesById((current) => ({ ...current, [target.id]: update(target) }));
         if (target.mediaId) await removeIdeaMedia(target.mediaId);
-        setNotice("PIXEL STATION SAVED · SYNCING WITH THIS IDEA");
+        setNotice("SCALED STATION SAVED · SYNCING WITH THIS IDEA");
       }
       setStationMakerSetup(null);
       setStationMakerTarget(null);
     } catch {
-      setNotice("THE PIXEL STATION COULD NOT BE SAVED · YOUR EDIT IS STILL OPEN");
+      setNotice("THE STATION COULD NOT BE SAVED · YOUR EDIT IS STILL OPEN");
     }
   }
 
@@ -8463,7 +9001,7 @@ export default function Home() {
       setNotice("NAME THE IDEA BEFORE SAVING IT TO RYAN’S IDEA LIBRARY");
       return;
     }
-    const tags = newIdeaTags.split(",").map((tag) => tag.trim()).filter(Boolean);
+      const tags = normalizeIdeaTags(newIdeaTags);
     const ideaId = `local-idea-${Date.now()}`;
     setIsSavingNewIdea(true);
     try {
@@ -8477,7 +9015,7 @@ export default function Home() {
           title,
           description: newIdeaDescription.trim() || "Add the rules, coaching notes, or reference details when you are ready.",
           tags: tags.length ? tags : [newIdeaKind.toLowerCase(), "local"],
-          accent: newIdeaKind === "SKILL" ? "pink" : newIdeaKind === "ACTIVITY" ? "green" : newIdeaKind === "REFERENCE" ? "yellow" : "cyan",
+          accent: newIdeaKind === "SKILL" ? "pink" : newIdeaKind === "ACTIVITY" || newIdeaKind === "WARM_UP" ? "green" : newIdeaKind === "REFERENCE" ? "yellow" : "cyan",
           mats: parseEditableList(newIdeaMats),
           levels: [...newIdeaLevels],
         }),
@@ -8526,6 +9064,7 @@ export default function Home() {
           <option value="DRILL">DRILL</option>
           <option value="ROUTINE">ROUTINE</option>
           <option value="ACTIVITY">ACTIVITY</option>
+          <option value="WARM_UP">WARM-UP</option>
           <option value="REFERENCE">REFERENCE</option>
         </select>
       </label>
@@ -8549,7 +9088,7 @@ export default function Home() {
           </label>
         ))}
       </fieldset>
-      <label>TAGS<input value={newIdeaTags} onChange={(event) => setNewIdeaTags(event.target.value)} placeholder="floor, L3, warmup" maxLength={120} /></label>
+      <IdeaTagPicker value={newIdeaTags} onChange={setNewIdeaTags} options={libraryTagOptions} />
       <div className="new-idea-media-actions">
         <b>REFERENCE PHOTO OR VIDEO <small>optional · one shared attachment · syncs with this Idea Library</small></b>
         <input
@@ -8577,9 +9116,9 @@ export default function Home() {
         <button type="button" onClick={() => newIdeaMediaInputRef.current?.click()}>CHOOSE PHOTO / VIDEO</button>
         <button type="button" onClick={openNewStationMaker}>MAKE STATION</button>
         {newIdeaMediaFile ? <button type="button" className="media-clear" onClick={() => setNewIdeaMediaFile(null)}>CLEAR ATTACHMENT</button> : null}
-        {newIdeaStationSetup ? <button type="button" className="media-clear" onClick={() => { setNewIdeaStationSetup(null); setNotice("PIXEL STATION CLEARED · YOU CAN NOW CHOOSE A PHOTO OR VIDEO"); }}>CLEAR PIXEL STATION</button> : null}
-        {newIdeaStationSetup ? <span>EDITABLE PIXEL STATION READY · {newIdeaStationSetup.objects.length} {newIdeaStationSetup.objects.length === 1 ? "PIECE" : "PIECES"}</span> : newIdeaMediaFile ? <span>{ideaMediaKindForFile(newIdeaMediaFile)?.toUpperCase()} READY: {newIdeaMediaFile.name || "NEW CAMERA PHOTO"}</span> : <span>NO ATTACHMENT</span>}
-        {newIdeaStationSetup ? <StationPreview setup={newIdeaStationSetup} label="New pixel station" /> : null}
+        {newIdeaStationSetup ? <button type="button" className="media-clear" onClick={() => { setNewIdeaStationSetup(null); setNotice("SCALED STATION CLEARED · YOU CAN NOW CHOOSE A PHOTO OR VIDEO"); }}>CLEAR STATION</button> : null}
+        {newIdeaStationSetup ? <span>EDITABLE SCALED STATION READY · {newIdeaStationSetup.objects.length} {newIdeaStationSetup.objects.length === 1 ? "OBJECT" : "OBJECTS"}</span> : newIdeaMediaFile ? <span>{ideaMediaKindForFile(newIdeaMediaFile)?.toUpperCase()} READY: {newIdeaMediaFile.name || "NEW CAMERA PHOTO"}</span> : <span>NO ATTACHMENT</span>}
+        {newIdeaStationSetup ? <StationPreview setup={newIdeaStationSetup} label="New scaled station" /> : null}
         {newIdeaMediaFile && newIdeaMediaPreviewUrl ? (
           <figure className="idea-media-preview">
             {ideaMediaKindForFile(newIdeaMediaFile) === "video"
@@ -8603,8 +9142,16 @@ export default function Home() {
         </div>
       </div>
       <div className="library-placement-strip">
-        <b>{isLibraryWindow ? "VIEW · EDIT · DRAFT · FAVORITE · ARCHIVE · RESTORE" : "PLACE → THEN TAP A HIGHLIGHTED STATION"}</b>
-        <span>{isLibraryWindow ? "Double-click any editable card value to change only that field. Changes sync only for Ryan in the planner window." : "Pinch this list out for details, or in to compact it. Double-click a card value to edit only that field."}</span>
+        <b>{isLibraryWindow
+          ? "VIEW · EDIT · DRAFT · FAVORITE · ARCHIVE · RESTORE"
+          : isPastActivePlan
+            ? "PAST REVISION · PLACE IN THE TEXT PLAN ONLY"
+            : "PLACE → THEN TAP A HIGHLIGHTED STATION"}</b>
+        <span>{isLibraryWindow
+          ? "Double-click any editable card value to change only that field. Changes sync only for Ryan in the planner window."
+          : isPastActivePlan
+            ? "This past lesson keeps its board snapshot frozen. You can add a lesson-local idea to the text plan, but not to a visual station."
+            : "Pinch this list out for details, or in to compact it. Double-click a card value to edit only that field."}</span>
       </div>
       <section className="library-transfer" aria-label="Import and export the Idea Library as JSON">
         <div className="library-transfer-heading"><b>IDEA LIBRARY JSON</b><span>Transfer ideas between devices. Attachments stay in a full Planner backup.</span></div>
@@ -8622,7 +9169,7 @@ export default function Home() {
         {isLibraryWindow && isLibraryReplacementOpen ? (
           <div className="library-replacement">
             <strong>REPLACE THIS LIBRARY</strong>
-            <p>THIS REMOVES THE CURRENT IDEA TEXT, GEMS, RECENT LIST, DRAFTS, ARCHIVE, AND HIDDEN IDEAS. PLACED LESSON COPIES STAY. BACKUPS AND IMPORTS ARE TEXT ONLY, SO ATTACHMENTS AND PIXEL STATIONS WILL NOT STAY LINKED.</p>
+            <p>THIS REMOVES THE CURRENT IDEA TEXT, GEMS, RECENT LIST, DRAFTS, ARCHIVE, AND HIDDEN IDEAS. PLACED LESSON COPIES STAY. BACKUPS AND IMPORTS ARE TEXT ONLY, SO ATTACHMENTS AND SCALED STATIONS WILL NOT STAY LINKED.</p>
             <div className="library-replacement-actions">
               <button type="button" disabled={!allLibraryItems.length} onClick={exportLibraryReplacementBackup}>
                 {hasLibraryReplacementBackup ? "BACKUP DOWNLOADED" : "1. DOWNLOAD BACKUP"}
@@ -8709,7 +9256,15 @@ export default function Home() {
           {pendingPlacementPhase ? (
             <>
               {pendingPlacementPhase.id !== activePhase.id ? <button className="open-placement-phase" onClick={() => setActivePhaseId(pendingPlacementPhase.id)}>OPEN THAT PHASE</button> : null}
-              <p className="placement-instructions">{pendingPlacementPhase.mode === "TEXT" ? "Tap the highlighted text plan." : pendingPlacementPhase.mode === "MIXED" ? "Tap the highlighted text plan or one highlighted station." : pendingPlacementPhase.zones.length ? "Tap any highlighted station on the map." : "Add a station to this visual phase, or change its format, before placing this idea."}</p>
+              <p className="placement-instructions">{isPastActivePlan
+                ? "Tap the highlighted text plan. This past revision keeps its visual station anchors frozen."
+                : pendingPlacementPhase.mode === "TEXT"
+                  ? "Tap the highlighted text plan."
+                  : pendingPlacementPhase.mode === "MIXED"
+                    ? "Tap the highlighted text plan or one highlighted station."
+                    : pendingPlacementPhase.zones.length
+                      ? "Tap any highlighted station on the map."
+                      : "Add a station to this visual phase, or change its format, before placing this idea."}</p>
             </>
           ) : (
             <p className="destination-picker-warning">That phase no longer exists. Cancel this selection; nothing has been saved.</p>
@@ -8742,9 +9297,15 @@ export default function Home() {
                   : card.sourceStatus.toUpperCase();
           const tags = card.tags.slice(0, 2).join(" · ");
           const levels = card.levels?.length ? `L${card.levels.join(" · L")}` : "";
-          const extraDetail = card.safety ? `⚠ ${card.safety}` : card.skills.slice(0, 3).join(" · ");
+          const skills = card.skills.slice(0, 3).join(" · ");
+          const safety = card.safety?.trim() ?? "";
           const events = card.events.length ? card.events.join(" · ") : "NONE LISTED";
           const mats = card.mats?.length ? card.mats.join(" · ") : "NONE LISTED";
+          const attachment = card.stationSetupId
+            ? "TRUE-SCALE STATION"
+            : card.mediaId
+              ? card.mediaKind === "video" ? "VIDEO REFERENCE" : "PHOTO REFERENCE"
+              : "NO ATTACHMENT";
           const isUnavailable = Boolean(card.isRemoved || card.isArchived);
           const stationSetup = card.stationSetupId ? stationSetupsById[card.stationSetupId] : null;
           const libraryPhotoUrl = libraryRowHeight >= 110 && card.mediaKind === "image" && card.mediaId
@@ -8754,21 +9315,23 @@ export default function Home() {
             <article key={card.id} className={`library-item${libraryPhotoUrl || card.stationSetupId ? " has-library-photo" : ""}`}>
               <div className="library-item-copy">
                 <div className="library-item-kicker">
-                  <button type="button" className="library-quick-edit-target" aria-label={`Edit type for ${card.title}`} title="Double-click to edit Type" onDoubleClick={(event) => { event.stopPropagation(); startLibraryQuickEdit(card, "kind"); }} onKeyDown={(event) => openLibraryQuickEditFromKeyboard(event, card, "kind")}>{card.kind}</button>
+                  <LibraryQuickEditButton card={card} field="kind" onOpen={startLibraryQuickEdit} className="library-quick-edit-target" ariaLabel={`Edit type for ${card.title}`} title="Edit Type">{card.kind}</LibraryQuickEditButton>
                   <span>{card.variants.length} VARIANT{card.variants.length === 1 ? "" : "S"}</span>
                 </div>
-                <button type="button" className="library-item-title library-quick-edit-target" aria-label={`Edit title for ${card.title}`} title="Double-click to edit Title" onDoubleClick={(event) => { event.stopPropagation(); startLibraryQuickEdit(card, "title"); }} onKeyDown={(event) => openLibraryQuickEditFromKeyboard(event, card, "title")}><strong>{card.title}</strong></button>
+                <LibraryQuickEditButton card={card} field="title" onOpen={startLibraryQuickEdit} className="library-item-title library-quick-edit-target" ariaLabel={`Edit title for ${card.title}`} title="Edit Title"><strong>{card.title}</strong></LibraryQuickEditButton>
                 <div className="library-item-state" title={[state, levels, tags].filter(Boolean).join(" · ")}>
                   <span>{state}</span>
-                  <button type="button" className="library-quick-edit-target" aria-label={`Edit levels for ${card.title}`} title="Double-click to edit Levels" onDoubleClick={(event) => { event.stopPropagation(); startLibraryQuickEdit(card, "levels"); }} onKeyDown={(event) => openLibraryQuickEditFromKeyboard(event, card, "levels")}>{levels || "NO LEVELS"}</button>
-                  <button type="button" className="library-quick-edit-target" aria-label={`Edit tags for ${card.title}`} title="Double-click to edit Tags" onDoubleClick={(event) => { event.stopPropagation(); startLibraryQuickEdit(card, "tags"); }} onKeyDown={(event) => openLibraryQuickEditFromKeyboard(event, card, "tags")}>{tags || "NO TAGS"}</button>
+                  <LibraryQuickEditButton card={card} field="levels" onOpen={startLibraryQuickEdit} className="library-quick-edit-target" ariaLabel={`Edit levels for ${card.title}`} title="Edit Levels">{levels || "NO LEVELS"}</LibraryQuickEditButton>
+                  <LibraryQuickEditButton card={card} field="tags" onOpen={startLibraryQuickEdit} className="library-quick-edit-target" ariaLabel={`Edit tags for ${card.title}`} title="Edit Tags">{tags || "NO TAGS"}</LibraryQuickEditButton>
                 </div>
-                <button type="button" className="library-item-description library-quick-edit-target" aria-label={`Edit description for ${card.title}`} aria-hidden={libraryRowHeight < 86} tabIndex={libraryRowHeight < 86 ? -1 : 0} title="Double-click to edit Description" onDoubleClick={(event) => { event.stopPropagation(); startLibraryQuickEdit(card, "description"); }} onKeyDown={(event) => openLibraryQuickEditFromKeyboard(event, card, "description")}>{card.description}</button>
-                {extraDetail ? <button type="button" className="library-item-extra library-quick-edit-target" aria-label={`Edit ${card.safety ? "safety note" : "skills"} for ${card.title}`} aria-hidden={libraryRowHeight <= 100} tabIndex={libraryRowHeight <= 100 ? -1 : 0} title={`Double-click to edit ${card.safety ? "Safety Note" : "Skills"}`} onDoubleClick={(event) => { event.stopPropagation(); startLibraryQuickEdit(card, card.safety ? "safety" : "skills"); }} onKeyDown={(event) => openLibraryQuickEditFromKeyboard(event, card, card.safety ? "safety" : "skills")}>{card.safety ? extraDetail : `SKILLS · ${extraDetail}`}</button> : null}
+                <LibraryQuickEditButton card={card} field="description" onOpen={startLibraryQuickEdit} className="library-item-description library-quick-edit-target" ariaLabel={`Edit description for ${card.title}`} ariaHidden={libraryRowHeight < 86} tabIndex={libraryRowHeight < 86 ? -1 : 0} title="Edit Description">{card.description}</LibraryQuickEditButton>
+                {skills ? <LibraryQuickEditButton card={card} field="skills" onOpen={startLibraryQuickEdit} className="library-item-extra library-quick-edit-target" ariaLabel={`Edit skills for ${card.title}`} ariaHidden={libraryRowHeight <= 100} tabIndex={libraryRowHeight <= 100 ? -1 : 0} title="Edit Skills">SKILLS · {skills}</LibraryQuickEditButton> : null}
+                {safety ? <LibraryQuickEditButton card={card} field="safety" onOpen={startLibraryQuickEdit} className="library-item-extra safety library-quick-edit-target" ariaLabel={`Edit safety note for ${card.title}`} ariaHidden={libraryRowHeight <= 100} tabIndex={libraryRowHeight <= 100 ? -1 : 0} title="Edit Safety Note">⚠ {safety}</LibraryQuickEditButton> : null}
                 {libraryDetailLevel(libraryRowHeight) === "FULL DETAILS" ? (
                   <div className="library-item-facts">
-                    <button type="button" className="library-quick-edit-target" aria-label={`Edit events for ${card.title}`} title={`Events: ${events} · Double-click to edit`} onDoubleClick={(event) => { event.stopPropagation(); startLibraryQuickEdit(card, "events"); }} onKeyDown={(event) => openLibraryQuickEditFromKeyboard(event, card, "events")}><b>EVENTS</b> {events}</button>
-                    <button type="button" className="library-quick-edit-target" aria-label={`Edit mats for ${card.title}`} title={`Mats: ${mats} · Double-click to edit`} onDoubleClick={(event) => { event.stopPropagation(); startLibraryQuickEdit(card, "mats"); }} onKeyDown={(event) => openLibraryQuickEditFromKeyboard(event, card, "mats")}><b>MATS</b> {mats}</button>
+                    <LibraryQuickEditButton card={card} field="events" onOpen={startLibraryQuickEdit} className="library-quick-edit-target" ariaLabel={`Edit events for ${card.title}`} title={`Edit Events: ${events}`}><b>EVENTS</b> {events}</LibraryQuickEditButton>
+                    <LibraryQuickEditButton card={card} field="mats" onOpen={startLibraryQuickEdit} className="library-quick-edit-target" ariaLabel={`Edit mats for ${card.title}`} title={`Edit Mats: ${mats}`}><b>MATS</b> {mats}</LibraryQuickEditButton>
+                    <span className="library-item-media-indicator"><b>ATTACHMENT</b> {attachment}</span>
                   </div>
                 ) : null}
               </div>
@@ -8851,10 +9414,16 @@ export default function Home() {
         {mode === "EDIT" && !isPastActivePlan ? <button className={isClassManagerOpen ? "active class-manager-trigger" : "class-manager-trigger"} onClick={openClassImportManager}>+ IMPORT CLASS</button> : null}
         <button onClick={openLibraryWindow} aria-label="Open the Idea Library in a new window">LIBRARY <b>{allLibraryItems.length} IDEAS</b></button>
         <button className={isPlannerBackupOpen ? "active planner-backup-trigger" : "planner-backup-trigger"} onClick={openPlannerBackupPanel}>BACKUP / RESTORE</button>
+        {isPastActivePlan ? (
+          <div className="past-revision-controls" aria-label="Past lesson revision controls">
+            {isRevisingPastPlan ? <button type="button" className="selected" onClick={finishPastLessonRevision}>FINISH REVISION</button> : <button type="button" onClick={() => setIsPastRevisionConfirmOpen(true)}>EDIT PAST LESSON</button>}
+            <button type="button" onClick={() => setRevisionReview(lessonRevisions[lessonRevisions.length - 1] ?? null)} disabled={!lessonRevisions.length}>HISTORY {lessonRevisions.length}</button>
+          </div>
+        ) : null}
         {mode === "VIEW" ? <button className="view-new-idea-nav" onClick={() => setIsAddingIdea((open) => !open)}>{isAddingIdea ? "CLOSE NEW IDEA" : "+ NEW IDEA"}</button> : null}
         <div className="mode-switch" aria-label="Lesson mode">
           {(["EDIT", "VIEW"] as const).map((entry) => (
-            <button key={entry} className={mode === entry ? "selected" : ""} onClick={() => setLessonMode(entry)} disabled={entry === "EDIT" && isPastActivePlan}>{entry}</button>
+            <button key={entry} className={mode === entry ? "selected" : ""} onClick={() => setLessonMode(entry)} disabled={entry === "EDIT" && isPastPlanReadOnly}>{entry}</button>
           ))}
         </div>
       </nav>
@@ -8865,7 +9434,7 @@ export default function Home() {
           <div className="planner-backup-body">
             <div className="planner-backup-heading">
               <b>KEEP A COMPLETE LOCAL COPY</b>
-              <span>Exports planner records, saved classes, reminders, preferences, photo/video attachments, and pixel stations into one dated JSON file.</span>
+              <span>Exports planner records, saved classes, reminders, preferences, photo/video attachments, and scaled stations into one dated JSON file.</span>
             </div>
             <div className="planner-backup-actions">
               <button type="button" onClick={() => { void exportPlannerBackup(); }} disabled={isExportingPlannerBackup || isRestoringPlannerBackup}>{isExportingPlannerBackup ? "CREATING FULL BACKUP…" : "EXPORT FULL BACKUP (.JSON)"}</button>
@@ -8887,7 +9456,7 @@ export default function Home() {
                 <section className="planner-backup-preview ready" aria-label="Ready full backup restore">
                   <b>READY: {plannerBackupImport.fileName}</b>
                   <span>{Math.ceil(plannerBackupImport.fileSize / 1024)} KB · exported {new Date(plannerBackupImport.bundle.exportedAt).toLocaleString()}</span>
-                  <span>{summary.localRecordCount} planner records · {attachmentCount} attachment{attachmentCount === 1 ? "" : "s"} · {summary.stationSetupCount} pixel station{summary.stationSetupCount === 1 ? "" : "s"}</span>
+                  <span>{summary.localRecordCount} planner records · {attachmentCount} attachment{attachmentCount === 1 ? "" : "s"} · {summary.stationSetupCount} station setup{summary.stationSetupCount === 1 ? "" : "s"}</span>
                   <p>Restore replaces the Planner data in this browser and reloads. Shared sync stays paused afterward so this backup cannot be overwritten or uploaded automatically.</p>
                   <div>
                     <button type="button" onClick={() => { void applyPlannerBackupRestore(); }} disabled={isRestoringPlannerBackup}>{isRestoringPlannerBackup ? "RESTORING…" : "RESTORE THIS BACKUP & RELOAD"}</button>
@@ -9099,7 +9668,7 @@ export default function Home() {
                     : activeLocalClass
                       ? "Shared class blocks remain visible, but they cannot confirm which gym areas are free without a ready full-schedule link."
                       : "Import a shared class to replace this sample schedule and roster."}</span>
-                {suggestedSafeScheduleGroup && activeLocalClass ? <button type="button" className="schedule-advisory-link" onClick={() => linkLocalClassToSafeSchedule(activeLocalClass.id, suggestedSafeScheduleGroup)}>REVIEW LINK {suggestedSafeScheduleGroup} →</button> : null}
+                {!isPastActivePlan && suggestedSafeScheduleGroup && activeLocalClass ? <button type="button" className="schedule-advisory-link" onClick={() => linkLocalClassToSafeSchedule(activeLocalClass.id, suggestedSafeScheduleGroup)}>REVIEW LINK {suggestedSafeScheduleGroup} →</button> : null}
               </div>
 
               {safeScheduleDay ? (
@@ -9109,12 +9678,12 @@ export default function Home() {
                       <b>{safeScheduleDay.resolvedWeek?.toUpperCase()} WEEK</b>
                       <span>WEEK OF {formatLessonPlanDate(safeScheduleDay.weekStartDate).toUpperCase()}</span>
                     </div>
-                    <button type="button" onClick={openSafeScheduleWeekAnchor}>RE-ANCHOR</button>
+                    {!isPastActivePlan ? <button type="button" onClick={openSafeScheduleWeekAnchor}>RE-ANCHOR</button> : null}
                   </div>
                   <small>{safeScheduleDay.weekResolutionSource === "legacy_exact_date"
                     ? `LEGACY EXACT-DATE CONFIRMATION · THE SHARED CYCLE OTHERWISE USES ${safeScheduleDay.weekAnchor.week.toUpperCase()} FROM ${formatLessonPlanDate(safeScheduleDay.weekAnchor.weekStartDate).toUpperCase()}`
                     : `CONTINUOUS MONDAY CYCLE · ${safeScheduleDay.weekAnchor.week.toUpperCase()} ANCHOR FROM ${formatLessonPlanDate(safeScheduleDay.weekAnchor.weekStartDate).toUpperCase()}`}</small>
-                  {isScheduleWeekAnchorOpen ? (
+                  {!isPastActivePlan && isScheduleWeekAnchorOpen ? (
                     <form className="schedule-week-anchor-form" onSubmit={(event) => {
                       event.preventDefault();
                       saveSafeScheduleWeekAnchor();
@@ -9213,7 +9782,7 @@ export default function Home() {
           </section>
 
           <section className="retro-window schedule-window">
-            <div className="window-title schedule-phase-window-title"><b>YOUR LESSON PHASES</b><div><span>{isPastActivePlan ? "PAST SNAPSHOT · READ-ONLY" : "RYAN-ONLY SHARED DRAFT"}</span>{mode === "EDIT" && !isPastActivePlan ? <button type="button" onClick={syncCurrentLessonSchedule}>SYNC DAY →</button> : null}{mode === "EDIT" && !isPastActivePlan ? <button type="button" onClick={() => { setIsEventEditorOpen(true); scrollToPlannerSection("lesson-plan"); }}>EDIT EVENTS →</button> : null}</div></div>
+            <div className="window-title schedule-phase-window-title"><b>YOUR LESSON PHASES</b><div><span>{isPastActivePlan ? isRevisingPastPlan ? "REVISING · ORIGINAL PRESERVED" : "PAST SNAPSHOT · READ-ONLY" : "RYAN-ONLY SHARED DRAFT"}</span>{mode === "EDIT" && !isPastActivePlan ? <button type="button" onClick={syncCurrentLessonSchedule}>SYNC DAY →</button> : null}{mode === "EDIT" && !isPastPlanReadOnly ? <button type="button" onClick={() => { setIsEventEditorOpen(true); scrollToPlannerSection("lesson-plan"); }}>EDIT EVENTS →</button> : null}</div></div>
             <div className="window-body schedule-list">
               {lessonPhases.map((phase) => {
                 const phaseName = phase.title.trim();
@@ -9440,7 +10009,7 @@ export default function Home() {
                       );
                     })}
                   </div>
-                  {mode === "EDIT" ? (
+                  {mode === "EDIT" && !isPastActivePlan ? (
                     <div className={`photo-area-picker ${customBoards.length ? "" : "empty"}`}>
                       <div>
                         <b>{sharedPhotoAreaCount !== null ? "SHARED PHOTO AREAS" : customBoards.length ? "YOUR PHOTO AREAS" : "NO PHOTO AREAS YET"}</b>
@@ -9470,7 +10039,7 @@ export default function Home() {
                       />
                     </div>
                   ) : null}
-                  {mode === "EDIT" && customBoardImport ? (
+                  {mode === "EDIT" && !isPastActivePlan && customBoardImport ? (
                     <div className={`photo-area-import-preview ${customBoardImport.kind}`}>
                       <strong>{customBoardImport.kind === "ready" ? "PHOTO AREA IMPORT PREVIEW" : "PHOTO AREA IMPORT BLOCKED"}</strong>
                       {customBoardImport.kind === "ready" ? (
@@ -9493,7 +10062,7 @@ export default function Home() {
                       )}
                     </div>
                   ) : null}
-                  {mode === "EDIT" && hiddenAreaEntries.length ? (
+                  {mode === "EDIT" && !isPastActivePlan && hiddenAreaEntries.length ? (
                     <div className="hidden-area-picker" aria-label="Restore locally removed station areas">
                       <div><b>REMOVED EVENTS</b><span>These stay saved locally. Restore one whenever you want it back in your station choices.</span></div>
                       <div className="hidden-area-actions">
@@ -9503,7 +10072,7 @@ export default function Home() {
                       </div>
                     </div>
                   ) : null}
-                  {isAddingCustomBoard ? (
+                  {!isPastActivePlan && isAddingCustomBoard ? (
                     <form className="new-photo-area-form" onSubmit={(event) => { event.preventDefault(); void saveNewCustomBoard(); }}>
                       <b>NEW PHOTO AREA</b>
                       <label>AREA NAME<input value={newCustomBoardTitle} onChange={(event) => setNewCustomBoardTitle(event.target.value)} maxLength={80} placeholder="e.g. North low bars" autoFocus /></label>
@@ -9603,7 +10172,7 @@ export default function Home() {
                   const usesFreeformGeometry = Boolean(layout?.usesFreeformGeometry);
                   const hasStationArt = Boolean(customBoard || referenceBoard || usesFreeformGeometry);
                   const placedAnchors = resolveVisualAnchors(zone, visualAnchorByCardId, customBoard, builtInStationSpots);
-                  const compatibleAnchors = isActivePhasePlacementMode && pendingZonePlacement
+                  const compatibleAnchors = !isPastActivePlan && isActivePhasePlacementMode && pendingZonePlacement
                     ? compatibleVisualAnchors(zone, visualAnchorByCardId, customBoard, builtInStationSpots)
                     : [];
                   const isPlacementTarget = compatibleAnchors.length > 0;
@@ -9874,7 +10443,7 @@ export default function Home() {
                         "--custom-board-presentation-scale": customPhotoPanel.scale,
                       } as React.CSSProperties : undefined}
                     >
-                      {customBoard && mode === "EDIT" ? (
+                      {customBoard && mode === "EDIT" && !isPastActivePlan ? (
                         <div className="custom-board-toolbar" aria-label={`Tools for ${customBoard.title}`}>
                           <b className="area-tools-heading">AREA TOOLS</b>
                           <button
@@ -9941,7 +10510,7 @@ export default function Home() {
                           ) : null}
                         </div>
                       ) : null}
-                      {!customBoard && mode === "EDIT" ? (
+                      {!customBoard && mode === "EDIT" && !isPastActivePlan ? (
                         <div className="custom-board-toolbar built-in-board-toolbar" aria-label={`Tools for ${zone.title}`}>
                           <b className="area-tools-heading">AREA TOOLS</b>
                           {hasBuiltInStationEditor ? <>
@@ -10004,7 +10573,7 @@ export default function Home() {
                           ) : null}
                         </div>
                       ) : null}
-                      {customBoard && mode === "EDIT" && boardTool === "spots" ? (
+                      {customBoard && mode === "EDIT" && !isPastActivePlan && boardTool === "spots" ? (
                         <div className="custom-spot-editor">
                           <b>STATION SPOTS</b>
                           {selectedCustomSpot ? <>
@@ -10013,7 +10582,7 @@ export default function Home() {
                           </> : <span>Tap the photo to add a spot, then tap/drag that marker to rename, move, or remove it.</span>}
                         </div>
                       ) : null}
-                      {hasBuiltInStationEditor && mode === "EDIT" && boardTool === "spots" ? (
+                      {hasBuiltInStationEditor && mode === "EDIT" && !isPastActivePlan && boardTool === "spots" ? (
                         <div className="custom-spot-editor built-in-spot-editor">
                           <b>STATION SPOTS</b>
                           {selectedBuiltInSpot ? <>
@@ -10026,7 +10595,7 @@ export default function Home() {
                           </> : <span>Tap the supplied image to add a spot, then tap or drag a marker to rename or move it. Supplied spots can always be reset.</span>}
                         </div>
                       ) : null}
-                      {customBoard && mode === "EDIT" && boardTool === "labels" ? (
+                      {customBoard && mode === "EDIT" && !isPastActivePlan && boardTool === "labels" ? (
                         <div className="custom-label-editor">
                           <b>LABEL ARRANGEMENT</b>
                           {selectedCustomLabel && selectedCustomLabelSpot && selectedCustomLabelLayout ? <>
@@ -10055,7 +10624,7 @@ export default function Home() {
                           </> : <span>Tap a placed label, then drag it around the photo or choose a line style.</span>}
                         </div>
                       ) : null}
-                      {hasBuiltInStationEditor && mode === "EDIT" && boardTool === "labels" && layout && builtInStationSpots ? (
+                      {hasBuiltInStationEditor && mode === "EDIT" && !isPastActivePlan && boardTool === "labels" && layout && builtInStationSpots ? (
                         <div className="custom-label-editor built-in-label-editor">
                           <b>LABEL ARRANGEMENT</b>
                           {selectedBuiltInLabel && selectedBuiltInLabelSpot && selectedBuiltInLabelLayout ? <>
@@ -10264,6 +10833,66 @@ export default function Home() {
         />
       ) : null}
 
+      {isPastRevisionConfirmOpen ? (
+        <div className="idea-detail-scrim" role="presentation" onMouseDown={() => setIsPastRevisionConfirmOpen(false)}>
+          <section className="idea-detail-dialog retro-window past-revision-dialog" role="dialog" aria-modal="true" aria-label="Confirm past lesson revision" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="window-title">EDIT PAST LESSON <button type="button" onClick={() => setIsPastRevisionConfirmOpen(false)} aria-label="Close past lesson edit confirmation">×</button></div>
+            <div className="idea-detail-body">
+              <p><strong>The current past version will be saved before editing begins.</strong> Your original phases, labels, frozen board setup, and saved schedule context stay recoverable in Revision History.</p>
+              <p>Shared class, schedule, photo-area, and board-definition tools remain locked. You can revise this lesson&apos;s phases, cards, notes, and document details only. Attendance and operational to-dos stay live outside revision history.</p>
+              <div className="idea-editor-actions">
+                <button type="button" onClick={() => setIsPastRevisionConfirmOpen(false)}>KEEP VIEW-ONLY</button>
+                <button type="button" onClick={beginPastLessonRevision}>SAVE ORIGINAL + EDIT</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {revisionReview ? (
+        <div className="idea-detail-scrim" role="presentation" onMouseDown={() => setRevisionReview(null)}>
+          <section className="idea-detail-dialog retro-window past-revision-dialog" role="dialog" aria-modal="true" aria-label="Past lesson revision history" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="window-title">REVISION HISTORY <button type="button" onClick={() => setRevisionReview(null)} aria-label="Close revision history">×</button></div>
+            <div className="idea-detail-body">
+              <p><strong>{lessonRevisions.length} recoverable version{lessonRevisions.length === 1 ? "" : "s"}</strong> are retained with this lesson. Restoring a version first saves the current revision as another recovery point.</p>
+              <div className="revision-history-list" aria-label="Saved revisions">
+                {[...lessonRevisions].reverse().map((revision) => (
+                  <button key={revision.id} type="button" className={revision.id === revisionReview.id ? "selected" : ""} onClick={() => setRevisionReview(revision)}>
+                    <b>{revision.action === "past-edit" ? "ORIGINAL BEFORE PAST EDIT" : "VERSION BEFORE RESTORE"}</b>
+                    <span>{new Date(revision.createdAt).toLocaleString()} · {revision.snapshot.phases.length} phases · {revision.snapshot.boardSnapshot.customBoards.length} photo board{revision.snapshot.boardSnapshot.customBoards.length === 1 ? "" : "s"}</span>
+                  </button>
+                ))}
+              </div>
+              <section className="revision-history-summary" aria-label="Selected revision summary">
+                <b>SELECTED VERSION</b>
+                <span>{revisionReview.snapshot.phases.length} phases · {revisionReview.snapshot.documentDetails.goals.trim() ? "goals saved" : "no goal text"} · {revisionReview.snapshot.boardSnapshot.stationBoardOverrides.boardsById ? Object.keys(revisionReview.snapshot.boardSnapshot.stationBoardOverrides.boardsById).length : 0} frozen station boards</span>
+                <span>{revisionReview.scheduleSnapshot ? revisionReview.scheduleSnapshot.source === "legacy-unavailable" ? "Schedule context was unavailable in the legacy saved plan." : `${revisionReview.scheduleSnapshot.source.replace("-", " ").toUpperCase()} · ${revisionReview.scheduleSnapshot.blocks.length} saved schedule blocks` : "No schedule context was captured for this version."}</span>
+              </section>
+              <div className="idea-editor-actions">
+                <button type="button" onClick={() => setRevisionReview(null)}>CLOSE</button>
+                <button type="button" disabled={!isRevisingPastPlan} onClick={() => { setRevisionRestoreCandidate(revisionReview); setRevisionReview(null); }}>RESTORE THIS VERSION</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {revisionRestoreCandidate ? (
+        <div className="idea-detail-scrim" role="presentation" onMouseDown={() => setRevisionRestoreCandidate(null)}>
+          <section className="idea-detail-dialog retro-window past-revision-dialog" role="dialog" aria-modal="true" aria-label="Confirm revision restore" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="window-title">RESTORE SAVED VERSION <button type="button" onClick={() => setRevisionRestoreCandidate(null)} aria-label="Close restore confirmation">×</button></div>
+            <div className="idea-detail-body">
+              <p>Restore the version saved {new Date(revisionRestoreCandidate.createdAt).toLocaleString()}?</p>
+              <p>Your current revision will be saved first as a new recovery point. Nothing in history is deleted.</p>
+              <div className="idea-editor-actions">
+                <button type="button" onClick={() => setRevisionRestoreCandidate(null)}>CANCEL</button>
+                <button type="button" onClick={restorePastLessonRevision}>SAVE CURRENT + RESTORE</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
       {stationMakerSetup && stationMakerTarget ? <StationMakerDialog setup={stationMakerSetup} onSave={(setup) => void saveStationMaker(setup)} onCancel={() => { setStationMakerSetup(null); setStationMakerTarget(null); }} /> : null}
 
       {detailCard ? (
@@ -10288,7 +10917,7 @@ export default function Home() {
                         : <img src={ideaMediaUrls[detailCard.mediaId]} alt={`Reference photo for ${detailCard.title}`} />}
                     </figure>
                   ) : null}
-                  {detailCard.stationSetupId ? <section className="idea-station-preview"><b>EDITABLE PIXEL STATION</b><StationPreview setup={stationSetupsById[detailCard.stationSetupId]} label={detailCard.title} /><button type="button" onClick={() => void openSavedStationMaker(detailCard)}>EDIT STATION</button></section> : null}
+                  {detailCard.stationSetupId ? <section className="idea-station-preview"><b>EDITABLE 2.5D STATION</b><StationPreview setup={stationSetupsById[detailCard.stationSetupId]} label={detailCard.title} /><button type="button" onClick={() => void openSavedStationMaker(detailCard)}>EDIT STATION</button></section> : null}
                   <section className="idea-detail-facts" aria-label="Saved coaching details">
                     {detailCard.instructions.length ? <div><b>INSTRUCTIONS</b><ul>{detailCard.instructions.map((instruction) => <li key={instruction}>{instruction}</li>)}</ul></div> : null}
                     {detailCard.coachingCues.length ? <div><b>COACHING CUES</b><ul>{detailCard.coachingCues.map((cue) => <li key={cue}>{cue}</li>)}</ul></div> : null}
@@ -10372,6 +11001,7 @@ export default function Home() {
                     <option value="DRILL">DRILL</option>
                     <option value="ROUTINE">ROUTINE</option>
                     <option value="ACTIVITY">ACTIVITY</option>
+                    <option value="WARM_UP">WARM-UP</option>
                     <option value="REFERENCE">REFERENCE</option>
                   </select>
                 </label>
@@ -10393,6 +11023,13 @@ export default function Home() {
                     );
                   })}
                 </fieldset>
+              ) : libraryQuickEdit.field === "tags" ? (
+                <IdeaTagPicker
+                  label="TAGS"
+                  value={libraryQuickEdit.value}
+                  onChange={(value) => setLibraryQuickEdit((current) => current ? { ...current, value } : current)}
+                  options={libraryTagOptions}
+                />
               ) : libraryQuickEdit.field === "title" || libraryQuickEdit.field === "safety" ? (
                 <label>{libraryQuickEditLabels[libraryQuickEdit.field]}
                   <input autoFocus value={libraryQuickEdit.value} maxLength={libraryQuickEdit.field === "title" ? 100 : 260} onChange={(event) => setLibraryQuickEdit((current) => current ? { ...current, value: event.target.value } : current)} />
@@ -10432,6 +11069,7 @@ export default function Home() {
                     <option value="DRILL">DRILL</option>
                     <option value="ROUTINE">ROUTINE</option>
                     <option value="ACTIVITY">ACTIVITY</option>
+                    <option value="WARM_UP">WARM-UP</option>
                     <option value="REFERENCE">REFERENCE</option>
                   </select>
                 </label>
@@ -10455,7 +11093,12 @@ export default function Home() {
                     </label>
                   ))}
                 </fieldset>
-                <label>TAGS <small>one per line or comma</small><textarea value={libraryEditDraft.tags} onChange={(event) => updateLibraryEditDraft("tags", event.target.value)} /></label>
+                <IdeaTagPicker
+                  label="TAGS"
+                  value={libraryEditDraft.tags}
+                  onChange={(value) => updateLibraryEditDraft("tags", value)}
+                  options={libraryTagOptions}
+                />
                 <label>EVENTS <small>one per line or comma</small><textarea value={libraryEditDraft.events} onChange={(event) => updateLibraryEditDraft("events", event.target.value)} /></label>
                 <label className="wide">SKILLS <small>one per line or comma</small><textarea value={libraryEditDraft.skills} onChange={(event) => updateLibraryEditDraft("skills", event.target.value)} /></label>
                 <label>GOALS <small>one per line or comma</small><textarea value={libraryEditDraft.goals} onChange={(event) => updateLibraryEditDraft("goals", event.target.value)} /></label>
@@ -10500,7 +11143,7 @@ export default function Home() {
                       setEditingIdeaMediaFile(null);
                     }}
                   >
-                    {removeEditingStation ? "KEEP PIXEL STATION" : "REMOVE PIXEL STATION"}
+                    {removeEditingStation ? "KEEP STATION" : "REMOVE STATION"}
                   </button> : null}
                   <button
                     type="button"
@@ -10510,13 +11153,13 @@ export default function Home() {
                   >
                     REMOVE ATTACHMENT
                   </button>
-                  {editingIdeaStationSetup && !editingLibraryItem.stationSetupId ? <button type="button" className="detail-remove" disabled={isSavingLibraryEdit} onClick={() => setEditingIdeaStationSetup(null)}>CLEAR PIXEL STATION</button> : null}
+                  {editingIdeaStationSetup && !editingLibraryItem.stationSetupId ? <button type="button" className="detail-remove" disabled={isSavingLibraryEdit} onClick={() => setEditingIdeaStationSetup(null)}>CLEAR STATION</button> : null}
                 </div>
-                {editingLibraryItem.stationSetupId && !removeEditingStation ? <p className="reminder-form-help">This idea has a saved pixel station. Remove it in this edit before replacing it with a photo or video; it remains saved until you tap Save.</p> : null}
-                {removeEditingStation ? <p className="reminder-form-help">The pixel station will be removed only when you save this edit.</p> : null}
+                {editingLibraryItem.stationSetupId && !removeEditingStation ? <p className="reminder-form-help">This idea has a saved station. Remove it in this edit before replacing it with a photo or video; it remains saved until you tap Save.</p> : null}
+                {removeEditingStation ? <p className="reminder-form-help">The station will be removed only when you save this edit.</p> : null}
                 {editingIdeaStationSetup ? (
                   <section className="idea-station-preview">
-                    <b>EDITABLE PIXEL STATION READY · {editingIdeaStationSetup.objects.length} {editingIdeaStationSetup.objects.length === 1 ? "PIECE" : "PIECES"}</b>
+                    <b>EDITABLE SCALED STATION READY · {editingIdeaStationSetup.objects.length} {editingIdeaStationSetup.objects.length === 1 ? "OBJECT" : "OBJECTS"}</b>
                     <StationPreview setup={editingIdeaStationSetup} label={`Pending station for ${editingLibraryItem.title}`} />
                   </section>
                 ) : editingMediaUrl ? (

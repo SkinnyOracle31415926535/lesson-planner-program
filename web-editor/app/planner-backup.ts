@@ -19,8 +19,10 @@ import {
   sharedIdeaMediaReferences,
 } from "./shared-idea-library";
 import {
+  copyStationSetup,
   isStationSetup,
   listStationSetups,
+  migrateStationSetup,
   restoreStationSetups,
   type StationSetup,
 } from "./station-setups";
@@ -418,6 +420,25 @@ function isPlannerBackupBundle(value: unknown): value is PlannerBackupBundleV1 {
   return attachmentBytes <= MAX_PLANNER_BACKUP_ATTACHMENT_BYTES && validateReferenceIntegrity(value as PlannerBackupBundleV1) === null;
 }
 
+/**
+ * Copy the parsed backup before it reaches browser storage.  V1 station
+ * layouts are deliberately retained as legacy pixel documents here: a backup
+ * restore must not invent a meter conversion that the original file lacks.
+ */
+function copyPlannerBackupBundle(bundle: PlannerBackupBundleV1): PlannerBackupBundleV1 | null {
+  const stationSetups = bundle.media.stationSetups.map(migrateStationSetup);
+  if (stationSetups.some((setup) => setup === null)) return null;
+  return {
+    ...bundle,
+    localStorage: { ...bundle.localStorage },
+    media: {
+      areaPhotos: bundle.media.areaPhotos.map((photo) => ({ ...photo })),
+      ideaMedia: bundle.media.ideaMedia.map((media) => ({ ...media })),
+      stationSetups: stationSetups.map((setup) => copyStationSetup(setup!)),
+    },
+  };
+}
+
 function restoreLocalStorage(storage: Storage, values: Record<string, string>): void {
   const currentKeys = Object.keys(plannerBackupStorageEntries(storage));
   // Publish every lesson payload first, then its index. This matches the
@@ -472,7 +493,7 @@ export async function createPlannerBackupBundle(storage: Storage, exportedAt = n
     version: PLANNER_BACKUP_VERSION,
     exportedAt,
     localStorage,
-    media: { areaPhotos, ideaMedia: backedUpIdeaMedia, stationSetups },
+    media: { areaPhotos, ideaMedia: backedUpIdeaMedia, stationSetups: stationSetups.map(copyStationSetup) },
   };
   if (plannerBackupSummary(bundle).attachmentBytes > MAX_PLANNER_BACKUP_ATTACHMENT_BYTES) {
     throw new Error("The saved attachments are too large for one full JSON backup.");
@@ -489,8 +510,10 @@ export function parsePlannerBackupJson(json: string, fileSize = json.length): Pl
   try {
     const parsed: unknown = JSON.parse(json);
     if (!isPlannerBackupBundle(parsed)) return { ok: false, error: "This is not a valid full Lesson Planner backup." };
-    const integrityError = validateReferenceIntegrity(parsed);
-    return integrityError ? { ok: false, error: integrityError } : { ok: true, value: parsed };
+    const migrated = copyPlannerBackupBundle(parsed);
+    if (!migrated) return { ok: false, error: "This backup has an invalid station layout." };
+    const integrityError = validateReferenceIntegrity(migrated);
+    return integrityError ? { ok: false, error: integrityError } : { ok: true, value: migrated };
   } catch {
     return { ok: false, error: "The selected file is not valid JSON." };
   }
@@ -499,11 +522,12 @@ export function parsePlannerBackupJson(json: string, fileSize = json.length): Pl
 export async function restorePlannerBackup(storage: Storage, bundle: PlannerBackupBundleV1): Promise<void> {
   const validation = parsePlannerBackupJson(JSON.stringify(bundle));
   if (!validation.ok) throw new Error(validation.error);
+  const restored = validation.value;
   // Pause both automatic sync paths before the restored browser data becomes visible.
   // If an IndexedDB write fails, preserving this guard is safer than risking a
   // partially restored local copy being overwritten by the remote workspace.
   markPlannerBackupRestoreGuards(storage);
-  const areaPhotos: StoredAreaPhoto[] = bundle.media.areaPhotos.map((photo) => ({
+  const areaPhotos: StoredAreaPhoto[] = restored.media.areaPhotos.map((photo) => ({
     id: photo.id,
     blob: blobFromBase64(photo.base64, photo.mimeType),
     filename: photo.filename,
@@ -512,7 +536,7 @@ export async function restorePlannerBackup(storage: Storage, bundle: PlannerBack
     height: photo.height,
     createdAt: photo.createdAt,
   }));
-  const ideaMedia: StoredIdeaMedia[] = bundle.media.ideaMedia.map((media) => ({
+  const ideaMedia: StoredIdeaMedia[] = restored.media.ideaMedia.map((media) => ({
     id: media.id,
     ideaId: media.ideaId,
     blob: blobFromBase64(media.base64, media.mimeType),
@@ -527,9 +551,9 @@ export async function restorePlannerBackup(storage: Storage, bundle: PlannerBack
   await Promise.all([
     restoreCustomBoardPhotos(areaPhotos),
     restoreIdeaMedia(ideaMedia),
-    restoreStationSetups(bundle.media.stationSetups),
+    restoreStationSetups(restored.media.stationSetups),
   ]);
-  restoreLocalStorage(storage, bundle.localStorage);
+  restoreLocalStorage(storage, restored.localStorage);
 }
 
 export function markPlannerBackupRestoreGuards(storage: Storage): void {

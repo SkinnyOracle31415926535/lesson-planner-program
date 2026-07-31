@@ -34,6 +34,34 @@ final class LessonPlannerUITests: XCTestCase {
     }
 
     @MainActor
+    func testIdeaLibraryDetailExposesQuickFieldEditing() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        let newIdeaButton = app.buttons["+ NEW IDEA"]
+        for _ in 0..<10 where !newIdeaButton.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(newIdeaButton.exists, "The populated Idea Library should remain reachable in Edit mode.")
+
+        let infoButton = app.buttons["INFO"].firstMatch
+        XCTAssertTrue(infoButton.exists, "Each visible Idea card should keep a single-tap detail action.")
+        infoButton.tap()
+
+        XCTAssertTrue(app.navigationBars["IDEA DETAIL"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["TYPE"].exists)
+        XCTAssertTrue(app.staticTexts["DESCRIPTION"].exists)
+        XCTAssertTrue(app.staticTexts["PHOTO / STATION"].exists)
+
+        let editTypeButton = app.buttons["idea-detail-edit-kind"]
+        XCTAssertTrue(editTypeButton.exists)
+        editTypeButton.tap()
+
+        XCTAssertTrue(app.navigationBars["QUICK EDIT"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["SAVE TYPE"].exists)
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {
