@@ -19,6 +19,10 @@ final class PlannerStore {
     /// All mutation goes through event-aware methods below.
     var phases: [LessonPhase] { eventBlocks.flatMap(\.phases) }
     var activeShelf: [PlanningCard]
+    /// Archive records are editable library records too. Making the fixture
+    /// shelf local and persisted avoids a misleading read-only exception for
+    /// an idea merely because it was archived.
+    var archivedShelf: [PlanningCard]
     var attendance: [AttendancePerson]
     var isReady: Bool
     var dailyTasks: [DailyTask]
@@ -61,6 +65,7 @@ final class PlannerStore {
             eventBlocks = persisted.eventBlocks
                 ?? LessonEvent.migratedFromLegacyPhases(persisted.phases ?? LessonDemoData.phases)
             activeShelf = persisted.activeShelf
+            archivedShelf = persisted.archivedShelf ?? LessonDemoData.archivedLibrary
             attendance = persisted.attendance
             isReady = persisted.isReady
             var loadedDailyTasks = persisted.dailyTasks ?? LessonDemoData.dailyTasks
@@ -84,6 +89,7 @@ final class PlannerStore {
         } else {
             eventBlocks = LessonDemoData.events
             activeShelf = LessonDemoData.activeShelf
+            archivedShelf = LessonDemoData.archivedLibrary
             attendance = LessonDemoData.attendance
             isReady = false
             dailyTasks = LessonDemoData.dailyTasks
@@ -96,11 +102,51 @@ final class PlannerStore {
     }
 
     var libraryEventOptions: [String] {
-        ["ALL"] + Array(Set(allLibraryCards.map(\.libraryEvent))).sorted()
+        ["ALL"] + Array(Set(allLibraryCards.flatMap(\.libraryEvents))).sorted()
     }
 
     var libraryLevelOptions: [String] {
-        ["ALL"] + Array(Set(allLibraryCards.map(\.libraryLevel))).sorted()
+        ["ALL"] + Array(Set(allLibraryCards.flatMap(\.libraryLevels))).sorted()
+    }
+
+    /// Tags are intentionally collected from saved local ideas rather than a
+    /// second, hand-maintained catalog. The first saved spelling becomes the
+    /// reusable display spelling for obvious variants such as warmup,
+    /// warm-up, and Warm Up.
+    var libraryTagSuggestions: [String] {
+        var canonicalTags: [String: String] = [:]
+        for card in allLibraryCards {
+            for tag in card.tags {
+                let cleanedTag = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !cleanedTag.isEmpty else { continue }
+                let key = Self.normalizedTagKey(cleanedTag)
+                if canonicalTags[key] == nil {
+                    canonicalTags[key] = cleanedTag
+                }
+            }
+        }
+        return canonicalTags.values.sorted {
+            $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+        }
+    }
+
+    /// Use the saved spelling when a matching tag already exists and remove
+    /// duplicate spellings within the submitted selection. This is deliberately
+    /// narrow: it does not collapse unrelated words just because they look
+    /// similar.
+    func normalizedLibraryTags(_ tags: [String]) -> [String] {
+        let existingTags = Dictionary(
+            uniqueKeysWithValues: libraryTagSuggestions.map { (Self.normalizedTagKey($0), $0) }
+        )
+        var seenKeys = Set<String>()
+        var normalizedTags: [String] = []
+        for tag in tags {
+            let cleanedTag = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = Self.normalizedTagKey(cleanedTag)
+            guard !key.isEmpty, seenKeys.insert(key).inserted else { continue }
+            normalizedTags.append(existingTags[key] ?? cleanedTag)
+        }
+        return normalizedTags
     }
 
     func libraryCards(in scope: LibraryScope) -> [PlanningCard] {
@@ -117,7 +163,7 @@ final class PlannerStore {
                 rawLibraryCard(withID: cardID).map(decorateForLibrary)
             }
         case .archive:
-            return LessonDemoData.archivedLibrary
+            return archivedShelf
                 .map(decorateForLibrary)
                 .sorted { lhs, rhs in
                     if lhs.isGem != rhs.isGem { return lhs.isGem }
@@ -137,6 +183,9 @@ final class PlannerStore {
 
         if let activeShelfIndex = activeShelf.firstIndex(where: { $0.id == cardID }) {
             activeShelf[activeShelfIndex].isGem = gemmedLibraryCardIDs.contains(cardID)
+        }
+        if let archivedShelfIndex = archivedShelf.firstIndex(where: { $0.id == cardID }) {
+            archivedShelf[archivedShelfIndex].isGem = gemmedLibraryCardIDs.contains(cardID)
         }
         save()
     }
@@ -251,7 +300,14 @@ final class PlannerStore {
             tags: libraryCard.tags,
             accent: libraryCard.accent,
             isGem: libraryCard.isGem,
-            safetyRequirement: libraryCard.safetyRequirement
+            safetyRequirement: libraryCard.safetyRequirement,
+            levels: libraryCard.levels,
+            skills: libraryCard.skills,
+            events: libraryCard.events,
+            mats: libraryCard.mats,
+            variantCount: libraryCard.variantCount,
+            hasPhotoAttachment: libraryCard.hasPhotoAttachment,
+            hasStationSetup: libraryCard.hasStationSetup
         )
 
         if let destinationZoneID {
@@ -493,27 +549,71 @@ final class PlannerStore {
         let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanedTitle.isEmpty else { return nil }
         let cleanedDetail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleanedTags = tags
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        let accent: CardAccent = switch kind {
-        case .drill: .cyan
-        case .activity: .green
-        case .reference: .yellow
-        }
+        let cleanedTags = normalizedLibraryTags(tags)
         let card = PlanningCard(
             id: "library-\(UUID().uuidString.lowercased())",
             kind: kind,
             title: cleanedTitle,
             detail: cleanedDetail.isEmpty ? "Coach-added idea." : cleanedDetail,
             tags: cleanedTags.isEmpty ? ["GENERAL"] : cleanedTags,
-            accent: accent,
+            accent: kind.defaultAccent,
             isGem: false,
             safetyRequirement: nil
         )
         activeShelf.insert(card, at: 0)
         save()
         return card
+    }
+
+    /// Updates only the source library record. Existing lesson placements are
+    /// intentional snapshots and therefore remain unchanged.
+    @discardableResult
+    func updateLibraryCard(
+        id: String,
+        kind: PlanningCardKind,
+        title: String,
+        detail: String,
+        tags: [String],
+        levels: [String],
+        skills: [String],
+        events: [String],
+        mats: [String],
+        safetyRequirement: String?,
+        variantCount: Int
+    ) -> PlanningCard? {
+        let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedTitle.isEmpty else { return nil }
+
+        let cleanedDetail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanedSafetyRequirement = safetyRequirement?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let updatedTags = normalizedLibraryTags(tags)
+
+        func applyEdits(to card: inout PlanningCard) {
+            card.kind = kind
+            card.title = cleanedTitle
+            card.detail = cleanedDetail.isEmpty ? "Coach-added idea." : cleanedDetail
+            card.tags = updatedTags.isEmpty ? ["GENERAL"] : updatedTags
+            card.accent = kind.defaultAccent
+            card.levels = Self.cleanedLibraryValues(levels)
+            card.skills = Self.cleanedLibraryValues(skills)
+            card.events = Self.cleanedLibraryValues(events)
+            card.mats = Self.cleanedLibraryValues(mats)
+            card.safetyRequirement = cleanedSafetyRequirement?.isEmpty == false ? cleanedSafetyRequirement : nil
+            card.variantCount = max(1, variantCount)
+        }
+
+        if let activeIndex = activeShelf.firstIndex(where: { $0.id == id }) {
+            applyEdits(to: &activeShelf[activeIndex])
+            save()
+            return decorateForLibrary(activeShelf[activeIndex])
+        }
+        if let archiveIndex = archivedShelf.firstIndex(where: { $0.id == id }) {
+            applyEdits(to: &archivedShelf[archiveIndex])
+            save()
+            return decorateForLibrary(archivedShelf[archiveIndex])
+        }
+        return nil
     }
 
     private func phaseLocation(for phaseID: String) -> (eventIndex: Int, phaseIndex: Int)? {
@@ -552,6 +652,7 @@ final class PlannerStore {
             eventBlocks: eventBlocks,
             phases: phases,
             activeShelf: activeShelf,
+            archivedShelf: archivedShelf,
             attendance: attendance,
             isReady: isReady,
             taskComplete: taskComplete,
@@ -592,7 +693,7 @@ final class PlannerStore {
     }
 
     private var allLibraryCards: [PlanningCard] {
-        activeShelf + LessonDemoData.archivedLibrary
+        activeShelf + archivedShelf
     }
 
     private func rawLibraryCard(withID cardID: String) -> PlanningCard? {
@@ -624,6 +725,30 @@ final class PlannerStore {
             .filter(\.isGem)
             .map(\.id))
     }
+
+    private static func normalizedTagKey(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+            .unicodeScalars
+            .filter { CharacterSet.alphanumerics.contains($0) }
+            .map(String.init)
+            .joined()
+    }
+
+    private static func cleanedLibraryValues(_ values: [String]) -> [String] {
+        var seenValues = Set<String>()
+        return values.compactMap { value in
+            let cleanedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !cleanedValue.isEmpty else { return nil }
+            let comparisonKey = cleanedValue.folding(
+                options: [.caseInsensitive, .diacriticInsensitive],
+                locale: .current
+            )
+            return seenValues.insert(comparisonKey).inserted ? cleanedValue : nil
+        }
+    }
 }
 
 private struct PersistedLesson: Codable {
@@ -633,6 +758,9 @@ private struct PersistedLesson: Codable {
     /// older prototype builds that persisted only a flat phase list.
     let phases: [LessonPhase]?
     let activeShelf: [PlanningCard]
+    /// Optional so pre-archive-edit local files retain the built-in archive
+    /// fixture without failing their migration.
+    let archivedShelf: [PlanningCard]?
     let attendance: [AttendancePerson]
     let isReady: Bool
     let taskComplete: Bool

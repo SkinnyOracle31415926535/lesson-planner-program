@@ -13,6 +13,7 @@ import {
   plannerBackupFilename,
   plannerBackupSummary,
 } from "../app/planner-backup";
+import { LEGACY_STATION_CANVAS, createLegacyStationObject } from "../app/station-setups";
 
 const exportedAt = "2026-07-29T20:30:00.000Z";
 
@@ -106,6 +107,29 @@ test("full planner backups parse only their versioned format", () => {
     localStorage: { "gym-lesson-planner-public-workspace-checkpoint-v1": "{}" },
   };
   assert.equal(parsePlannerBackupJson(JSON.stringify(withCheckpoint)).ok, false);
+});
+
+test("full planner backups copy legacy pixel stations without falsely converting their coordinates to meters", () => {
+  const legacyStation = {
+    id: "legacy-station",
+    version: 1 as const,
+    canvas: LEGACY_STATION_CANVAS,
+    objects: [{ ...createLegacyStationObject("panel", 1, "legacy-panel"), x: 448, y: 160 }],
+    createdAt: exportedAt,
+    updatedAt: exportedAt,
+  };
+  const parsed = parsePlannerBackupJson(JSON.stringify({
+    ...emptyBackup(),
+    media: { areaPhotos: [], ideaMedia: [], stationSetups: [legacyStation] },
+  }));
+  assert.equal(parsed.ok, true);
+  if (!parsed.ok) return;
+  assert.equal(parsed.value.media.stationSetups[0]?.version, 1);
+  assert.deepEqual(parsed.value.media.stationSetups[0]?.canvas, LEGACY_STATION_CANVAS);
+  assert.equal(parsed.value.media.stationSetups[0]?.objects[0]?.x, 448);
+
+  legacyStation.objects[0]!.x = 0;
+  assert.equal(parsed.value.media.stationSetups[0]?.objects[0]?.x, 448, "parser returns a safe copy for restore");
 });
 
 test("full planner backups require every referenced photo", () => {

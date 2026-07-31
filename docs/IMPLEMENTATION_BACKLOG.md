@@ -26,7 +26,7 @@ This is the initial traditional engineering backlog. Keep it updated as work sta
 
 ## Milestone 2 — Local lesson planning core
 
-- [ ] Complete local/mock persistence and version-history behavior. The iPad and browser prototypes now persist local lesson edits, snapshots, and library preferences; revision history is not built.
+- [x] Complete local/mock persistence and version-history behavior. Browser lesson payload v9 preserves bounded, recoverable past-lesson revisions with frozen board and schedule context; legacy payloads migrate without rewriting their history.
 - [ ] Build classes/calendar/day selection and smart-draft structure. A bridge-level safe day resolver is complete; both clients now show a static contract-shaped advisory preview, but neither connects to real schedule data or may auto-apply it to phases.
 - [ ] Build library Inbox, Active Shelf, Archive, filter/search, star, recent-use, variants, and sources. Both prototypes now have local retrieval slices, but real imported catalog data and sources are not wired into either client.
 - [ ] Build Lesson/Phase/Lane data and text-only/mixed visual phases. Both prototypes now have event blocks with ordered phases, explicit add-within-event versus transition-early behavior, title/time/mode editing, selected-only station rendering, parked-zone preservation, structured text plans, direct tap-to-place targets, and legacy-style View output. Confirmed selected zones render against the owner’s Freeform geometry; spatial drag/drop, parallel lanes, reusable recipes, and mapping of every remaining gym area remain pending.

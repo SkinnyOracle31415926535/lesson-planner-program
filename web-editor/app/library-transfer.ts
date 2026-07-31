@@ -110,6 +110,7 @@ function isLibraryTransferIdea(value: unknown): value is LibraryTransferIdea {
       || value.kind === "DRILL"
       || value.kind === "ROUTINE"
       || value.kind === "ACTIVITY"
+      || value.kind === "WARM_UP"
       || value.kind === "REFERENCE")
     && isText(value.title, 500)
     && value.title.trim().length > 0

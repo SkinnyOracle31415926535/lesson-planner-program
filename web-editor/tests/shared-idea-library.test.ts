@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { LibraryItem } from "../app/lesson-data";
-import { STATION_CANVAS, type StationSetup } from "../app/station-setups";
+import {
+  LEGACY_STATION_CANVAS,
+  createLegacyStationObject,
+  createStationObject,
+  createStationSetup,
+  type StationSetup,
+} from "../app/station-setups";
 import {
   copySharedIdeaLibraryState,
   isSharedIdeaLibraryEmpty,
@@ -37,23 +43,10 @@ function idea(id: string): LibraryItem {
 }
 
 const station: StationSetup = {
-  id: "station-handstand",
-  version: 1,
-  canvas: STATION_CANVAS,
-  objects: [{
-    id: "station-object-panel",
-    kind: "equipment",
-    assetId: "panel",
-    color: "blue",
-    x: 0,
-    y: 0,
-    width: 192,
-    height: 96,
-    rotation: 0,
-    zIndex: 1,
-  }],
+  ...createStationSetup("station-handstand"),
   createdAt: "2026-07-25T00:00:00.000Z",
   updatedAt: "2026-07-25T00:00:00.000Z",
+  objects: [createStationObject("norberts-power-incline-2", 1, "station-object-incline")],
 };
 
 function state() {
@@ -99,6 +92,26 @@ test("legacy public Idea Library preferences upgrade to an empty Drafts shelf", 
   const parsed = parseSharedIdeaLibraryState(legacy);
   assert.equal(parsed?.preferences.version, 7);
   assert.deepEqual(parsed?.preferences.draftIdeaIds, []);
+});
+
+test("shared state accepts WARM_UP cards and retains legacy station coordinates without a false scale migration", () => {
+  const legacyStation = {
+    id: station.id,
+    version: 1 as const,
+    canvas: LEGACY_STATION_CANVAS,
+    objects: [{ ...createLegacyStationObject("panel", 1, "legacy-panel"), x: 320, y: 128 }],
+    createdAt: "2026-07-25T00:00:00.000Z",
+    updatedAt: "2026-07-25T00:00:00.000Z",
+  };
+  const payload = state();
+  payload.preferences.customCards[0]!.kind = "WARM_UP";
+  payload.stationSetups = [legacyStation];
+
+  const parsed = parseSharedIdeaLibraryState(payload);
+  assert.equal(parsed?.preferences.customCards[0]?.kind, "WARM_UP");
+  assert.equal(parsed?.stationSetups[0]?.version, 1);
+  assert.deepEqual(parsed?.stationSetups[0]?.canvas, LEGACY_STATION_CANVAS);
+  assert.equal(parsed?.stationSetups[0]?.objects[0]?.x, 320);
 });
 
 test("public Idea Library parser rejects unbounded or orphaned public records", () => {

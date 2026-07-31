@@ -46,6 +46,173 @@ private struct SnapshotPlacementRequest: Identifiable {
     let phaseID: String
 }
 
+/// The compact library card stays readable at a glance, while each of these
+/// named fields can be changed without opening a broad, unrelated form.
+private enum IdeaLibraryEditableField: String, Identifiable {
+    case kind
+    case title
+    case description
+    case levels
+    case tags
+    case skills
+    case events
+    case mats
+    case safety
+    case variantCount
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .kind: "TYPE"
+        case .title: "TITLE"
+        case .description: "DESCRIPTION"
+        case .levels: "LEVELS"
+        case .tags: "TAGS"
+        case .skills: "SKILLS"
+        case .events: "EVENTS"
+        case .mats: "MATS NEEDED"
+        case .safety: "SAFETY NOTE"
+        case .variantCount: "VARIANT COUNT"
+        }
+    }
+}
+
+private struct IdeaLibraryQuickEditRequest: Identifiable {
+    let id = UUID()
+    let card: PlanningCard
+    let field: IdeaLibraryEditableField
+}
+
+/// A lightweight reusable picker that learns from tags already saved in the
+/// local library. It deliberately begins as a small selected/relevant strip;
+/// the searchable full catalog appears only after the coach asks for it.
+private struct IdeaLibraryTagPicker: View {
+    let suggestedTags: [String]
+    @Binding var selectedTags: [String]
+    let normalize: ([String]) -> [String]
+
+    @State private var isExpanded = false
+    @State private var isAddingCustomTag = false
+    @State private var tagSearch = ""
+    @State private var customTag = ""
+
+    private var matchingTags: [String] {
+        let trimmedSearch = tagSearch.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedSearch.isEmpty else { return suggestedTags }
+        return suggestedTags.filter { $0.localizedCaseInsensitiveContains(trimmedSearch) }
+    }
+
+    private var compactTags: [String] {
+        var result = selectedTags
+        for tag in suggestedTags where !result.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) {
+            result.append(tag)
+            if result.count >= 8 { break }
+        }
+        return result
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 7) {
+                Text("TAGS")
+                    .font(.system(size: 10, weight: .black, design: .monospaced))
+                    .foregroundStyle(RetroPalette.titleNavy)
+                Spacer()
+                Button(isExpanded ? "HIDE ALL TAGS" : "SHOW ALL TAGS") {
+                    isExpanded.toggle()
+                    if !isExpanded { tagSearch = "" }
+                }
+                .buttonStyle(BevelButtonStyle(fill: .white))
+            }
+
+            if compactTags.isEmpty {
+                Text("No tags selected yet.")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.black.opacity(0.65))
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 5) {
+                        ForEach(compactTags, id: \.self) { tag in
+                            tagButton(tag)
+                        }
+                    }
+                    .padding(.vertical, 1)
+                }
+            }
+
+            if isExpanded {
+                TextField("Search saved tags", text: $tagSearch)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 13, weight: .bold))
+                if matchingTags.isEmpty {
+                    Text("No saved tags match. Add it as a custom tag below.")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.black.opacity(0.65))
+                } else {
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 108), spacing: 6)],
+                        alignment: .leading,
+                        spacing: 6
+                    ) {
+                        ForEach(matchingTags, id: \.self) { tag in
+                            tagButton(tag)
+                        }
+                    }
+                }
+            }
+
+            if isAddingCustomTag {
+                HStack(spacing: 7) {
+                    TextField("Custom tag", text: $customTag)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 13, weight: .bold))
+                    Button("ADD") { addCustomTag() }
+                        .buttonStyle(BevelButtonStyle(fill: RetroPalette.laserYellow))
+                        .disabled(customTag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            } else {
+                Button("ADD CUSTOM TAG") { isAddingCustomTag = true }
+                    .buttonStyle(BevelButtonStyle(fill: RetroPalette.electricCyan.opacity(0.62)))
+            }
+        }
+        .onAppear {
+            selectedTags = normalize(selectedTags)
+        }
+    }
+
+    private func tagButton(_ tag: String) -> some View {
+        let selected = selectedTags.contains { $0.caseInsensitiveCompare(tag) == .orderedSame }
+        return Button {
+            var nextTags = selectedTags
+            if let index = nextTags.firstIndex(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) {
+                nextTags.remove(at: index)
+            } else {
+                nextTags.append(tag)
+            }
+            selectedTags = normalize(nextTags)
+        } label: {
+            Text(selected ? "✓ \(tag)" : tag)
+                .font(.system(size: 10, weight: .black, design: .monospaced))
+                .lineLimit(1)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 5)
+                .background(selected ? RetroPalette.laserYellow : .white.opacity(0.86))
+                .overlay(Rectangle().stroke(.black.opacity(0.72)))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(selected ? "Remove tag \(tag)" : "Add tag \(tag)")
+    }
+
+    private func addCustomTag() {
+        let cleanedTag = customTag.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedTag.isEmpty else { return }
+        selectedTags = normalize(selectedTags + [cleanedTag])
+        customTag = ""
+        isAddingCustomTag = false
+    }
+}
+
 struct ContentView: View {
     /// Every station uses one bounded planning canvas. Coach-supplied station
     /// art is letterboxed inside it, rather than making a Tumble Strip grow
@@ -78,7 +245,27 @@ struct ContentView: View {
     @State private var newIdeaKind: PlanningCardKind = .drill
     @State private var newIdeaTitle = ""
     @State private var newIdeaDetail = ""
-    @State private var newIdeaTags = ""
+    @State private var newIdeaTags: [String] = []
+    @State private var selectedLibraryIdeaDetail: PlanningCard?
+    @State private var quickIdeaEdit: IdeaLibraryQuickEditRequest?
+    @State private var deferredQuickIdeaEdit: IdeaLibraryQuickEditRequest?
+    @State private var deferredFullIdeaEditor = false
+    @State private var deferredLibraryIdeaDetail: PlanningCard?
+    @State private var quickIdeaEditText = ""
+    @State private var quickIdeaEditKind: PlanningCardKind = .drill
+    @State private var quickIdeaEditTags: [String] = []
+    @State private var isFullIdeaEditorPresented = false
+    @State private var editingIdeaID: String?
+    @State private var editingIdeaKind: PlanningCardKind = .drill
+    @State private var editingIdeaTitle = ""
+    @State private var editingIdeaDetail = ""
+    @State private var editingIdeaTags: [String] = []
+    @State private var editingIdeaLevels = ""
+    @State private var editingIdeaSkills = ""
+    @State private var editingIdeaEvents = ""
+    @State private var editingIdeaMats = ""
+    @State private var editingIdeaSafety = ""
+    @State private var editingIdeaVariantCount = "1"
     @State private var isHeaderSparkActive = false
     @State private var isUpdateShakeActive = false
 
@@ -128,6 +315,18 @@ struct ContentView: View {
         .sheet(isPresented: $isNewIdeaSheetPresented) {
             newIdeaSheet
                 .presentationDetents([.medium, .large])
+        }
+        .sheet(item: $selectedLibraryIdeaDetail, onDismiss: presentDeferredLibraryEditor) { card in
+            libraryIdeaDetailSheet(for: card)
+                .presentationDetents([.medium, .large])
+        }
+        .sheet(item: $quickIdeaEdit, onDismiss: presentDeferredLibraryDetail) { request in
+            quickIdeaEditSheet(for: request)
+                .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $isFullIdeaEditorPresented, onDismiss: presentDeferredLibraryDetail) {
+            fullIdeaEditorSheet
+                .presentationDetents([.large])
         }
         .sheet(item: $selectedAnchorDetail) { placement in
             anchorDetailSheet(for: placement)
@@ -1282,11 +1481,59 @@ struct ContentView: View {
     }
 
     private func plannerCard(_ card: PlanningCard) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack { Text(card.kind.rawValue).font(.system(size: 8, weight: .black, design: .monospaced)); Spacer(); if card.isGem { Text("★").font(.system(size: 12, weight: .black, design: .monospaced)) } }
-            Text(card.title).font(.system(size: 14, weight: .black))
-            Text(card.detail).font(.system(size: 10, weight: .medium))
-            HStack(spacing: 3) { ForEach(card.tags, id: \.self) { tag in Text(tag).font(.system(size: 8, weight: .bold, design: .monospaced)).padding(3).background(.black.opacity(0.08)).overlay(Rectangle().stroke(.black.opacity(0.4))) } }
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 6) {
+                Text(card.kind.rawValue)
+                    .font(.system(size: 9, weight: .black, design: .monospaced))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 3)
+                    .background(RetroPalette.laserYellow)
+                    .overlay(Rectangle().stroke(.black.opacity(0.7)))
+                Text("\(card.variantCount) VARIANT\(card.variantCount == 1 ? "" : "S")")
+                    .font(.system(size: 8, weight: .black, design: .monospaced))
+                Spacer()
+                if card.isGem {
+                    Text("★")
+                        .font(.system(size: 14, weight: .black, design: .monospaced))
+                        .foregroundStyle(RetroPalette.hotPink)
+                }
+            }
+            Text(card.title)
+                .font(.system(size: 16, weight: .black))
+                .lineLimit(2)
+            Text(card.detail)
+                .font(.system(size: 11, weight: .medium))
+                .lineLimit(4)
+
+            ideaCardFact(label: "LEVELS", value: card.levels.isEmpty ? card.libraryLevel : card.levels.joined(separator: " · "))
+            ideaCardFact(label: "EVENTS", value: card.events.isEmpty ? card.libraryEvent : card.events.joined(separator: " · "))
+            ideaCardFact(label: "SKILLS", value: card.skills.isEmpty ? "NONE LISTED" : card.skills.joined(separator: " · "))
+            ideaCardFact(label: "MATS", value: card.mats.isEmpty ? "NONE LISTED" : card.mats.joined(separator: " · "))
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    if card.tags.isEmpty {
+                        Text("NO TAGS")
+                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    } else {
+                        ForEach(card.tags, id: \.self) { tag in
+                            Text(tag)
+                                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                .padding(3)
+                                .background(.black.opacity(0.08))
+                                .overlay(Rectangle().stroke(.black.opacity(0.4)))
+                        }
+                    }
+                }
+                .padding(.vertical, 1)
+            }
+
+            ideaCardFact(
+                label: "SAFETY",
+                value: card.safetyRequirement ?? "NONE LISTED",
+                emphasized: card.safetyRequirement != nil
+            )
+            ideaCardFact(label: "MEDIA / STATION", value: card.mediaAndStationIndicator)
         }
         .padding(8)
         .background(
@@ -1295,6 +1542,19 @@ struct ContentView: View {
         )
         .overlay(Rectangle().stroke(.black, lineWidth: 2))
         .overlay(alignment: .leading) { Rectangle().fill(accentColor(card.accent)).frame(width: 8) }
+    }
+
+    private func ideaCardFact(label: String, value: String, emphasized: Bool = false) -> some View {
+        HStack(alignment: .top, spacing: 5) {
+            Text(label)
+                .font(.system(size: 8, weight: .black, design: .monospaced))
+                .foregroundStyle(emphasized ? .red : RetroPalette.titleNavy)
+                .frame(width: 80, alignment: .leading)
+            Text(value)
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(emphasized ? .red : .black.opacity(0.78))
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private var activeShelf: some View {
@@ -1373,17 +1633,14 @@ struct ContentView: View {
                             ForEach(filteredLibraryCards) { card in
                                 VStack(alignment: .leading, spacing: 7) {
                                     Button {
-                                        placementRequest = SnapshotPlacementRequest(
-                                            payload: .libraryIdea(card),
-                                            phaseID: selectedPhaseID
-                                        )
+                                        selectedLibraryIdeaDetail = card
                                     } label: {
                                         plannerCard(card)
-                                            .frame(width: 245)
+                                            .frame(width: 310)
                                             .overlay(
                                                 Rectangle()
                                                     .stroke(
-                                                        isSelectedLibraryCard(card)
+                                                        selectedLibraryIdeaDetail?.id == card.id
                                                             ? RetroPalette.hotPink
                                                             : .clear,
                                                         lineWidth: 4
@@ -1391,6 +1648,7 @@ struct ContentView: View {
                                             )
                                     }
                                     .buttonStyle(.plain)
+                                    .accessibilityHint("Opens complete details and per-field editing for \(card.title)")
                                     HStack(spacing: 7) {
                                         Button(card.isGem ? "★" : "☆") {
                                             store.toggleGem(for: card.id)
@@ -1405,6 +1663,9 @@ struct ContentView: View {
                                             )
                                         }
                                         .buttonStyle(BevelButtonStyle(fill: RetroPalette.laserYellow))
+
+                                        Button("INFO") { selectedLibraryIdeaDetail = card }
+                                            .buttonStyle(BevelButtonStyle(fill: .white))
                                     }
                                 }
                             }
@@ -1425,8 +1686,8 @@ struct ContentView: View {
         scopedLibraryCards.filter { card in
             card.matchesLibrarySearch(librarySearch)
                 && (selectedLibraryCategory == "ALL" || card.kind.rawValue == selectedLibraryCategory)
-                && (selectedLibraryEvent == "ALL" || card.libraryEvent == selectedLibraryEvent)
-                && (selectedLibraryLevel == "ALL" || card.libraryLevel == selectedLibraryLevel)
+                && (selectedLibraryEvent == "ALL" || card.libraryEvents.contains(selectedLibraryEvent))
+                && (selectedLibraryLevel == "ALL" || card.libraryLevels.contains(selectedLibraryLevel))
         }
     }
 
@@ -1517,7 +1778,7 @@ struct ContentView: View {
             ScrollView {
                 RetroWindow(title: "NEW IDEA") {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Add a drill, activity, or reference once; it stays in your local library for future plans.")
+                        Text("Add a skill, drill, routine, warm-up, activity, or reference once; it stays in your local library for future plans.")
                             .font(.system(size: 12, weight: .bold))
                             .foregroundStyle(RetroPalette.titleNavy)
 
@@ -1526,18 +1787,20 @@ struct ContentView: View {
                                 Text(kind.rawValue).tag(kind)
                             }
                         }
-                        .pickerStyle(.segmented)
+                        .pickerStyle(.menu)
 
-                        TextField("Name of drill / activity / reference", text: $newIdeaTitle)
+                        TextField("Name of idea", text: $newIdeaTitle)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(size: 15, weight: .bold))
                         TextField("How it works or the coaching cue", text: $newIdeaDetail, axis: .vertical)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(size: 14, weight: .bold))
                             .lineLimit(3...6)
-                        TextField("Tags, separated by commas (for example: HB, L3, shapes)", text: $newIdeaTags)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(size: 13, weight: .bold))
+                        IdeaLibraryTagPicker(
+                            suggestedTags: store.libraryTagSuggestions,
+                            selectedTags: $newIdeaTags,
+                            normalize: { store.normalizedLibraryTags($0) }
+                        )
 
                         HStack(spacing: 8) {
                             Button("ADD TO LIBRARY") { saveNewIdea() }
@@ -1562,12 +1825,11 @@ struct ContentView: View {
     }
 
     private func saveNewIdea() {
-        let tags = newIdeaTags.split(separator: ",").map(String.init)
         guard store.addLibraryCard(
             kind: newIdeaKind,
             title: newIdeaTitle,
             detail: newIdeaDetail,
-            tags: tags
+            tags: newIdeaTags
         ) != nil else {
             return
         }
@@ -1578,8 +1840,423 @@ struct ContentView: View {
         newIdeaKind = .drill
         newIdeaTitle = ""
         newIdeaDetail = ""
-        newIdeaTags = ""
+        newIdeaTags = []
         isNewIdeaSheetPresented = false
+    }
+
+    private func libraryIdeaDetailSheet(for card: PlanningCard) -> some View {
+        NavigationStack {
+            ScrollView {
+                RetroWindow(title: "IDEA DETAIL · (card.kind.rawValue)") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Complete library facts stay visible here. Double-tap a displayed value or use its EDIT button to change only that field.")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(RetroPalette.titleNavy)
+
+                        libraryEditableFact(card: card, field: .kind, value: card.kind.rawValue)
+                        libraryEditableFact(card: card, field: .title, value: card.title)
+                        libraryEditableFact(card: card, field: .description, value: card.detail, multiline: true)
+                        libraryEditableFact(
+                            card: card,
+                            field: .levels,
+                            value: card.levels.isEmpty ? card.libraryLevel : card.levels.joined(separator: " · ")
+                        )
+                        libraryEditableFact(
+                            card: card,
+                            field: .tags,
+                            value: card.tags.isEmpty ? "NONE LISTED" : card.tags.joined(separator: " · ")
+                        )
+                        libraryEditableFact(
+                            card: card,
+                            field: .events,
+                            value: card.events.isEmpty ? card.libraryEvent : card.events.joined(separator: " · ")
+                        )
+                        libraryEditableFact(
+                            card: card,
+                            field: .skills,
+                            value: card.skills.isEmpty ? "NONE LISTED" : card.skills.joined(separator: " · ")
+                        )
+                        libraryEditableFact(
+                            card: card,
+                            field: .mats,
+                            value: card.mats.isEmpty ? "NONE LISTED" : card.mats.joined(separator: " · ")
+                        )
+                        libraryEditableFact(
+                            card: card,
+                            field: .safety,
+                            value: card.safetyRequirement ?? "NONE LISTED",
+                            highlighted: card.safetyRequirement != nil
+                        )
+                        libraryEditableFact(
+                            card: card,
+                            field: .variantCount,
+                            value: "\(card.variantCount)"
+                        )
+                        libraryReadOnlyFact(
+                            label: "PHOTO / STATION",
+                            value: card.mediaAndStationIndicator,
+                            note: "Private media and saved station setups are not connected in this local native prototype."
+                        )
+
+                        HStack(spacing: 8) {
+                            Button("EDIT ALL FIELDS") { startFullIdeaEditor(for: card) }
+                                .buttonStyle(BevelButtonStyle(fill: RetroPalette.electricCyan.opacity(0.65)))
+                            Button("PLACE") {
+                                placementRequest = SnapshotPlacementRequest(
+                                    payload: .libraryIdea(card),
+                                    phaseID: selectedPhaseID
+                                )
+                                selectedLibraryIdeaDetail = nil
+                            }
+                            .buttonStyle(BevelButtonStyle(fill: RetroPalette.laserYellow))
+                        }
+                    }
+                    .padding(14)
+                }
+                .padding(14)
+            }
+            .background(RetroPalette.webTeal.ignoresSafeArea())
+            .navigationTitle("IDEA DETAIL")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("DONE") { selectedLibraryIdeaDetail = nil }
+                }
+            }
+        }
+    }
+
+    private func libraryEditableFact(
+        card: PlanningCard,
+        field: IdeaLibraryEditableField,
+        value: String,
+        multiline: Bool = false,
+        highlighted: Bool = false
+    ) -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(field.label)
+                    .font(.system(size: 9, weight: .black, design: .monospaced))
+                    .foregroundStyle(highlighted ? .red : RetroPalette.titleNavy)
+                Text(value)
+                    .font(.system(size: multiline ? 13 : 12, weight: .bold))
+                    .foregroundStyle(highlighted ? .red : .black)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .onTapGesture(count: 2) { startQuickIdeaEdit(card, field: field) }
+                    .accessibilityHint("Double-tap to edit \(field.label.lowercased())")
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Button("EDIT") { startQuickIdeaEdit(card, field: field) }
+                .buttonStyle(BevelButtonStyle(fill: .white))
+                .accessibilityIdentifier("idea-detail-edit-\(field.rawValue)")
+        }
+        .padding(8)
+        .background(highlighted ? RetroPalette.warning.opacity(0.48) : .white.opacity(0.82))
+        .overlay(Rectangle().stroke(.black.opacity(0.72)))
+    }
+
+    private func libraryReadOnlyFact(label: String, value: String, note: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .font(.system(size: 9, weight: .black, design: .monospaced))
+                .foregroundStyle(RetroPalette.titleNavy)
+            Text(value)
+                .font(.system(size: 12, weight: .bold))
+            Text(note)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.black.opacity(0.68))
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RetroPalette.laserYellow.opacity(0.42))
+        .overlay(Rectangle().stroke(.black.opacity(0.72)))
+    }
+
+    private func quickIdeaEditSheet(for request: IdeaLibraryQuickEditRequest) -> some View {
+        NavigationStack {
+            ScrollView {
+                RetroWindow(title: "EDIT \(request.field.label)") {
+                    VStack(alignment: .leading, spacing: 13) {
+                        Text("Only \(request.field.label.lowercased()) will change for \(request.card.title). Lesson placements remain their original snapshots.")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(RetroPalette.titleNavy)
+
+                        if request.field == .kind {
+                            Picker("Type", selection: $quickIdeaEditKind) {
+                                ForEach(PlanningCardKind.allCases) { kind in
+                                    Text(kind.rawValue).tag(kind)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                        } else if request.field == .tags {
+                            IdeaLibraryTagPicker(
+                                suggestedTags: store.libraryTagSuggestions,
+                                selectedTags: $quickIdeaEditTags,
+                                normalize: { store.normalizedLibraryTags($0) }
+                            )
+                        } else {
+                            Text(request.field == .description
+                                 ? "Write the description or coaching cue."
+                                 : request.field == .variantCount
+                                    ? "Use a whole number of variants."
+                                    : "Use commas or new lines for more than one value.")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(.black.opacity(0.7))
+                            TextField(request.field.label, text: $quickIdeaEditText, axis: request.field == .description ? .vertical : .horizontal)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(size: 14, weight: .bold))
+                                .lineLimit(request.field == .description ? 4...8 : 1...3)
+                        }
+
+                        HStack(spacing: 8) {
+                            Button("CANCEL") { quickIdeaEdit = nil }
+                                .buttonStyle(BevelButtonStyle(fill: RetroPalette.warning))
+                            Button("SAVE \(request.field.label)") { saveQuickIdeaEdit() }
+                                .buttonStyle(BevelButtonStyle(fill: RetroPalette.laserYellow))
+                                .disabled(
+                                    request.field == .title
+                                        && quickIdeaEditText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                )
+                        }
+                    }
+                    .padding(14)
+                }
+                .padding(14)
+            }
+            .background(RetroPalette.webTeal.ignoresSafeArea())
+            .navigationTitle("QUICK EDIT")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("DONE") { quickIdeaEdit = nil }
+                }
+            }
+        }
+    }
+
+    private var fullIdeaEditorSheet: some View {
+        NavigationStack {
+            ScrollView {
+                RetroWindow(title: "FULL IDEA EDITOR") {
+                    VStack(alignment: .leading, spacing: 13) {
+                        Text("Use this complete editor when several facts need to change. Existing lesson placements keep the snapshot that was already used.")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(RetroPalette.titleNavy)
+
+                        Picker("Type", selection: $editingIdeaKind) {
+                            ForEach(PlanningCardKind.allCases) { kind in
+                                Text(kind.rawValue).tag(kind)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        TextField("Title", text: $editingIdeaTitle)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 15, weight: .bold))
+                        TextField("Description / coaching cue", text: $editingIdeaDetail, axis: .vertical)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 14, weight: .bold))
+                            .lineLimit(3...8)
+                        IdeaLibraryTagPicker(
+                            suggestedTags: store.libraryTagSuggestions,
+                            selectedTags: $editingIdeaTags,
+                            normalize: { store.normalizedLibraryTags($0) }
+                        )
+                        editableIdeaListField("Levels", text: $editingIdeaLevels)
+                        editableIdeaListField("Skills", text: $editingIdeaSkills)
+                        editableIdeaListField("Events", text: $editingIdeaEvents)
+                        editableIdeaListField("Mats needed", text: $editingIdeaMats)
+                        TextField("Safety note", text: $editingIdeaSafety, axis: .vertical)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 13, weight: .bold))
+                            .lineLimit(1...3)
+                        TextField("Variant count", text: $editingIdeaVariantCount)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 13, weight: .bold))
+                            .keyboardType(.numberPad)
+
+                        HStack(spacing: 8) {
+                            Button("CANCEL") { isFullIdeaEditorPresented = false }
+                                .buttonStyle(BevelButtonStyle(fill: RetroPalette.warning))
+                            Button("SAVE IDEA") { saveFullIdeaEdit() }
+                                .buttonStyle(BevelButtonStyle(fill: RetroPalette.laserYellow))
+                                .disabled(editingIdeaTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+                    }
+                    .padding(14)
+                }
+                .padding(14)
+            }
+            .background(RetroPalette.webTeal.ignoresSafeArea())
+            .navigationTitle("EDIT IDEA")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("DONE") { isFullIdeaEditorPresented = false }
+                }
+            }
+        }
+    }
+
+    private func editableIdeaListField(_ title: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("\(title.uppercased()) · COMMA OR NEW LINE SEPARATED")
+                .font(.system(size: 9, weight: .black, design: .monospaced))
+                .foregroundStyle(RetroPalette.titleNavy)
+            TextField(title, text: text, axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 13, weight: .bold))
+                .lineLimit(1...3)
+        }
+    }
+
+    private func startQuickIdeaEdit(_ card: PlanningCard, field: IdeaLibraryEditableField) {
+        quickIdeaEditKind = card.kind
+        quickIdeaEditTags = card.tags
+        quickIdeaEditText = quickIdeaEditValue(for: card, field: field)
+        let request = IdeaLibraryQuickEditRequest(card: card, field: field)
+        if selectedLibraryIdeaDetail != nil {
+            deferredQuickIdeaEdit = request
+            selectedLibraryIdeaDetail = nil
+        } else {
+            quickIdeaEdit = request
+        }
+    }
+
+    private func quickIdeaEditValue(for card: PlanningCard, field: IdeaLibraryEditableField) -> String {
+        switch field {
+        case .kind:
+            return card.kind.rawValue
+        case .title:
+            return card.title
+        case .description:
+            return card.detail
+        case .levels:
+            return card.levels.joined(separator: ", ")
+        case .tags:
+            return card.tags.joined(separator: ", ")
+        case .skills:
+            return card.skills.joined(separator: ", ")
+        case .events:
+            return card.events.joined(separator: ", ")
+        case .mats:
+            return card.mats.joined(separator: ", ")
+        case .safety:
+            return card.safetyRequirement ?? ""
+        case .variantCount:
+            return "\(card.variantCount)"
+        }
+    }
+
+    private func saveQuickIdeaEdit() {
+        guard let request = quickIdeaEdit else { return }
+        var editedCard = request.card
+        switch request.field {
+        case .kind:
+            editedCard.kind = quickIdeaEditKind
+        case .title:
+            editedCard.title = quickIdeaEditText
+        case .description:
+            editedCard.detail = quickIdeaEditText
+        case .levels:
+            editedCard.levels = ideaList(from: quickIdeaEditText)
+        case .tags:
+            editedCard.tags = quickIdeaEditTags
+        case .skills:
+            editedCard.skills = ideaList(from: quickIdeaEditText)
+        case .events:
+            editedCard.events = ideaList(from: quickIdeaEditText)
+        case .mats:
+            editedCard.mats = ideaList(from: quickIdeaEditText)
+        case .safety:
+            editedCard.safetyRequirement = quickIdeaEditText
+        case .variantCount:
+            editedCard.variantCount = Int(quickIdeaEditText) ?? editedCard.variantCount
+        }
+
+        guard let updatedCard = store.updateLibraryCard(
+            id: editedCard.id,
+            kind: editedCard.kind,
+            title: editedCard.title,
+            detail: editedCard.detail,
+            tags: editedCard.tags,
+            levels: editedCard.levels,
+            skills: editedCard.skills,
+            events: editedCard.events,
+            mats: editedCard.mats,
+            safetyRequirement: editedCard.safetyRequirement,
+            variantCount: editedCard.variantCount
+        ) else {
+            return
+        }
+        deferredLibraryIdeaDetail = updatedCard
+        quickIdeaEdit = nil
+    }
+
+    private func startFullIdeaEditor(for card: PlanningCard) {
+        editingIdeaID = card.id
+        editingIdeaKind = card.kind
+        editingIdeaTitle = card.title
+        editingIdeaDetail = card.detail
+        editingIdeaTags = card.tags
+        editingIdeaLevels = card.levels.joined(separator: ", ")
+        editingIdeaSkills = card.skills.joined(separator: ", ")
+        editingIdeaEvents = card.events.joined(separator: ", ")
+        editingIdeaMats = card.mats.joined(separator: ", ")
+        editingIdeaSafety = card.safetyRequirement ?? ""
+        editingIdeaVariantCount = "\(card.variantCount)"
+        if selectedLibraryIdeaDetail != nil {
+            deferredFullIdeaEditor = true
+            selectedLibraryIdeaDetail = nil
+        } else {
+            isFullIdeaEditorPresented = true
+        }
+    }
+
+    private func saveFullIdeaEdit() {
+        guard let editingIdeaID,
+              let updatedCard = store.updateLibraryCard(
+                id: editingIdeaID,
+                kind: editingIdeaKind,
+                title: editingIdeaTitle,
+                detail: editingIdeaDetail,
+                tags: editingIdeaTags,
+                levels: ideaList(from: editingIdeaLevels),
+                skills: ideaList(from: editingIdeaSkills),
+                events: ideaList(from: editingIdeaEvents),
+                mats: ideaList(from: editingIdeaMats),
+                safetyRequirement: editingIdeaSafety,
+                variantCount: Int(editingIdeaVariantCount) ?? 1
+              ) else {
+            return
+        }
+        deferredLibraryIdeaDetail = updatedCard
+        isFullIdeaEditorPresented = false
+    }
+
+    private func ideaList(from value: String) -> [String] {
+        value
+            .components(separatedBy: CharacterSet(charactersIn: ",\n"))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    /// SwiftUI will not reliably present a new sheet in the same update that
+    /// dismisses a different sheet. Defer the destination until its source
+    /// sheet's dismissal callback so direct per-field editing remains
+    /// dependable on iPad rather than appearing to ignore a tap.
+    private func presentDeferredLibraryEditor() {
+        if let request = deferredQuickIdeaEdit {
+            deferredQuickIdeaEdit = nil
+            quickIdeaEdit = request
+            return
+        }
+        if deferredFullIdeaEditor {
+            deferredFullIdeaEditor = false
+            isFullIdeaEditorPresented = true
+        }
+    }
+
+    private func presentDeferredLibraryDetail() {
+        guard let card = deferredLibraryIdeaDetail else { return }
+        deferredLibraryIdeaDetail = nil
+        selectedLibraryIdeaDetail = card
     }
 
     private var operations: some View {

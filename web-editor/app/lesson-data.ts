@@ -1,4 +1,4 @@
-export type CardKind = "SKILL" | "DRILL" | "ROUTINE" | "ACTIVITY" | "REFERENCE";
+export type CardKind = "SKILL" | "DRILL" | "ROUTINE" | "ACTIVITY" | "WARM_UP" | "REFERENCE";
 export type LibraryShelf = "all" | "gems" | "recent" | "drafts" | "archive";
 export type OperationTaskKind = "RECURRING" | "TEMPORARY";
 export const IDEA_LEVELS = [3, 4, 5, 6, 7, 8, 9, 10] as const;
@@ -194,7 +194,7 @@ export type LibraryItem = LessonCard & {
   mediaWidth?: number;
   mediaHeight?: number;
   mediaDurationSeconds?: number;
-  /** Browser-local editable pixel station setup. Its document stays in IndexedDB. */
+  /** Browser-local editable station setup. Its document stays in IndexedDB. */
   stationSetupId?: string;
   /** Lets the library distinguish a generated station preview from a normal attachment. */
   stationPreviewKind?: "pixel-station";
