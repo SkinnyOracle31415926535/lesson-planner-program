@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   anchorForPanel,
   anchorStyleForViewport,
@@ -599,6 +599,14 @@ type LibraryEditDraft = {
   levels: IdeaLevel[];
 };
 
+type LibraryQuickEditField = "kind" | "title" | "levels" | "tags" | "description" | "safety" | "skills" | "events" | "mats";
+
+type LibraryQuickEdit = {
+  item: LibraryItem;
+  field: LibraryQuickEditField;
+  value: string;
+};
+
 type LibraryTransferImportState =
   | {
     kind: "ready";
@@ -815,6 +823,30 @@ function libraryEditDraftFor(card: LibraryItem): LibraryEditDraft {
     coachingCues: editableList(card.coachingCues),
     levels: [...(card.levels ?? [])],
   };
+}
+
+const libraryQuickEditLabels: Record<LibraryQuickEditField, string> = {
+  kind: "TYPE",
+  title: "TITLE",
+  levels: "LEVELS",
+  tags: "TAGS",
+  description: "DESCRIPTION",
+  safety: "SAFETY NOTE",
+  skills: "SKILLS",
+  events: "EVENTS",
+  mats: "MATS NEEDED",
+};
+
+function libraryQuickEditValue(card: LibraryItem, field: LibraryQuickEditField): string {
+  if (field === "kind") return card.kind;
+  if (field === "title") return card.title;
+  if (field === "levels") return editableList((card.levels ?? []).map(String));
+  if (field === "tags") return editableList(card.tags);
+  if (field === "description") return card.description;
+  if (field === "safety") return card.safety ?? "";
+  if (field === "skills") return editableList(card.skills);
+  if (field === "events") return editableList(card.events);
+  return editableList(card.mats ?? []);
 }
 
 function copyZone(zone: ZonePanel): ZonePanel {
@@ -2804,6 +2836,7 @@ export default function Home() {
   const [detailCard, setDetailCard] = useState<LessonCard | LibraryItem | null>(null);
   const [editingLibraryItem, setEditingLibraryItem] = useState<LibraryItem | null>(null);
   const [libraryEditDraft, setLibraryEditDraft] = useState<LibraryEditDraft | null>(null);
+  const [libraryQuickEdit, setLibraryQuickEdit] = useState<LibraryQuickEdit | null>(null);
   const [editingIdeaMediaFile, setEditingIdeaMediaFile] = useState<File | null>(null);
   const [editingIdeaStationSetup, setEditingIdeaStationSetup] = useState<StationSetup | null>(null);
   const [removeEditingIdeaMedia, setRemoveEditingIdeaMedia] = useState(false);
@@ -7420,6 +7453,7 @@ export default function Home() {
   function startLibraryEdit(card: LibraryItem) {
     setDetailCard(null);
     setRemoveCandidate(null);
+    setLibraryQuickEdit(null);
     setEditingLibraryItem(copyLibraryItem(card));
     setLibraryEditDraft(libraryEditDraftFor(card));
     setEditingIdeaMediaFile(null);
@@ -7442,6 +7476,61 @@ export default function Home() {
 
   function updateLibraryEditDraft<Key extends keyof LibraryEditDraft>(key: Key, value: LibraryEditDraft[Key]) {
     setLibraryEditDraft((current) => current ? { ...current, [key]: value } : current);
+  }
+
+  function startLibraryQuickEdit(card: LibraryItem, field: LibraryQuickEditField) {
+    setDetailCard(null);
+    setRemoveCandidate(null);
+    setEditingLibraryItem(null);
+    setLibraryEditDraft(null);
+    setLibraryQuickEdit({ item: copyLibraryItem(card), field, value: libraryQuickEditValue(card, field) });
+  }
+
+  function openLibraryQuickEditFromKeyboard(event: ReactKeyboardEvent<HTMLButtonElement>, card: LibraryItem, field: LibraryQuickEditField) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    event.stopPropagation();
+    startLibraryQuickEdit(card, field);
+  }
+
+  function saveLibraryQuickEdit() {
+    if (!libraryQuickEdit) return;
+    const { item, field, value } = libraryQuickEdit;
+    const edited = copyLibraryItem(item);
+    if (field === "title") {
+      const title = value.trim();
+      if (!title) {
+        setNotice("IDEA NAME IS REQUIRED · NOTHING WAS CHANGED");
+        return;
+      }
+      edited.title = title;
+    } else if (field === "kind") {
+      edited.kind = value as LibraryItem["kind"];
+    } else if (field === "levels") {
+      edited.levels = parseEditableList(value)
+        .map(Number)
+        .filter((level): level is IdeaLevel => IDEA_LEVELS.includes(level as IdeaLevel))
+        .sort((first, second) => first - second);
+    } else if (field === "tags") {
+      edited.tags = parseEditableList(value);
+    } else if (field === "description") {
+      edited.description = value.trim() || "Add the rules, coaching notes, or reference details when you are ready.";
+    } else if (field === "safety") {
+      edited.safety = value.trim() || undefined;
+    } else if (field === "skills") {
+      edited.skills = parseEditableList(value);
+    } else if (field === "events") {
+      edited.events = parseEditableList(value);
+    } else {
+      edited.mats = parseEditableList(value);
+    }
+    if (customLibraryCards.some((card) => card.id === edited.id)) {
+      setCustomLibraryCards((cards) => cards.map((card) => card.id === edited.id ? edited : card));
+    } else {
+      setItemOverridesById((current) => ({ ...current, [edited.id]: edited }));
+    }
+    setLibraryQuickEdit(null);
+    setNotice(`${libraryQuickEditLabels[field]} UPDATED FOR ${edited.title.toUpperCase()} · SYNCING TO RYAN’S IDEA LIBRARY`);
   }
 
   function chooseLibraryIdeaMedia(file: File | null, target: "new" | "edit") {
@@ -8515,7 +8604,7 @@ export default function Home() {
       </div>
       <div className="library-placement-strip">
         <b>{isLibraryWindow ? "VIEW · EDIT · DRAFT · FAVORITE · ARCHIVE · RESTORE" : "PLACE → THEN TAP A HIGHLIGHTED STATION"}</b>
-        <span>{isLibraryWindow ? "Use Drafts for Ideas you still want to edit. Changes sync only for Ryan in the planner window." : "Pinch this list out for details, or in to compact it. One finger still scrolls; normal size shows five ideas."}</span>
+        <span>{isLibraryWindow ? "Double-click any editable card value to change only that field. Changes sync only for Ryan in the planner window." : "Pinch this list out for details, or in to compact it. Double-click a card value to edit only that field."}</span>
       </div>
       <section className="library-transfer" aria-label="Import and export the Idea Library as JSON">
         <div className="library-transfer-heading"><b>IDEA LIBRARY JSON</b><span>Transfer ideas between devices. Attachments stay in a full Planner backup.</span></div>
@@ -8664,15 +8753,22 @@ export default function Home() {
           return (
             <article key={card.id} className={`library-item${libraryPhotoUrl || card.stationSetupId ? " has-library-photo" : ""}`}>
               <div className="library-item-copy">
-                <div className="library-item-kicker"><span>{card.kind}</span><span>{card.variants.length} VARIANT{card.variants.length === 1 ? "" : "S"}</span></div>
-                <strong title={card.title}>{card.title}</strong>
-                <span className="library-item-state" title={[state, levels, tags].filter(Boolean).join(" · ")}>{[state, levels, tags].filter(Boolean).join(" · ")}</span>
-                <p className="library-item-description">{card.description}</p>
-                {extraDetail ? <span className="library-item-extra">{card.safety ? extraDetail : `SKILLS · ${extraDetail}`}</span> : null}
+                <div className="library-item-kicker">
+                  <button type="button" className="library-quick-edit-target" aria-label={`Edit type for ${card.title}`} title="Double-click to edit Type" onDoubleClick={(event) => { event.stopPropagation(); startLibraryQuickEdit(card, "kind"); }} onKeyDown={(event) => openLibraryQuickEditFromKeyboard(event, card, "kind")}>{card.kind}</button>
+                  <span>{card.variants.length} VARIANT{card.variants.length === 1 ? "" : "S"}</span>
+                </div>
+                <button type="button" className="library-item-title library-quick-edit-target" aria-label={`Edit title for ${card.title}`} title="Double-click to edit Title" onDoubleClick={(event) => { event.stopPropagation(); startLibraryQuickEdit(card, "title"); }} onKeyDown={(event) => openLibraryQuickEditFromKeyboard(event, card, "title")}><strong>{card.title}</strong></button>
+                <div className="library-item-state" title={[state, levels, tags].filter(Boolean).join(" · ")}>
+                  <span>{state}</span>
+                  <button type="button" className="library-quick-edit-target" aria-label={`Edit levels for ${card.title}`} title="Double-click to edit Levels" onDoubleClick={(event) => { event.stopPropagation(); startLibraryQuickEdit(card, "levels"); }} onKeyDown={(event) => openLibraryQuickEditFromKeyboard(event, card, "levels")}>{levels || "NO LEVELS"}</button>
+                  <button type="button" className="library-quick-edit-target" aria-label={`Edit tags for ${card.title}`} title="Double-click to edit Tags" onDoubleClick={(event) => { event.stopPropagation(); startLibraryQuickEdit(card, "tags"); }} onKeyDown={(event) => openLibraryQuickEditFromKeyboard(event, card, "tags")}>{tags || "NO TAGS"}</button>
+                </div>
+                <button type="button" className="library-item-description library-quick-edit-target" aria-label={`Edit description for ${card.title}`} aria-hidden={libraryRowHeight < 86} tabIndex={libraryRowHeight < 86 ? -1 : 0} title="Double-click to edit Description" onDoubleClick={(event) => { event.stopPropagation(); startLibraryQuickEdit(card, "description"); }} onKeyDown={(event) => openLibraryQuickEditFromKeyboard(event, card, "description")}>{card.description}</button>
+                {extraDetail ? <button type="button" className="library-item-extra library-quick-edit-target" aria-label={`Edit ${card.safety ? "safety note" : "skills"} for ${card.title}`} aria-hidden={libraryRowHeight <= 100} tabIndex={libraryRowHeight <= 100 ? -1 : 0} title={`Double-click to edit ${card.safety ? "Safety Note" : "Skills"}`} onDoubleClick={(event) => { event.stopPropagation(); startLibraryQuickEdit(card, card.safety ? "safety" : "skills"); }} onKeyDown={(event) => openLibraryQuickEditFromKeyboard(event, card, card.safety ? "safety" : "skills")}>{card.safety ? extraDetail : `SKILLS · ${extraDetail}`}</button> : null}
                 {libraryDetailLevel(libraryRowHeight) === "FULL DETAILS" ? (
                   <div className="library-item-facts">
-                    <span title={`Events: ${events}`}><b>EVENTS</b> {events}</span>
-                    <span title={`Mats: ${mats}`}><b>MATS</b> {mats}</span>
+                    <button type="button" className="library-quick-edit-target" aria-label={`Edit events for ${card.title}`} title={`Events: ${events} · Double-click to edit`} onDoubleClick={(event) => { event.stopPropagation(); startLibraryQuickEdit(card, "events"); }} onKeyDown={(event) => openLibraryQuickEditFromKeyboard(event, card, "events")}><b>EVENTS</b> {events}</button>
+                    <button type="button" className="library-quick-edit-target" aria-label={`Edit mats for ${card.title}`} title={`Mats: ${mats} · Double-click to edit`} onDoubleClick={(event) => { event.stopPropagation(); startLibraryQuickEdit(card, "mats"); }} onKeyDown={(event) => openLibraryQuickEditFromKeyboard(event, card, "mats")}><b>MATS</b> {mats}</button>
                   </div>
                 ) : null}
               </div>
@@ -10253,6 +10349,65 @@ export default function Home() {
               ) : null}
             </div>
           </section>
+        </div>
+      ) : null}
+
+      {libraryQuickEdit ? (
+        <div className="idea-detail-scrim" role="presentation" onMouseDown={() => setLibraryQuickEdit(null)}>
+          <form
+            className="idea-detail-dialog retro-window library-quick-edit-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Edit ${libraryQuickEditLabels[libraryQuickEdit.field].toLowerCase()} for ${libraryQuickEdit.item.title}`}
+            onMouseDown={(event) => event.stopPropagation()}
+            onSubmit={(event) => { event.preventDefault(); saveLibraryQuickEdit(); }}
+          >
+            <div className="window-title">EDIT {libraryQuickEditLabels[libraryQuickEdit.field]} <button type="button" onClick={() => setLibraryQuickEdit(null)} aria-label="Close quick editor">×</button></div>
+            <div className="idea-detail-body library-quick-edit-body">
+              <p className="idea-editor-note">Only {libraryQuickEditLabels[libraryQuickEdit.field].toLowerCase()} will change for <strong>{libraryQuickEdit.item.title}</strong>.</p>
+              {libraryQuickEdit.field === "kind" ? (
+                <label>{libraryQuickEditLabels[libraryQuickEdit.field]}
+                  <select autoFocus value={libraryQuickEdit.value} onChange={(event) => setLibraryQuickEdit((current) => current ? { ...current, value: event.target.value } : current)}>
+                    <option value="SKILL">SKILL</option>
+                    <option value="DRILL">DRILL</option>
+                    <option value="ROUTINE">ROUTINE</option>
+                    <option value="ACTIVITY">ACTIVITY</option>
+                    <option value="REFERENCE">REFERENCE</option>
+                  </select>
+                </label>
+              ) : libraryQuickEdit.field === "levels" ? (
+                <fieldset className="idea-level-picker">
+                  <legend>LEVELS <small>check every level this applies to</small></legend>
+                  {IDEA_LEVELS.map((level) => {
+                    const selectedLevels = parseEditableList(libraryQuickEdit.value).map(Number);
+                    return (
+                      <label key={level}>
+                        <input type="checkbox" autoFocus={level === IDEA_LEVELS[0]} checked={selectedLevels.includes(level)} onChange={(event) => {
+                          const next = event.currentTarget.checked
+                            ? [...selectedLevels, level].sort((first, second) => first - second)
+                            : selectedLevels.filter((candidate) => candidate !== level);
+                          setLibraryQuickEdit((current) => current ? { ...current, value: editableList(next.map(String)) } : current);
+                        }} />
+                        {level}
+                      </label>
+                    );
+                  })}
+                </fieldset>
+              ) : libraryQuickEdit.field === "title" || libraryQuickEdit.field === "safety" ? (
+                <label>{libraryQuickEditLabels[libraryQuickEdit.field]}
+                  <input autoFocus value={libraryQuickEdit.value} maxLength={libraryQuickEdit.field === "title" ? 100 : 260} onChange={(event) => setLibraryQuickEdit((current) => current ? { ...current, value: event.target.value } : current)} />
+                </label>
+              ) : (
+                <label>{libraryQuickEditLabels[libraryQuickEdit.field]} {libraryQuickEdit.field !== "description" ? <small>one per line or comma</small> : null}
+                  <textarea autoFocus value={libraryQuickEdit.value} maxLength={libraryQuickEdit.field === "description" ? 500 : undefined} onChange={(event) => setLibraryQuickEdit((current) => current ? { ...current, value: event.target.value } : current)} />
+                </label>
+              )}
+              <div className="idea-editor-actions">
+                <button type="button" onClick={() => setLibraryQuickEdit(null)}>CANCEL</button>
+                <button type="submit">SAVE {libraryQuickEditLabels[libraryQuickEdit.field]}</button>
+              </div>
+            </div>
+          </form>
         </div>
       ) : null}
 

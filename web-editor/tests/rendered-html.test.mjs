@@ -88,3 +88,14 @@ test("full-detail Idea cards show events and mats", async () => {
   assert.match(page, /<b>MATS<\/b>/);
   assert.match(page, /--library-facts-height/);
 });
+
+test("Idea card values expose focused double-click editors", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+
+  assert.match(page, /type LibraryQuickEditField/);
+  assert.match(page, /className="library-quick-edit-target"/);
+  assert.match(page, /onDoubleClick=/);
+  assert.match(page, /className="idea-detail-dialog retro-window library-quick-edit-dialog"/);
+  assert.match(page, /Only \{libraryQuickEditLabels\[libraryQuickEdit\.field\]\.toLowerCase\(\)\} will change/);
+  assert.match(page, /SAVE \{libraryQuickEditLabels\[libraryQuickEdit\.field\]\}/);
+});
