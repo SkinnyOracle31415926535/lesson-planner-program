@@ -6,6 +6,7 @@ import {
   libraryTransferFilename,
   mergeLibraryTransfer,
   parseLibraryTransferJson,
+  replaceLibraryTransfer,
   serializeLibraryTransfer,
 } from "../app/library-transfer";
 import type { LibraryItem } from "../app/lesson-data";
@@ -101,6 +102,19 @@ test("library merge adds only unseen IDs and never overwrites existing ideas", (
   assert.deepEqual(result.newIdeas.map((entry) => entry.title), ["Roundoff"]);
   assert.deepEqual(result.mergedIdeas.map((entry) => entry.title), ["Roundoff", "Work iPad version"]);
   assert.equal(result.mergedIdeas[1].photoId, "work-photo");
+});
+
+test("library replacement uses every imported idea and clears attachment references", () => {
+  const imported = [
+    idea("same-id", "Replacement version"),
+    idea("new-id", "Roundoff"),
+  ];
+  const replacement = replaceLibraryTransfer(imported);
+
+  assert.deepEqual(replacement.map((entry) => entry.title), ["Replacement version", "Roundoff"]);
+  assert.equal("mediaId" in replacement[0], false);
+  imported[0].tags.push("changed-after-replace");
+  assert.deepEqual(replacement[0].tags, ["floor"]);
 });
 
 test("library transfer filenames use the local calendar date", () => {

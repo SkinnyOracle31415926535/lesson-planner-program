@@ -155,6 +155,7 @@ import {
   libraryTransferFilename,
   mergeLibraryTransfer,
   parseLibraryTransferJson,
+  replaceLibraryTransfer,
   serializeLibraryTransfer,
   type LibraryTransferBundleV1,
 } from "./library-transfer";
@@ -618,6 +619,18 @@ type PlannerBackupImportState =
     fileName: string;
     fileSize: number;
     bundle: PlannerBackupBundleV1;
+  }
+  | {
+    kind: "error";
+    fileName: string;
+    message: string;
+  };
+
+type LibraryReplacementImportState =
+  | {
+    kind: "ready";
+    fileName: string;
+    bundle: LibraryTransferBundleV1;
   }
   | {
     kind: "error";
@@ -2665,6 +2678,7 @@ export default function Home() {
   const libraryTransferInputRef = useRef<HTMLInputElement | null>(null);
   const classImportInputRef = useRef<HTMLInputElement | null>(null);
   const plannerBackupInputRef = useRef<HTMLInputElement | null>(null);
+  const libraryReplacementInputRef = useRef<HTMLInputElement | null>(null);
   const customBoardImportInputRef = useRef<HTMLInputElement | null>(null);
   const libraryStackRef = useRef<HTMLDivElement | null>(null);
   const libraryPinchRef = useRef<LibraryPinchState>({ active: false, startDistance: 0, startRowHeight: LIBRARY_ROW_HEIGHT_DEFAULT });
@@ -2828,6 +2842,10 @@ export default function Home() {
   const newIdeaMediaPreviewUrl = useLocalFileUrl(newIdeaMediaFile);
   const editingIdeaMediaPreviewUrl = useLocalFileUrl(editingIdeaMediaFile);
   const [libraryTransferImport, setLibraryTransferImport] = useState<LibraryTransferImportState | null>(null);
+  const [isLibraryReplacementOpen, setIsLibraryReplacementOpen] = useState(false);
+  const [hasLibraryReplacementBackup, setHasLibraryReplacementBackup] = useState(false);
+  const [libraryReplacementImport, setLibraryReplacementImport] = useState<LibraryReplacementImportState | null>(null);
+  const [libraryReplacementConfirmation, setLibraryReplacementConfirmation] = useState("");
   const [visualLabelDraft, setVisualLabelDraft] = useState("");
   const [hasLoadedLibraryPreferences, setHasLoadedLibraryPreferences] = useState(false);
   const [operationTaskDoneByPlanId, setOperationTaskDoneByPlanId] = useState<Record<string, Record<string, boolean>>>({});
@@ -7907,6 +7925,67 @@ export default function Home() {
     setNotice(`${allLibraryItems.length} IDEA${allLibraryItems.length === 1 ? "" : "S"} EXPORTED · THE BACKUP JSON EXCLUDES ATTACHMENTS`);
   }
 
+  function openLibraryReplacement() {
+    setLibraryTransferImport(null);
+    setHasLibraryReplacementBackup(false);
+    setLibraryReplacementImport(null);
+    setLibraryReplacementConfirmation("");
+    setIsLibraryReplacementOpen(true);
+  }
+
+  function closeLibraryReplacement() {
+    setIsLibraryReplacementOpen(false);
+    setHasLibraryReplacementBackup(false);
+    setLibraryReplacementImport(null);
+    setLibraryReplacementConfirmation("");
+  }
+
+  function exportLibraryReplacementBackup() {
+    exportIdeaLibrary();
+    setHasLibraryReplacementBackup(true);
+  }
+
+  async function previewIdeaLibraryReplacement(file: File | null) {
+    if (!file) return;
+    try {
+      const parsed = parseLibraryTransferJson(await file.text(), file.size);
+      if (!parsed.ok) {
+        setLibraryReplacementImport({ kind: "error", fileName: file.name, message: parsed.error });
+        setNotice(`IDEA LIBRARY REPLACEMENT BLOCKED · ${parsed.error.toUpperCase()}`);
+        return;
+      }
+      setLibraryReplacementImport({ kind: "ready", fileName: file.name, bundle: parsed.value });
+      setLibraryReplacementConfirmation("");
+      setNotice(`${parsed.value.ideas.length} IDEA${parsed.value.ideas.length === 1 ? "" : "S"} READY TO REPLACE THIS LIBRARY`);
+    } catch {
+      const message = "The selected file could not be read.";
+      setLibraryReplacementImport({ kind: "error", fileName: file.name, message });
+      setNotice("IDEA LIBRARY REPLACEMENT BLOCKED · THE SELECTED FILE COULD NOT BE READ");
+    } finally {
+      if (libraryReplacementInputRef.current) libraryReplacementInputRef.current.value = "";
+    }
+  }
+
+  function applyIdeaLibraryReplacement() {
+    if (libraryReplacementImport?.kind !== "ready"
+      || !hasLibraryReplacementBackup
+      || libraryReplacementConfirmation.trim().toUpperCase() !== "REPLACE") return;
+    const previousCount = allLibraryItems.length;
+    const replacement = replaceLibraryTransfer(libraryReplacementImport.bundle.ideas);
+    setGemIds([]);
+    setCustomLibraryCards(replacement);
+    setRecentIdeaIds([]);
+    setArchivedIdeaIds([]);
+    setRestoredIdeaIds([]);
+    setDraftIdeaIds([]);
+    setItemOverridesById({});
+    setRemovedIdeaIds([]);
+    setLibrarySearch("");
+    setLibraryFilter("all");
+    closeLibraryReplacement();
+    setNotice(`${previousCount} IDEA${previousCount === 1 ? "" : "S"} REPLACED WITH ${replacement.length} FROM ${libraryReplacementImport.fileName.toUpperCase()} · SYNCING TO RYAN’S IDEA LIBRARY`);
+  }
+
   async function previewIdeaLibraryImport(file: File | null) {
     if (!file) return;
     try {
@@ -8394,6 +8473,58 @@ export default function Home() {
           <div className="library-transfer-preview"><strong>READY: {libraryTransferImport.fileName}</strong><span>{libraryTransferImport.newCount} new idea{libraryTransferImport.newCount === 1 ? "" : "s"} · {libraryTransferImport.duplicateCount} already here</span><p>Import adds only unseen idea IDs. Existing ideas and attachments are never replaced.</p><div><button type="button" onClick={applyIdeaLibraryImport}>MERGE IDEAS</button><button type="button" onClick={() => setLibraryTransferImport(null)}>CANCEL</button></div></div>
         ) : libraryTransferImport?.kind === "error" ? (
           <div className="library-transfer-preview error"><strong>CAN’T IMPORT {libraryTransferImport.fileName}</strong><span>{libraryTransferImport.message}</span><button type="button" onClick={() => setLibraryTransferImport(null)}>CLEAR</button></div>
+        ) : null}
+        {isLibraryWindow ? <button type="button" className="library-replace-trigger" onClick={openLibraryReplacement}>REPLACE ENTIRE LIBRARY</button> : null}
+        {isLibraryWindow && isLibraryReplacementOpen ? (
+          <div className="library-replacement">
+            <strong>REPLACE THIS LIBRARY</strong>
+            <p>THIS REMOVES THE CURRENT IDEA TEXT, GEMS, RECENT LIST, DRAFTS, ARCHIVE, AND HIDDEN IDEAS. PLACED LESSON COPIES STAY. BACKUPS AND IMPORTS ARE TEXT ONLY, SO ATTACHMENTS AND PIXEL STATIONS WILL NOT STAY LINKED.</p>
+            <div className="library-replacement-actions">
+              <button type="button" disabled={!allLibraryItems.length} onClick={exportLibraryReplacementBackup}>
+                {hasLibraryReplacementBackup ? "BACKUP DOWNLOADED" : "1. DOWNLOAD BACKUP"}
+              </button>
+              <button type="button" disabled={!hasLibraryReplacementBackup} onClick={() => libraryReplacementInputRef.current?.click()}>2. CHOOSE REPLACEMENT JSON</button>
+            </div>
+            <input
+              ref={libraryReplacementInputRef}
+              className="new-idea-file-input"
+              type="file"
+              accept=".json,application/json"
+              hidden
+              aria-hidden="true"
+              tabIndex={-1}
+              onChange={(event) => { void previewIdeaLibraryReplacement(event.currentTarget.files?.[0] ?? null); }}
+            />
+            {libraryReplacementImport ? (
+              <div className={`library-transfer-preview ${libraryReplacementImport.kind}`}>
+                <strong>{libraryReplacementImport.kind === "ready" ? "REPLACEMENT READY" : "REPLACEMENT BLOCKED"}</strong>
+                <span>{libraryReplacementImport.fileName}</span>
+                {libraryReplacementImport.kind === "ready" ? (
+                  <>
+                    <p><b>{libraryReplacementImport.bundle.ideas.length} IDEA{libraryReplacementImport.bundle.ideas.length === 1 ? "" : "S"}</b> WILL REPLACE {allLibraryItems.length} CURRENT IDEA{allLibraryItems.length === 1 ? "" : "S"}.</p>
+                    <label className="library-replacement-confirmation">
+                      <span>TYPE REPLACE TO CONTINUE</span>
+                      <input
+                        value={libraryReplacementConfirmation}
+                        onChange={(event) => setLibraryReplacementConfirmation(event.currentTarget.value)}
+                        autoComplete="off"
+                        aria-label="Type REPLACE to replace the entire Idea Library"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="library-replacement-confirm"
+                      disabled={libraryReplacementConfirmation.trim().toUpperCase() !== "REPLACE"}
+                      onClick={applyIdeaLibraryReplacement}
+                    >
+                      REPLACE {allLibraryItems.length} IDEA{allLibraryItems.length === 1 ? "" : "S"}
+                    </button>
+                  </>
+                ) : <p>{libraryReplacementImport.message}</p>}
+              </div>
+            ) : null}
+            <button type="button" className="library-replacement-cancel" onClick={closeLibraryReplacement}>CANCEL · KEEP CURRENT LIBRARY</button>
+          </div>
         ) : null}
       </section>
       <button className="new-idea-trigger" onClick={() => setIsAddingIdea((open) => !open)}>{isAddingIdea ? "CLOSE NEW IDEA" : "+ NEW IDEA"}</button>
