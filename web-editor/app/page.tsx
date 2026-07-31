@@ -2805,6 +2805,7 @@ export default function Home() {
   const [editingLibraryItem, setEditingLibraryItem] = useState<LibraryItem | null>(null);
   const [libraryEditDraft, setLibraryEditDraft] = useState<LibraryEditDraft | null>(null);
   const [editingIdeaMediaFile, setEditingIdeaMediaFile] = useState<File | null>(null);
+  const [editingIdeaStationSetup, setEditingIdeaStationSetup] = useState<StationSetup | null>(null);
   const [removeEditingIdeaMedia, setRemoveEditingIdeaMedia] = useState(false);
   const [removeEditingStation, setRemoveEditingStation] = useState(false);
   const [isSavingLibraryEdit, setIsSavingLibraryEdit] = useState(false);
@@ -2837,7 +2838,7 @@ export default function Home() {
   const [stationSetupsById, setStationSetupsById] = useState<Record<string, StationSetup>>({});
   const [loadedIdeaStationSignature, setLoadedIdeaStationSignature] = useState("");
   const [stationMakerSetup, setStationMakerSetup] = useState<StationSetup | null>(null);
-  const [stationMakerTarget, setStationMakerTarget] = useState<"new" | LibraryItem | null>(null);
+  const [stationMakerTarget, setStationMakerTarget] = useState<"new" | "edit" | LibraryItem | null>(null);
   const [isSavingNewIdea, setIsSavingNewIdea] = useState(false);
   const newIdeaMediaPreviewUrl = useLocalFileUrl(newIdeaMediaFile);
   const editingIdeaMediaPreviewUrl = useLocalFileUrl(editingIdeaMediaFile);
@@ -7419,6 +7420,7 @@ export default function Home() {
     setEditingLibraryItem(copyLibraryItem(card));
     setLibraryEditDraft(libraryEditDraftFor(card));
     setEditingIdeaMediaFile(null);
+    setEditingIdeaStationSetup(null);
     setRemoveEditingIdeaMedia(false);
     setRemoveEditingStation(false);
   }
@@ -7428,6 +7430,7 @@ export default function Home() {
     setEditingLibraryItem(null);
     setLibraryEditDraft(null);
     setEditingIdeaMediaFile(null);
+    setEditingIdeaStationSetup(null);
     setRemoveEditingIdeaMedia(false);
     setRemoveEditingStation(false);
     if (editIdeaCameraInputRef.current) editIdeaCameraInputRef.current.value = "";
@@ -7453,7 +7456,7 @@ export default function Home() {
       setNewIdeaMediaFile(file);
       return;
     }
-    if (editingLibraryItem?.stationSetupId && !removeEditingStation) {
+    if (editingIdeaStationSetup || (editingLibraryItem?.stationSetupId && !removeEditingStation)) {
       setNotice("REMOVE THE PIXEL STATION IN THIS EDIT BEFORE CHOOSING MEDIA · YOUR SAVED STATION STAYS UNTIL YOU SAVE");
       return;
     }
@@ -7522,6 +7525,19 @@ export default function Home() {
           return remaining;
         });
       }
+      if (editingIdeaStationSetup) {
+        await saveStationSetup(editingIdeaStationSetup);
+        edited.stationSetupId = editingIdeaStationSetup.id;
+        edited.stationPreviewKind = "pixel-station";
+        setStationSetupsById((current) => ({ ...current, [editingIdeaStationSetup.id]: editingIdeaStationSetup }));
+        if (editingLibraryItem.stationSetupId && editingLibraryItem.stationSetupId !== editingIdeaStationSetup.id) {
+          await removeStationSetup(editingLibraryItem.stationSetupId);
+          setStationSetupsById((current) => {
+            const { [editingLibraryItem.stationSetupId!]: _removed, ...remaining } = current;
+            return remaining;
+          });
+        }
+      }
       if (customLibraryCards.some((card) => card.id === edited.id)) {
         setCustomLibraryCards((cards) => cards.map((card) => card.id === edited.id ? edited : card));
       } else {
@@ -7531,6 +7547,7 @@ export default function Home() {
       setEditingLibraryItem(null);
       setLibraryEditDraft(null);
       setEditingIdeaMediaFile(null);
+      setEditingIdeaStationSetup(null);
       setRemoveEditingIdeaMedia(false);
       setRemoveEditingStation(false);
       setNotice(moveToDraft
@@ -8269,6 +8286,37 @@ export default function Home() {
     setStationMakerSetup(newIdeaStationSetup ?? createStationSetup());
   }
 
+  async function openLibraryEditStationMaker() {
+    if (!editingLibraryItem) return;
+    const currentMedia = normalizedLibraryMedia(editingLibraryItem);
+    if (editingIdeaMediaFile || (currentMedia.mediaId && !removeEditingIdeaMedia)) {
+      setNotice("REMOVE THE PHOTO OR VIDEO IN THIS EDIT BEFORE MAKING A PIXEL STATION · ONE ATTACHMENT PER IDEA");
+      return;
+    }
+    if (editingIdeaStationSetup) {
+      setStationMakerTarget("edit");
+      setStationMakerSetup(editingIdeaStationSetup);
+      return;
+    }
+    if (editingLibraryItem.stationSetupId && !removeEditingStation) {
+      try {
+        const setup = stationSetupsById[editingLibraryItem.stationSetupId] ?? await loadStationSetup(editingLibraryItem.stationSetupId);
+        if (!setup) {
+          setNotice("THIS PIXEL STATION IS NOT AVAILABLE IN THIS BROWSER");
+          return;
+        }
+        setStationMakerTarget("edit");
+        setStationMakerSetup(setup);
+        return;
+      } catch {
+        setNotice("THIS PIXEL STATION COULD NOT BE OPENED");
+        return;
+      }
+    }
+    setStationMakerTarget("edit");
+    setStationMakerSetup(createStationSetup());
+  }
+
   async function openSavedStationMaker(card: LibraryItem) {
     if (!card.stationSetupId) return;
     try {
@@ -8296,6 +8344,10 @@ export default function Home() {
         }
         setNewIdeaStationSetup(setup);
         setNotice("PIXEL STATION READY · SAVE THE IDEA TO SHARE IT IN RYAN’S LIBRARY");
+      } else if (target === "edit") {
+        setEditingIdeaStationSetup(setup);
+        setRemoveEditingStation(false);
+        setNotice("PIXEL STATION READY · TAP SAVE SHARED EDIT TO APPLY IT TO THIS IDEA");
       } else {
         await saveStationSetup(setup);
         setStationSetupsById((current) => ({ ...current, [setup.id]: setup }));
@@ -10271,12 +10323,14 @@ export default function Home() {
                 <div>
                   <button type="button" disabled={isSavingLibraryEdit || Boolean(editingLibraryItem.stationSetupId && !removeEditingStation)} onClick={() => editIdeaCameraInputRef.current?.click()}>TAKE PHOTO</button>
                   <button type="button" disabled={isSavingLibraryEdit || Boolean(editingLibraryItem.stationSetupId && !removeEditingStation)} onClick={() => editIdeaMediaInputRef.current?.click()}>CHOOSE PHOTO / VIDEO</button>
+                  <button type="button" disabled={isSavingLibraryEdit} onClick={() => void openLibraryEditStationMaker()}>{editingIdeaStationSetup || (editingLibraryItem.stationSetupId && !removeEditingStation) ? "EDIT STATION" : "MAKE STATION"}</button>
                   {editingLibraryItem.stationSetupId ? <button
                     type="button"
                     className="detail-remove"
                     disabled={isSavingLibraryEdit}
                     onClick={() => {
                       setRemoveEditingStation((current) => !current);
+                      setEditingIdeaStationSetup(null);
                       setEditingIdeaMediaFile(null);
                     }}
                   >
@@ -10290,10 +10344,16 @@ export default function Home() {
                   >
                     REMOVE ATTACHMENT
                   </button>
+                  {editingIdeaStationSetup && !editingLibraryItem.stationSetupId ? <button type="button" className="detail-remove" disabled={isSavingLibraryEdit} onClick={() => setEditingIdeaStationSetup(null)}>CLEAR PIXEL STATION</button> : null}
                 </div>
                 {editingLibraryItem.stationSetupId && !removeEditingStation ? <p className="reminder-form-help">This idea has a saved pixel station. Remove it in this edit before replacing it with a photo or video; it remains saved until you tap Save.</p> : null}
                 {removeEditingStation ? <p className="reminder-form-help">The pixel station will be removed only when you save this edit.</p> : null}
-                {editingMediaUrl ? (
+                {editingIdeaStationSetup ? (
+                  <section className="idea-station-preview">
+                    <b>EDITABLE PIXEL STATION READY · {editingIdeaStationSetup.objects.length} {editingIdeaStationSetup.objects.length === 1 ? "PIECE" : "PIECES"}</b>
+                    <StationPreview setup={editingIdeaStationSetup} label={`Pending station for ${editingLibraryItem.title}`} />
+                  </section>
+                ) : editingMediaUrl ? (
                   <figure className="idea-media-preview">
                     <figcaption>{editingMediaKind?.toUpperCase()} · {editingMediaFilename}</figcaption>
                     {editingMediaKind === "video"

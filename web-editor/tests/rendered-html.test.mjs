@@ -69,3 +69,13 @@ test("keeps direct Draft actions beside the shared Idea save actions", async () 
   assert.ok(editorActions.indexOf("MOVE TO DRAFT") < editorActions.indexOf("SAVE SHARED EDIT"));
   assert.match(editorActions, /<button type="button"[\s\S]*?saveLibraryEdit\(\{ moveToDraft: true \}\)[\s\S]*?>MOVE TO DRAFT<\/button>/);
 });
+
+test("the Idea Library edit form exposes the Station Maker", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const editorMediaStart = page.indexOf('<section className="idea-editor-media"');
+  const editorMedia = page.slice(editorMediaStart, page.indexOf("</section>", editorMediaStart));
+
+  assert.ok(editorMediaStart >= 0);
+  assert.match(editorMedia, /openLibraryEditStationMaker/);
+  assert.match(editorMedia, /"EDIT STATION" : "MAKE STATION"/);
+});
