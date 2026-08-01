@@ -92,6 +92,19 @@ test("full-detail Idea cards show the complete coaching details", async () => {
   assert.match(page, /--library-facts-height/);
 });
 
+test("narrow planner Library cards reserve a media row and hide zero-height quick editors", async () => {
+  const [page, styles] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(styles, /\.library-window:not\(\.library-workspace-window\) \.library-item\.has-library-photo \{ grid-template-columns:minmax\(0,1fr\) 110px; grid-template-rows:minmax\(var\(--idea-row-height\),auto\) auto; \}/);
+  assert.match(styles, /\.library-window:not\(\.library-workspace-window\) \.library-item\.has-library-photo > \.library-item-photo,[\s\S]*?grid-column:1\/-1; grid-row:2; width:100%; height:auto; aspect-ratio:3\/2;/);
+  assert.match(page, /ariaHidden=\{libraryRowHeight <= 66\} tabIndex=\{libraryRowHeight <= 66 \? -1 : 0\}/);
+  assert.match(page, /ariaHidden=\{libraryRowHeight <= 84\} tabIndex=\{libraryRowHeight <= 84 \? -1 : 0\}/);
+  assert.match(page, /field="safety"[\s\S]*?ariaHidden=\{libraryRowHeight <= 84\} tabIndex=\{libraryRowHeight <= 84 \? -1 : 0\}/);
+});
+
 test("Idea card values expose focused double-click editors", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
 

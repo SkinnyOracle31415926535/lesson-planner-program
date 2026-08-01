@@ -26,6 +26,7 @@ import {
   type MeterStationSetup,
   type StationSetup,
 } from "./station-setups";
+import { StationPixelSprite } from "./station-pixel-sprite";
 
 function meter(value: number): string {
   return `${value.toFixed(2).replace(/\.00$/, "")} m`;
@@ -89,7 +90,7 @@ function MeterObject({ object, selected, onSelect }: { object: MeterStationObjec
   }
   const equipment = stationEquipment(object.equipmentId!);
   const className = `station-scene-piece station-profile-${equipment.profile}${selected ? " selected" : ""}`;
-  const content = <><span className="station-scene-top">{equipment.name}</span><span className="station-scene-side" /></>;
+  const content = <StationPixelSprite equipment={equipment} />;
   return onSelect
     ? <button type="button" className={className} aria-label={equipment.name} style={layout} onPointerDown={onSelect}>{content}</button>
     : <span aria-hidden="true" className={className} style={layout}>{content}</span>;
@@ -185,7 +186,7 @@ function ScaledStationMakerDialog({ setup, onSave, onCancel }: { setup: MeterSta
           {stationEquipmentCatalog.map((item) => {
             const placeable = item.measurementStatus === "verified";
             return <button key={item.id} type="button" disabled={!placeable} className={placeable ? "station-palette-item" : "station-palette-item needs-measurement"} onClick={() => { if (placeable) addEquipment(item.id as VerifiedStationEquipmentId); }}>
-              <i className={`station-palette-icon station-profile-${item.profile}`} />
+              <StationPixelSprite equipment={item} className="station-palette-icon" />
               <span>{item.name}<small>{placeable ? `${meterSize(stationEquipmentFootprint(item.id as VerifiedStationEquipmentId).length, stationEquipmentFootprint(item.id as VerifiedStationEquipmentId).width)} · VERIFIED` : "NEEDS MEASUREMENT"}</small></span>
             </button>;
           })}

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  addIdeaTag,
   ideaTagKey,
   ideaTagOptions,
   normalizeIdeaTags,
@@ -21,4 +22,9 @@ test("derives reusable tag choices and toggles by canonical key", () => {
   assert.deepEqual(choices.map((choice) => [choice.label, choice.count]), [["Warm Up", 2], ["Bars", 1], ["Floor", 1]]);
   assert.deepEqual(toggleIdeaTag(["Warm Up", "Floor"], "warm-up"), ["Floor"]);
   assert.deepEqual(toggleIdeaTag(["Floor"], "Warm-Up"), ["Floor", "Warm-Up"]);
+});
+
+test("adding a duplicate tag preserves its selected state", () => {
+  assert.deepEqual(addIdeaTag(["Warm Up", "Floor"], "warm-up"), ["Warm Up", "Floor"]);
+  assert.deepEqual(addIdeaTag(["Floor"], "Warm-Up"), ["Floor", "Warm-Up"]);
 });

@@ -54,3 +54,11 @@ export function toggleIdeaTag(current: readonly string[], candidate: string): st
     ? normalized.filter((tag) => ideaTagKey(tag) !== key)
     : normalizeIdeaTags([...normalized, candidate]);
 }
+
+/** Adds one tag without turning an existing matching selection off. */
+export function addIdeaTag(current: readonly string[], candidate: string): string[] {
+  const key = ideaTagKey(candidate);
+  const normalized = normalizeIdeaTags(current);
+  if (!key || normalized.some((tag) => ideaTagKey(tag) === key)) return normalized;
+  return normalizeIdeaTags([...normalized, candidate]);
+}

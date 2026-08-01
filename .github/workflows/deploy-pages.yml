@@ -34,6 +34,9 @@ jobs:
       - name: Install web editor dependencies
         working-directory: web-editor
         run: npm ci
+      - name: Lint web editor
+        working-directory: web-editor
+        run: npm run lint
       - name: Run web editor tests
         working-directory: web-editor
         run: npm run test:layout

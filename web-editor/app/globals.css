@@ -1230,6 +1230,23 @@ button { cursor: pointer; touch-action:manipulation; -webkit-tap-highlight-color
 .idea-tag-search input { width:100%; }
 .idea-editor-grid > .idea-tag-picker { grid-column:span 1; }
 
+/* Shared event controls use the same compact, tactile desktop language as tags. */
+.idea-event-picker { min-width:0; display:grid; gap:5px; margin:0; padding:7px; border:2px inset var(--window); background:#edf8ff; }
+.idea-event-picker legend { padding:0 3px; color:var(--navy); font:900 8px ui-monospace,monospace; letter-spacing:.04em; }
+.idea-event-picker legend small { color:#40525a; font:700 8px Arial,sans-serif; letter-spacing:0; }
+.idea-event-options,.idea-event-custom-selected { display:flex; flex-wrap:wrap; gap:4px; align-items:center; }
+.idea-event-options label,.idea-event-custom-selected label { display:flex; align-items:center; gap:4px; min-height:25px; padding:3px 6px; background:#fff; border:2px outset var(--window); color:var(--navy); font:900 8px ui-monospace,monospace; }
+.idea-event-options label:has(input:checked),.idea-event-custom-selected label:has(input:checked) { background:var(--cyan); }
+.idea-event-options input,.idea-event-custom-selected input { width:13px; height:13px; margin:0; accent-color:var(--navy); }
+.idea-event-custom-selected { padding:5px; background:#fff6a5; border:1px dotted #9c7300; }
+.idea-event-custom-selected > b { color:#5d4600; font:900 7px ui-monospace,monospace; }
+.idea-event-actions { display:flex; flex-wrap:wrap; gap:4px; align-items:end; }
+.idea-event-actions label { min-width:120px; display:grid; flex:1 1 150px; gap:2px; color:#315463; font:900 7px ui-monospace,monospace; }
+.idea-event-actions input { min-width:0; min-height:25px; border:2px inset var(--window); padding:3px 5px; background:var(--white); color:var(--ink); font:700 10px Arial,sans-serif; }
+.idea-event-actions button { min-height:25px; border:2px outset var(--window); padding:3px 6px; background:var(--green); color:var(--navy); font:900 8px ui-monospace,monospace; }
+.idea-event-actions button:disabled { cursor:default; background:#d7d7d7; color:#777; }
+.idea-editor-grid > .idea-event-picker { grid-column:span 1; }
+
 /* An explicit recovery surface keeps a past-plan revision distinguishable from a normal current draft. */
 .past-revision-controls { display:flex; flex-wrap:wrap; gap:3px; align-items:center; }
 .past-revision-controls button { min-height:30px; border:2px outset var(--window); padding:4px 7px; background:#fff6a5; color:var(--navy); font:900 8px ui-monospace,monospace; }
@@ -1249,9 +1266,62 @@ button { cursor: pointer; touch-action:manipulation; -webkit-tap-highlight-color
 .library-item-media-indicator { display:block; color:#315463; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
 .library-item .station-preview.station-preview-metric,.library-item .station-preview-empty { width:var(--library-station-preview-width,72px); height:var(--library-station-preview-height,48px); }
 
+/* A readable default preserves the deliberately compact view, but no longer
+   makes normal cards wait for a large expansion before showing their content. */
+.library-stack { --idea-row-height:120px; --library-description-height:42px; --library-description-opacity:1; --library-extra-height:22px; --library-extra-opacity:1; }
+.library-item.has-library-photo { grid-template-columns:minmax(0,1fr) minmax(72px,104px) 110px; }
+.library-item-photo { height:calc(var(--idea-row-height) - 10px); align-self:stretch; }
+.library-item-photo img { object-fit:contain; }
+.library-item-description { color:#343434; font:700 10px/1.25 Arial,sans-serif; }
+.library-item-extra { color:#315463; font:800 9px/1.2 Arial,sans-serif; }
+/* The planner-side tray is intentionally narrow. Give media its own framed row
+   instead of squeezing it between readable copy and the physical action keys. */
+.library-window:not(.library-workspace-window) .library-stack { grid-auto-rows:auto; }
+.library-window:not(.library-workspace-window) .library-item { height:auto; min-height:var(--idea-row-height); }
+.library-window:not(.library-workspace-window) .library-item.has-library-photo { grid-template-columns:minmax(0,1fr) 110px; grid-template-rows:minmax(var(--idea-row-height),auto) auto; }
+.library-window:not(.library-workspace-window) .library-item.has-library-photo > .library-item-copy { grid-column:1; grid-row:1; }
+.library-window:not(.library-workspace-window) .library-item.has-library-photo > .library-actions { grid-column:2; grid-row:1; }
+.library-window:not(.library-workspace-window) .library-item.has-library-photo > .library-item-photo,.library-window:not(.library-workspace-window) .library-item.has-library-photo > .station-preview,.library-window:not(.library-workspace-window) .library-item.has-library-photo > .station-preview-empty { grid-column:1/-1; grid-row:2; width:100%; height:auto; aspect-ratio:3/2; align-self:stretch; }
+.library-workspace-window .library-item.has-library-photo { grid-template-columns:minmax(0,1fr) minmax(140px,32%) 172px; }
+.library-workspace-window .library-item-photo,.library-workspace-window .library-item .station-preview.station-preview-metric,.library-workspace-window .library-item .station-preview-empty { width:100%; height:calc(var(--idea-row-height) - 10px); align-self:stretch; }
+@media (max-width:520px) {
+  .library-workspace-window .library-item.has-library-photo { grid-template-columns:1fr; }
+  .library-workspace-window .library-item-photo,.library-workspace-window .library-item .station-preview.station-preview-metric,.library-workspace-window .library-item .station-preview-empty { grid-column:1; width:100%; height:160px; }
+}
+
 /* The scene itself is the ruler: never stretch a 12m × 8m grid for viewport height. */
 .station-canvas { min-height:0; border:0; outline:3px solid #315463; }
 .station-preview.station-preview-metric { border:0; outline:1px solid var(--navy); outline-offset:-1px; }
+
+/* Original dimetric, pixel-grid equipment art replaces generic gradients and CSS shadows. */
+.station-scene-piece { display:block; box-sizing:border-box; min-width:0; min-height:0; overflow:visible; border:0; background:transparent; color:inherit; }
+.station-scene-piece::after { content:none; }
+.station-pixel-sprite { display:block; width:100%; height:100%; overflow:visible; pointer-events:none; shape-rendering:crispEdges; image-rendering:pixelated; }
+.station-pixel-shadow { fill:#071f30; fill-opacity:.56; }
+.station-pixel-side { fill:#9b5c08; stroke:#5d3500; stroke-width:2; }
+.station-pixel-incline-face { fill:#e7961b; stroke:#5d3500; stroke-width:2; }
+.station-pixel-incline-top { fill:#ffe778; stroke:#5d3500; stroke-width:2; }
+.station-pixel-highlight { fill:#fff7c9; }
+.station-pixel-seam { fill:#b56c09; }
+.station-pixel-vault-leg-dark { fill:#164f86; stroke:#082b51; stroke-width:2; }
+.station-pixel-vault-leg { fill:#2788c7; stroke:#082b51; stroke-width:2; }
+.station-pixel-vault-brace { fill:#f1c234; stroke:#725300; stroke-width:2; }
+.station-pixel-vault-side { fill:#b94b28; stroke:#6f2016; stroke-width:2; }
+.station-pixel-vault-top { fill:#f58d45; stroke:#6f2016; stroke-width:2; }
+.station-pixel-vault-light { fill:#ffd98b; }
+.station-pixel-trainer-side { fill:#663a9d; stroke:#39205e; stroke-width:2; }
+.station-pixel-trainer-top { fill:#9b6ed1; stroke:#39205e; stroke-width:2; }
+.station-pixel-trainer-stripe { fill:#e5d0ff; }
+.station-pixel-trainer-foot { fill:#4b2779; stroke:#281344; stroke-width:2; }
+.station-pixel-unknown-side { fill:#777; stroke:#4d4d4d; stroke-width:2; }
+.station-pixel-unknown-top { fill:#b9b9b9; stroke:#4d4d4d; stroke-width:2; }
+.station-palette .station-palette-icon { flex:0 0 32px; width:32px; height:25px; border:0; background:transparent; box-shadow:none; }
+
+/* Keep the meter scene in view while a coach scrolls the long equipment catalog. */
+@media (min-width:761px) {
+  .station-maker-body { overflow:hidden; }
+  .station-palette { max-height:calc(100dvh - 180px); overflow:auto; overscroll-behavior:contain; }
+}
 
 @media (max-width:800px) {
   .idea-tag-actions { align-items:stretch; }

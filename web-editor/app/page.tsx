@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { Fragment, startTransition, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import {
   anchorForPanel,
   anchorStyleForViewport,
@@ -35,12 +35,20 @@ import {
   type ZonePanel,
 } from "./lesson-data";
 import {
+  addIdeaTag,
   ideaTagKey,
   ideaTagOptions,
   normalizeIdeaTags,
   toggleIdeaTag,
   type IdeaTagOption,
 } from "./idea-tags";
+import {
+  IDEA_EVENT_OPTIONS,
+  addIdeaEvent,
+  ideaEventKey,
+  normalizeIdeaEvents,
+  toggleIdeaEvent,
+} from "./idea-events";
 import {
   addCustomStationSpot,
   boxesOverlap,
@@ -364,12 +372,25 @@ const BUILT_IN_BOARD_TOOL_PREFIX = "built-in:";
 const BUILT_IN_ZONE_IDS = zoneCatalog.map((zone) => zone.id);
 const INITIAL_DEMO_GEM_IDS: string[] = [];
 const LIBRARY_ROW_HEIGHT_MIN = 56;
-const LIBRARY_ROW_HEIGHT_DEFAULT = 66;
+const LIBRARY_ROW_HEIGHT_DEFAULT = 120;
 const LIBRARY_ROW_HEIGHT_MAX = 174;
 const LIBRARY_ROW_HEIGHT_STEP = 18;
 const LEGACY_RECURRING_TASK_ID = "set-bar-station-mats";
 const TODAY_LESSON_PLAN_ID = "legacy-current";
 const FUTURE_SAMPLE_CLASS_VALUE = "__sample_level_3__";
+
+/**
+ * Event-driven IDs must be generated outside the component body so rendering
+ * stays referentially transparent. Keep the established serialized prefixes
+ * because existing local records treat these values as opaque identifiers.
+ */
+function timestampId(prefix: string): string {
+  return `${prefix}-${Date.now()}`;
+}
+
+function randomizedId(prefix: string): string {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 const shelfCopy: Record<LibraryShelf, string> = {
   all: "Your shared skills, drills, routines, activities, and references",
@@ -725,6 +746,10 @@ function clampLibraryRowHeight(value: number): number {
 function libraryRowHeightFromStorage(value: string | null): number | null {
   if (value === null) return null;
   const parsed = Number(value);
+  // 66px was the previous automatic default, not a selectable density step.
+  // Move that legacy value to the new readable default while retaining every
+  // intentional compact or expanded preference.
+  if (parsed === 66) return LIBRARY_ROW_HEIGHT_DEFAULT;
   return Number.isFinite(parsed) ? clampLibraryRowHeight(parsed) : null;
 }
 
@@ -887,7 +912,7 @@ function IdeaTagPicker({
   const addCustomTag = () => {
     const next = normalizeIdeaTags([customTag]);
     if (!next.length) return;
-    changeTags(toggleIdeaTag(selected, next[0]));
+    changeTags(addIdeaTag(selected, next[0]));
     setCustomTag("");
   };
 
@@ -912,6 +937,52 @@ function IdeaTagPicker({
         <button type="button" onClick={() => { setShowAll((current) => !current); setSearch(""); }}>{showAll ? "SHOW FEWER TAGS" : "SHOW ALL TAGS"}</button>
         <label><span>ADD CUSTOM TAG</span><input value={customTag} onChange={(event) => setCustomTag(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addCustomTag(); } }} placeholder="e.g. relay" maxLength={80} /></label>
         <button type="button" disabled={!normalizeIdeaTags(customTag).length} onClick={addCustomTag}>ADD TAG</button>
+      </div>
+    </fieldset>
+  );
+}
+
+/** Shared checkbox editor that preserves both standard and older custom events. */
+function IdeaEventPicker({
+  value,
+  onChange,
+  label = "EVENTS",
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  label?: string;
+}) {
+  const [customEvent, setCustomEvent] = useState("");
+  const selected = normalizeIdeaEvents(value);
+  const selectedKeys = new Set(selected.map(ideaEventKey));
+  const standardKeys = new Set(IDEA_EVENT_OPTIONS.map(ideaEventKey));
+  const customEvents = selected.filter((event) => !standardKeys.has(ideaEventKey(event)));
+  const changeEvents = (events: readonly string[]) => onChange(editableList(normalizeIdeaEvents(events)));
+  const addCustomEvent = () => {
+    const next = normalizeIdeaEvents([customEvent]);
+    if (!next.length) return;
+    changeEvents(addIdeaEvent(selected, next[0]));
+    setCustomEvent("");
+  };
+
+  return (
+    <fieldset className="idea-event-picker">
+      <legend>{label} <small>check every event that applies</small></legend>
+      <div className="idea-event-options" aria-label={`${label} choices`}>
+        {IDEA_EVENT_OPTIONS.map((event) => {
+          const checked = selectedKeys.has(ideaEventKey(event));
+          return <label key={event}><input type="checkbox" checked={checked} onChange={() => changeEvents(toggleIdeaEvent(selected, event))} />{event}</label>;
+        })}
+      </div>
+      {customEvents.length ? (
+        <div className="idea-event-custom-selected" aria-label="Saved custom events">
+          <b>OTHER SAVED EVENTS</b>
+          {customEvents.map((event) => <label key={ideaEventKey(event)}><input type="checkbox" checked onChange={() => changeEvents(toggleIdeaEvent(selected, event))} />{event}</label>)}
+        </div>
+      ) : null}
+      <div className="idea-event-actions">
+        <label><span>ADD OTHER EVENT</span><input value={customEvent} onChange={(event) => setCustomEvent(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addCustomEvent(); } }} placeholder="e.g. open gym" maxLength={80} /></label>
+        <button type="button" disabled={!normalizeIdeaEvents(customEvent).length} onClick={addCustomEvent}>ADD EVENT</button>
       </div>
     </fieldset>
   );
@@ -3029,8 +3100,6 @@ export default function Home() {
   const sharedIdeaLibrarySyncConflictRef = useRef(false);
   const sharedIdeaStationFallbackRef = useRef<Record<string, StationSetup>>({});
   const [isLibraryWindow, setIsLibraryWindow] = useState(false);
-  activeLessonPlanIdRef.current = activeLessonPlan.id;
-  lessonModeRef.current = mode;
   const [lessonPlanIndex, setLessonPlanIndex] = useState<LessonPlanIndex | null>(null);
   const hasLessonPlanIndex = lessonPlanIndex !== null;
   const [planShelf, setPlanShelf] = useState<PlanShelf>(null);
@@ -3170,6 +3239,7 @@ export default function Home() {
   const [newIdeaDescription, setNewIdeaDescription] = useState("");
   const [newIdeaKind, setNewIdeaKind] = useState<LessonCard["kind"]>("DRILL");
   const [newIdeaTags, setNewIdeaTags] = useState("");
+  const [newIdeaEvents, setNewIdeaEvents] = useState("");
   const [newIdeaMats, setNewIdeaMats] = useState("");
   const [newIdeaLevels, setNewIdeaLevels] = useState<IdeaLevel[]>([]);
   const [newIdeaMediaFile, setNewIdeaMediaFile] = useState<File | null>(null);
@@ -3211,31 +3281,36 @@ export default function Home() {
   const [editingReminder, setEditingReminder] = useState<LocalReminderTemplate | null>(null);
   const [timerSeconds, setTimerSeconds] = useState(30 * 60);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const timerSecondsRef = useRef(timerSeconds);
   useEffect(() => {
     const libraryOnly = new URLSearchParams(window.location.search).get("library") === "1";
-    setIsLibraryWindow(libraryOnly);
-    if (!libraryOnly) return;
-    const previousTitle = document.title;
-    document.title = "Idea Library · Lesson Planner";
-    return () => { document.title = previousTitle; };
+    const previousTitle = libraryOnly ? document.title : null;
+    if (previousTitle !== null) document.title = "Idea Library · Lesson Planner";
+    startTransition(() => setIsLibraryWindow(libraryOnly));
+    return () => {
+      if (previousTitle !== null) document.title = previousTitle;
+    };
   }, []);
+  useEffect(() => {
+    timerSecondsRef.current = timerSeconds;
+  }, [timerSeconds]);
   const setLibraryRowHeightVisual = useCallback((value: number) => {
     const next = clampLibraryRowHeight(value);
-    const descriptionProgress = Math.max(0, Math.min(1, (next - 82) / (120 - 82)));
-    const extraProgress = Math.max(0, Math.min(1, (next - 100) / (120 - 100)));
+    const descriptionProgress = Math.max(0, Math.min(1, (next - 66) / (84 - 66)));
+    const extraProgress = Math.max(0, Math.min(1, (next - 84) / (102 - 84)));
     const factsProgress = Math.max(0, Math.min(1, (next - 120) / (LIBRARY_ROW_HEIGHT_MAX - 120)));
     libraryRowHeightRef.current = next;
     const stack = libraryStackRef.current;
     if (stack) {
-      const libraryStationPreviewHeight = Math.min(48, Math.max(0, next - 14));
+      const libraryStationPreviewHeight = Math.max(0, next - 10);
       stack.style.setProperty("--idea-row-height", `${next}px`);
       stack.style.setProperty("--station-preview-height", `${next - 10}px`);
       stack.style.setProperty("--station-preview-width", `${(next - 10) * 1.5}px`);
       stack.style.setProperty("--library-station-preview-height", `${libraryStationPreviewHeight}px`);
       stack.style.setProperty("--library-station-preview-width", `${libraryStationPreviewHeight * 1.5}px`);
-      stack.style.setProperty("--library-description-height", `${Math.round(descriptionProgress * 34)}px`);
+      stack.style.setProperty("--library-description-height", `${Math.round(descriptionProgress * 42)}px`);
       stack.style.setProperty("--library-description-opacity", String(descriptionProgress));
-      stack.style.setProperty("--library-extra-height", `${Math.round(extraProgress * 18)}px`);
+      stack.style.setProperty("--library-extra-height", `${Math.round(extraProgress * 22)}px`);
       stack.style.setProperty("--library-extra-opacity", String(extraProgress));
       stack.style.setProperty("--library-facts-height", `${Math.round(factsProgress * 46)}px`);
       stack.style.setProperty("--library-facts-opacity", String(factsProgress));
@@ -3685,12 +3760,25 @@ export default function Home() {
   const shouldShowTextLane = activePhase.mode !== "VISUAL";
 
   useEffect(() => {
-    if (!isTimerRunning || timerSeconds <= 0) return;
-    const timer = window.setInterval(() => setTimerSeconds((seconds) => Math.max(0, seconds - 1)), 1000);
+    if (!isTimerRunning || timerSecondsRef.current <= 0) return;
+    const timer = window.setInterval(() => {
+      const next = Math.max(0, timerSecondsRef.current - 1);
+      timerSecondsRef.current = next;
+      setTimerSeconds(next);
+      if (next === 0) {
+        window.clearInterval(timer);
+        setIsTimerRunning(false);
+        setNotice("PHASE TIMER COMPLETE · LOCAL DEMO ONLY");
+      }
+    }, 1000);
     return () => window.clearInterval(timer);
-  }, [isTimerRunning, timerSeconds]);
+  }, [isTimerRunning]);
 
   useEffect(() => {
+    const browserToday = localLessonPlanDate();
+    // A server or static build can be on the next UTC day while Ryan's browser
+    // is still in California. Reconcile before treating today's lesson as past.
+    if (lessonToday !== browserToday) startTransition(() => setLessonToday(browserToday));
     const nextMidnight = new Date();
     nextMidnight.setHours(24, 0, 5, 0);
     const timeout = window.setTimeout(() => setLessonToday(localLessonPlanDate()), Math.max(1, nextMidnight.getTime() - Date.now()));
@@ -3698,21 +3786,18 @@ export default function Home() {
   }, [lessonToday]);
 
   useEffect(() => {
-    if (timerSeconds === 0 && isTimerRunning) {
-      setIsTimerRunning(false);
-      setNotice("PHASE TIMER COMPLETE · LOCAL DEMO ONLY");
-    }
-  }, [isTimerRunning, timerSeconds]);
-
-  useEffect(() => {
+    if (lessonToday !== localLessonPlanDate()) return;
     if (!hasLoadedLocalLesson || !isPastActivePlan || isRevisingPastPlan) return;
-    clearTransientLessonPlanControls();
-    lessonModeRef.current = "VIEW";
-    setMode("VIEW");
-    setNotice(`${formatLessonPlanDate(activeLessonPlan.date)} IS A PAST SNAPSHOT · READ-ONLY`);
-  }, [activeLessonPlan.date, hasLoadedLocalLesson, isPastActivePlan, isRevisingPastPlan]);
+    startTransition(() => {
+      clearTransientLessonPlanControls();
+      lessonModeRef.current = "VIEW";
+      setMode("VIEW");
+      setNotice(`${formatLessonPlanDate(activeLessonPlan.date)} IS A PAST SNAPSHOT · READ-ONLY`);
+    });
+  }, [activeLessonPlan.date, hasLoadedLocalLesson, isPastActivePlan, isRevisingPastPlan, lessonToday]);
 
   useEffect(() => {
+    let restoredLessonHydrationScheduled = false;
     try {
       const storedIndex = window.localStorage.getItem(LOCAL_LESSON_PLAN_INDEX_STORAGE_KEY);
       const parsedIndex: unknown = storedIndex ? JSON.parse(storedIndex) : null;
@@ -3756,37 +3841,44 @@ export default function Home() {
         }
         if (indexedPlan !== index) window.localStorage.setItem(LOCAL_LESSON_PLAN_INDEX_STORAGE_KEY, JSON.stringify(indexedPlan));
         activeLessonPlanIdRef.current = planWithClass.id;
-        setActiveLessonPlan(planWithClass);
-        setLessonPlanIndex(indexedPlan);
-        setLessonPhases(restored.phases);
-        setTodoDone(restored.todoDone);
-        setIsReady(restored.isReady);
-        setSafetyAcknowledged(restored.safetyAcknowledged);
-        setLessonDocumentDetails(restored.documentDetails);
-        setActiveClassId(planWithClass.classId);
-        setAttendanceById(restored.attendanceById);
-        setVisualAnchorByCardId(restored.visualAnchorByCardId);
-        setVisualLabelLayoutByCardId(restored.visualLabelLayoutByCardId);
-        setActiveBoardSnapshot(restored.boardSnapshot);
-        setLessonRevisions(restored.revisions);
-        setLessonScheduleSnapshot(restored.scheduleSnapshot);
-        setIsRevisingPastPlan(false);
-        setActivePhaseId(restored.phases[0]?.id ?? "l3-f2");
-        setFuturePlanDate(localLessonPlanDate());
-        setFuturePlanClassId(planWithClass.classId);
-        setFuturePlanClassChosen(false);
-        setHydratedPlanId(planWithClass.id);
-        setNotice(classReconciliationBlocked
-          ? "BROWSER LESSON CACHE RESTORED · ITS SAVED CLASS COULD NOT BE REASSIGNED BECAUSE THAT DATE ALREADY HAS A PLAN"
-          : restored.migrated
-            ? "BROWSER LESSON CACHE RESTORED · PHASE DATA UPGRADED BEFORE PRIVATE SYNC"
-            : "BROWSER LESSON CACHE RESTORED · CONNECTING TO RYAN’S WORKSPACE");
+        startTransition(() => {
+          setActiveLessonPlan(planWithClass);
+          setLessonPlanIndex(indexedPlan);
+          setLessonPhases(restored.phases);
+          setTodoDone(restored.todoDone);
+          setIsReady(restored.isReady);
+          setSafetyAcknowledged(restored.safetyAcknowledged);
+          setLessonDocumentDetails(restored.documentDetails);
+          setActiveClassId(planWithClass.classId);
+          setAttendanceById(restored.attendanceById);
+          setVisualAnchorByCardId(restored.visualAnchorByCardId);
+          setVisualLabelLayoutByCardId(restored.visualLabelLayoutByCardId);
+          setActiveBoardSnapshot(restored.boardSnapshot);
+          setLessonRevisions(restored.revisions);
+          setLessonScheduleSnapshot(restored.scheduleSnapshot);
+          setIsRevisingPastPlan(false);
+          setActivePhaseId(restored.phases[0]?.id ?? "l3-f2");
+          setFuturePlanDate(localLessonPlanDate());
+          setFuturePlanClassId(planWithClass.classId);
+          setFuturePlanClassChosen(false);
+          setHydratedPlanId(planWithClass.id);
+          setNotice(classReconciliationBlocked
+            ? "BROWSER LESSON CACHE RESTORED · ITS SAVED CLASS COULD NOT BE REASSIGNED BECAUSE THAT DATE ALREADY HAS A PLAN"
+            : restored.migrated
+              ? "BROWSER LESSON CACHE RESTORED · PHASE DATA UPGRADED BEFORE PRIVATE SYNC"
+              : "BROWSER LESSON CACHE RESTORED · CONNECTING TO RYAN’S WORKSPACE");
+          setHasLoadedLocalLesson(true);
+        });
+        restoredLessonHydrationScheduled = true;
       }
     } catch {
-      setNotice("BROWSER CACHE COULD NOT RESTORE THE LAST EDIT · CONNECTING TO RYAN’S WORKSPACE");
-    } finally {
-      setHasLoadedLocalLesson(true);
+      startTransition(() => {
+        setNotice("BROWSER CACHE COULD NOT RESTORE THE LAST EDIT · CONNECTING TO RYAN’S WORKSPACE");
+        setHasLoadedLocalLesson(true);
+      });
+      return;
     }
+    if (!restoredLessonHydrationScheduled) startTransition(() => setHasLoadedLocalLesson(true));
   }, []);
 
   useEffect(() => {
@@ -3797,7 +3889,7 @@ export default function Home() {
       || (isPastActivePlan && !isRevisingPastPlan)) return;
     const savedLesson = currentLessonSnapshot();
     if (new TextEncoder().encode(JSON.stringify(savedLesson)).length > MAX_LESSON_DOCUMENT_BYTES) {
-      setNotice("LESSON REVISION IS TOO LARGE TO SAVE SAFELY · EXPORT A BACKUP BEFORE ADDING ANOTHER HISTORY ENTRY");
+      startTransition(() => setNotice("LESSON REVISION IS TOO LARGE TO SAVE SAFELY · EXPORT A BACKUP BEFORE ADDING ANOTHER HISTORY ENTRY"));
       return;
     }
     try {
@@ -3805,22 +3897,24 @@ export default function Home() {
         ? LOCAL_LESSON_STORAGE_KEY
         : lessonPlanStorageKey(activeLessonPlan.id);
       window.localStorage.setItem(storageKey, JSON.stringify(savedLesson));
-      setActiveBoardSnapshot(savedLesson.boardSnapshot);
-      if (!isPastActivePlan && !lessonScheduleSnapshot) {
-        setLessonScheduleSnapshot(copyLessonScheduleSnapshot(savedLesson.scheduleSnapshot));
-      }
-      setLessonPlanIndex((current) => {
-        const updatedPlan = { ...activeLessonPlan, updatedAt: new Date().toISOString() };
-        const next = indexWithLessonPlan(current, updatedPlan, activeLessonPlan.id);
-        if (!next) {
-          setNotice("THE LESSON'S CLASS AND DATE ALREADY BELONG TO ANOTHER SAVED PLAN · THE CURRENT PLAN WAS NOT REASSIGNED");
-          return current;
+      startTransition(() => {
+        setActiveBoardSnapshot(savedLesson.boardSnapshot);
+        if (!isPastActivePlan && !lessonScheduleSnapshot) {
+          setLessonScheduleSnapshot(copyLessonScheduleSnapshot(savedLesson.scheduleSnapshot));
         }
-        window.localStorage.setItem(LOCAL_LESSON_PLAN_INDEX_STORAGE_KEY, JSON.stringify(next));
-        return next;
+        setLessonPlanIndex((current) => {
+          const updatedPlan = { ...activeLessonPlan, updatedAt: new Date().toISOString() };
+          const next = indexWithLessonPlan(current, updatedPlan, activeLessonPlan.id);
+          if (!next) {
+            setNotice("THE LESSON'S CLASS AND DATE ALREADY BELONG TO ANOTHER SAVED PLAN · THE CURRENT PLAN WAS NOT REASSIGNED");
+            return current;
+          }
+          window.localStorage.setItem(LOCAL_LESSON_PLAN_INDEX_STORAGE_KEY, JSON.stringify(next));
+          return next;
+        });
       });
     } catch {
-      setNotice("LESSON PLAN IS ACTIVE · BROWSER CACHE IS UNAVAILABLE, SO PRIVATE SYNC MAY RETRY");
+      startTransition(() => setNotice("LESSON PLAN IS ACTIVE · BROWSER CACHE IS UNAVAILABLE, SO PRIVATE SYNC MAY RETRY"));
     }
   }, [activeLessonPlan, attendanceById, customBoards, hasLoadedCustomBoards, hasLoadedLocalLesson, hasLoadedStationBoardOverrides, hydratedPlanId, isPastActivePlan, isReady, isRevisingPastPlan, lessonDocumentDetails, lessonPhases, lessonRevisions, lessonScheduleSnapshot, safetyAcknowledged, stationBoardOverrides, todoDone, visualAnchorByCardId, visualLabelLayoutByCardId]);
 
@@ -3856,7 +3950,7 @@ export default function Home() {
   }
 
   function makeUnscheduledLessonPhase(className: string): LessonPhase {
-    const id = `unscheduled-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const id = randomizedId("unscheduled");
     return {
       id,
       eventId: id,
@@ -4280,20 +4374,25 @@ export default function Home() {
   }
 
   useEffect(() => {
+    let restoredBoards: CustomBoard[] | null = null;
+    let restoreNotice: string | null = null;
     try {
       const stored = window.localStorage.getItem(LOCAL_CUSTOM_BOARD_STORAGE_KEY);
       if (stored) {
         const parsed: unknown = JSON.parse(stored);
         if (isCustomBoardStorage(parsed)) {
-          setCustomBoards(parsed.boards);
-          setNotice("LOCAL PHOTO AREAS RESTORED · PHOTOS STAY IN THIS DEVICE AND BROWSER");
+          restoredBoards = parsed.boards;
+          restoreNotice = "LOCAL PHOTO AREAS RESTORED · PHOTOS STAY IN THIS DEVICE AND BROWSER";
         }
       }
     } catch {
-      setNotice("PHOTO AREA DATA IS LOCAL · THE LAST AREA LIST COULD NOT BE RESTORED");
-    } finally {
-      setHasLoadedCustomBoards(true);
+      restoreNotice = "PHOTO AREA DATA IS LOCAL · THE LAST AREA LIST COULD NOT BE RESTORED";
     }
+    startTransition(() => {
+      if (restoredBoards) setCustomBoards(restoredBoards);
+      if (restoreNotice) setNotice(restoreNotice);
+      setHasLoadedCustomBoards(true);
+    });
   }, []);
 
   useEffect(() => {
@@ -4301,27 +4400,32 @@ export default function Home() {
     try {
       window.localStorage.setItem(LOCAL_CUSTOM_BOARD_STORAGE_KEY, JSON.stringify(customBoardStorage(customBoards)));
     } catch {
-      setNotice("PHOTO AREA LIST CHANGED · BROWSER STORAGE COULD NOT SAVE THE METADATA");
+      startTransition(() => setNotice("PHOTO AREA LIST CHANGED · BROWSER STORAGE COULD NOT SAVE THE METADATA"));
     }
   }, [customBoards, hasLoadedCustomBoards]);
 
   useEffect(() => {
+    let restoredFloorPhotoAreas: FloorPhotoAreaStorage | null = null;
+    let restoreNotice: string | null = null;
     try {
       const stored = window.localStorage.getItem(LOCAL_FLOOR_PHOTO_AREA_STORAGE_KEY);
       if (stored) {
         const parsed: unknown = JSON.parse(stored);
         if (isFloorPhotoAreaStorage(parsed)) {
-          setFloorPhotoAreas(parsed);
-          setNotice("F2 + F3 PHOTO AREAS RESTORED · EACH IMAGE HAS A SHARED BACKUP WHEN CONNECTED");
+          restoredFloorPhotoAreas = parsed;
+          restoreNotice = "F2 + F3 PHOTO AREAS RESTORED · EACH IMAGE HAS A SHARED BACKUP WHEN CONNECTED";
         } else {
-          setNotice("SAVED F2/F3 PHOTO AREAS WERE NOT VALID · FLOOR CROPS STAY ACTIVE");
+          restoreNotice = "SAVED F2/F3 PHOTO AREAS WERE NOT VALID · FLOOR CROPS STAY ACTIVE";
         }
       }
     } catch {
-      setNotice("F2/F3 PHOTO AREA LIST COULD NOT BE RESTORED IN THIS BROWSER");
-    } finally {
-      setHasLoadedFloorPhotoAreas(true);
+      restoreNotice = "F2/F3 PHOTO AREA LIST COULD NOT BE RESTORED IN THIS BROWSER";
     }
+    startTransition(() => {
+      if (restoredFloorPhotoAreas) setFloorPhotoAreas(restoredFloorPhotoAreas);
+      if (restoreNotice) setNotice(restoreNotice);
+      setHasLoadedFloorPhotoAreas(true);
+    });
   }, []);
 
   useEffect(() => {
@@ -4329,12 +4433,12 @@ export default function Home() {
     try {
       window.localStorage.setItem(LOCAL_FLOOR_PHOTO_AREA_STORAGE_KEY, JSON.stringify(floorPhotoAreaStorage(floorPhotoAreas.photosByZoneId)));
     } catch {
-      setNotice("F2/F3 PHOTO AREA LIST CHANGED · BROWSER STORAGE COULD NOT SAVE THE METADATA");
+      startTransition(() => setNotice("F2/F3 PHOTO AREA LIST CHANGED · BROWSER STORAGE COULD NOT SAVE THE METADATA"));
     }
   }, [floorPhotoAreas, hasLoadedFloorPhotoAreas]);
 
   useEffect(() => {
-    setSharedPhotoLibraryAdminUrl(sharedPhotoLibraryManagerUrl());
+    startTransition(() => setSharedPhotoLibraryAdminUrl(sharedPhotoLibraryManagerUrl()));
     let active = true;
     void fetchSharedPhotoLibrary().then((library) => {
       if (!active || !library) return;
@@ -4348,22 +4452,27 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    let restoredAreaCatalog: AreaCatalogPreferences | null = null;
+    let restoreNotice: string | null = null;
     try {
       const stored = window.localStorage.getItem(LOCAL_AREA_CATALOG_STORAGE_KEY);
       if (stored) {
         const parsed: unknown = JSON.parse(stored);
         if (isAreaCatalogPreferences(parsed, BUILT_IN_ZONE_IDS)) {
-          setAreaCatalog(parsed);
-          setNotice("LOCAL AREA CUSTOMIZATIONS RESTORED · SUPPLIED BOARDS STAY UNCHANGED");
+          restoredAreaCatalog = parsed;
+          restoreNotice = "LOCAL AREA CUSTOMIZATIONS RESTORED · SUPPLIED BOARDS STAY UNCHANGED";
         } else {
-          setNotice("SAVED AREA CUSTOMIZATIONS WERE NOT VALID · SUPPLIED AREAS STAY AVAILABLE");
+          restoreNotice = "SAVED AREA CUSTOMIZATIONS WERE NOT VALID · SUPPLIED AREAS STAY AVAILABLE";
         }
       }
     } catch {
-      setNotice("LOCAL AREA CUSTOMIZATIONS ARE ACTIVE · THE LAST AREA LIST COULD NOT BE RESTORED");
-    } finally {
-      setHasLoadedAreaCatalog(true);
+      restoreNotice = "LOCAL AREA CUSTOMIZATIONS ARE ACTIVE · THE LAST AREA LIST COULD NOT BE RESTORED";
     }
+    startTransition(() => {
+      if (restoredAreaCatalog) setAreaCatalog(restoredAreaCatalog);
+      if (restoreNotice) setNotice(restoreNotice);
+      setHasLoadedAreaCatalog(true);
+    });
   }, []);
 
   useEffect(() => {
@@ -4371,26 +4480,31 @@ export default function Home() {
     try {
       window.localStorage.setItem(LOCAL_AREA_CATALOG_STORAGE_KEY, JSON.stringify(areaCatalogPreferences(areaCatalog)));
     } catch {
-      setNotice("AREA CUSTOMIZATION IS ON SCREEN · BROWSER STORAGE COULD NOT SAVE IT");
+      startTransition(() => setNotice("AREA CUSTOMIZATION IS ON SCREEN · BROWSER STORAGE COULD NOT SAVE IT"));
     }
   }, [areaCatalog, hasLoadedAreaCatalog]);
 
   useEffect(() => {
+    let restoredStationBoardOverrides: StationBoardOverrideStorage | null = null;
+    let restoreNotice: string | null = null;
     try {
       const stored = window.localStorage.getItem(LOCAL_STATION_BOARD_OVERRIDE_STORAGE_KEY);
       if (stored) {
         const parsed: unknown = JSON.parse(stored);
         if (isStationBoardOverrideStorage(parsed)) {
-          setStationBoardOverrides(parsed);
+          restoredStationBoardOverrides = parsed;
         } else {
-          setNotice("SAVED STATION-SPOT CHANGES WERE NOT VALID · THE SUPPLIED BOARD SPOTS ARE STILL INTACT");
+          restoreNotice = "SAVED STATION-SPOT CHANGES WERE NOT VALID · THE SUPPLIED BOARD SPOTS ARE STILL INTACT";
         }
       }
     } catch {
-      setNotice("SUPPLIED BOARD SPOTS ARE ACTIVE · LOCAL STATION-EDIT DATA COULD NOT BE RESTORED");
-    } finally {
-      setHasLoadedStationBoardOverrides(true);
+      restoreNotice = "SUPPLIED BOARD SPOTS ARE ACTIVE · LOCAL STATION-EDIT DATA COULD NOT BE RESTORED";
     }
+    startTransition(() => {
+      if (restoredStationBoardOverrides) setStationBoardOverrides(restoredStationBoardOverrides);
+      if (restoreNotice) setNotice(restoreNotice);
+      setHasLoadedStationBoardOverrides(true);
+    });
   }, []);
 
   useEffect(() => {
@@ -4398,7 +4512,7 @@ export default function Home() {
     try {
       window.localStorage.setItem(LOCAL_STATION_BOARD_OVERRIDE_STORAGE_KEY, JSON.stringify(stationBoardOverrides));
     } catch {
-      setNotice("STATION-SPOT CHANGE IS ON SCREEN · BROWSER STORAGE COULD NOT SAVE IT");
+      startTransition(() => setNotice("STATION-SPOT CHANGE IS ON SCREEN · BROWSER STORAGE COULD NOT SAVE IT"));
     }
   }, [hasLoadedStationBoardOverrides, stationBoardOverrides]);
 
@@ -4412,6 +4526,7 @@ export default function Home() {
 
     let upgradedPlanCount = 0;
     let failedPlanCount = 0;
+    let activePlanBoardSnapshot: LessonBoardSnapshot | null = null;
     lessonPlanIndex.plans.forEach((plan) => {
       try {
         const storageKey = storageKeyForLessonPlan(plan);
@@ -4424,36 +4539,44 @@ export default function Home() {
         const boardSnapshot = createLessonBoardSnapshot(restored.phases, customBoards, stationBoardOverrides);
         const upgraded = storedLessonWithBoardSnapshot(restored, boardSnapshot);
         window.localStorage.setItem(storageKey, JSON.stringify(upgraded));
-        if (plan.id === activeLessonPlan.id) setActiveBoardSnapshot(boardSnapshot);
+        if (plan.id === activeLessonPlan.id) activePlanBoardSnapshot = boardSnapshot;
         upgradedPlanCount += 1;
       } catch {
         failedPlanCount += 1;
       }
     });
 
-    if (failedPlanCount) {
-      setNotice("SAVED LESSONS STAY AVAILABLE · ONE OR MORE VISUAL BOARD SNAPSHOTS COULD NOT BE UPGRADED");
-    } else if (upgradedPlanCount) {
-      setNotice(`${upgradedPlanCount} SAVED LESSON${upgradedPlanCount === 1 ? "" : "S"} UPGRADED · VISUAL BOARD STATE IS NOW FROZEN PER PLAN`);
-    }
+    startTransition(() => {
+      if (activePlanBoardSnapshot) setActiveBoardSnapshot(activePlanBoardSnapshot);
+      if (failedPlanCount) {
+        setNotice("SAVED LESSONS STAY AVAILABLE · ONE OR MORE VISUAL BOARD SNAPSHOTS COULD NOT BE UPGRADED");
+      } else if (upgradedPlanCount) {
+        setNotice(`${upgradedPlanCount} SAVED LESSON${upgradedPlanCount === 1 ? "" : "S"} UPGRADED · VISUAL BOARD STATE IS NOW FROZEN PER PLAN`);
+      }
+    });
   }, [activeLessonPlan.id, customBoards, hasLoadedCustomBoards, hasLoadedLocalLesson, hasLoadedStationBoardOverrides, lessonPlanIndex, stationBoardOverrides]);
 
   useEffect(() => {
+    let restoredClassStorage: LocalClassStorage | null = null;
+    let restoreNotice: string | null = null;
     try {
       const stored = window.localStorage.getItem(LOCAL_CLASS_STORAGE_KEY);
       if (stored) {
         const parsed: unknown = JSON.parse(stored);
         if (isLocalClassStorage(parsed)) {
-          setClassStorage(parsed);
+          restoredClassStorage = parsed;
         } else {
-          setNotice("SAVED CLASS DATA WAS NOT VALID · NO ROSTER OR SCHEDULE WAS CHANGED");
+          restoreNotice = "SAVED CLASS DATA WAS NOT VALID · NO ROSTER OR SCHEDULE WAS CHANGED";
         }
       }
     } catch {
-      setNotice("SHARED CLASSES ARE AVAILABLE · THE LAST BROWSER CACHE COULD NOT BE RESTORED");
-    } finally {
-      setHasLoadedLocalClasses(true);
+      restoreNotice = "SHARED CLASSES ARE AVAILABLE · THE LAST BROWSER CACHE COULD NOT BE RESTORED";
     }
+    startTransition(() => {
+      if (restoredClassStorage) setClassStorage(restoredClassStorage);
+      if (restoreNotice) setNotice(restoreNotice);
+      setHasLoadedLocalClasses(true);
+    });
   }, []);
 
   useEffect(() => {
@@ -4461,15 +4584,17 @@ export default function Home() {
     try {
       window.localStorage.setItem(LOCAL_CLASS_STORAGE_KEY, JSON.stringify(classStorage));
     } catch {
-      setNotice("CLASS LIST CHANGED · BROWSER STORAGE COULD NOT SAVE IT");
+      startTransition(() => setNotice("CLASS LIST CHANGED · BROWSER STORAGE COULD NOT SAVE IT"));
     }
   }, [classStorage, hasLoadedLocalClasses]);
 
   useEffect(() => {
     if (!hasLoadedLocalClasses || !activeClassId) return;
     if (classStorage.classes.some((localClass) => localClass.id === activeClassId)) return;
-    setActiveClassId(null);
-    setNotice("THE CLASS SAVED ON THIS LESSON IS NOT IN THIS BROWSER CACHE · SAMPLE ROSTER SHOWN UNTIL RYAN’S SHARED COPY LOADS");
+    startTransition(() => {
+      setActiveClassId(null);
+      setNotice("THE CLASS SAVED ON THIS LESSON IS NOT IN THIS BROWSER CACHE · SAMPLE ROSTER SHOWN UNTIL RYAN’S SHARED COPY LOADS");
+    });
   }, [activeClassId, classStorage.classes, hasLoadedLocalClasses]);
 
   useEffect(() => {
@@ -4481,18 +4606,23 @@ export default function Home() {
   }, [plannerChecklist]);
 
   useEffect(() => {
+    let restoredSafeSchedule: SafeScheduleStorage | null = null;
+    let restoreNotice: string | null = null;
     try {
       const stored = window.localStorage.getItem(LOCAL_SAFE_SCHEDULE_STORAGE_KEY);
       if (stored) {
         const normalized = normalizeSafeScheduleStorage(JSON.parse(stored) as unknown);
-        if (normalized) setSafeScheduleStorageState(normalized);
-        else setNotice("SAVED FULL SCHEDULE WAS NOT VALID · CLASSES AND LESSONS WERE NOT CHANGED");
+        if (normalized) restoredSafeSchedule = normalized;
+        else restoreNotice = "SAVED FULL SCHEDULE WAS NOT VALID · CLASSES AND LESSONS WERE NOT CHANGED";
       }
     } catch {
-      setNotice("FULL SCHEDULE IMPORT IS AVAILABLE · THE LAST BROWSER CACHE COULD NOT BE RESTORED");
-    } finally {
-      setHasLoadedSafeSchedule(true);
+      restoreNotice = "FULL SCHEDULE IMPORT IS AVAILABLE · THE LAST BROWSER CACHE COULD NOT BE RESTORED";
     }
+    startTransition(() => {
+      if (restoredSafeSchedule) setSafeScheduleStorageState(restoredSafeSchedule);
+      if (restoreNotice) setNotice(restoreNotice);
+      setHasLoadedSafeSchedule(true);
+    });
   }, []);
 
   useEffect(() => {
@@ -4555,11 +4685,13 @@ export default function Home() {
     if (!template.phases.length && !hasScheduleGeneratedPhase(lessonPhases)) return;
     const reconciled = reconcileScheduleTemplateForLesson(lessonPhases, template, activeLessonPlan.classId);
     if (JSON.stringify(reconciled.phases) === JSON.stringify(lessonPhases)) return;
-    setLessonPhases(reconciled.phases);
-    setActivePhaseId((current) => reconciled.replacementPhaseIdByOldId[current]
-      ?? (reconciled.phases.some((phase) => phase.id === current)
-        ? current
-        : reconciled.phases[0]?.id ?? ""));
+    startTransition(() => {
+      setLessonPhases(reconciled.phases);
+      setActivePhaseId((current) => reconciled.replacementPhaseIdByOldId[current]
+        ?? (reconciled.phases.some((phase) => phase.id === current)
+          ? current
+          : reconciled.phases[0]?.id ?? ""));
+    });
   }, [
     activeLessonPlan.classId,
     activeLessonPlan.date,
@@ -4576,7 +4708,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!hasLoadedCustomBoards || !hasLoadedAreaCatalog || isPastActivePlan) return;
-    setLessonPhases((phases) => refreshAreaZoneMetadata(phases));
+    startTransition(() => setLessonPhases((phases) => refreshAreaZoneMetadata(phases)));
   }, [areaCatalog, customBoards, hasLoadedAreaCatalog, hasLoadedCustomBoards, isPastActivePlan]);
 
   useEffect(() => {
@@ -4586,21 +4718,23 @@ export default function Home() {
       && suggestedPhotoAreasForPhase(phase.title, availableZones).length > 0
     ));
     if (!hasUntouchedMatchingPhase) return;
-    setIsReady(false);
-    setLessonPhases((phases) => phases.map((phase) => {
-      if (!canAutoSelectPhotoAreas(phase)) return phase;
-      const suggestedAreas = suggestedPhotoAreasForPhase(phase.title, availableZones);
-      return suggestedAreas.length
-        ? { ...phase, zones: suggestedAreas.map(copyZone) }
-        : phase;
-    }));
+    startTransition(() => {
+      setIsReady(false);
+      setLessonPhases((phases) => phases.map((phase) => {
+        if (!canAutoSelectPhotoAreas(phase)) return phase;
+        const suggestedAreas = suggestedPhotoAreasForPhase(phase.title, availableZones);
+        return suggestedAreas.length
+          ? { ...phase, zones: suggestedAreas.map(copyZone) }
+          : phase;
+      }));
+    });
   }, [availableZones, hasLoadedAreaCatalog, hasLoadedCustomBoards, isPastActivePlan, lessonPhases]);
 
   useEffect(() => {
     if (!hasLoadedCustomBoards) return;
     let active = true;
     const urls: string[] = [];
-    setCustomBoardPhotoUrls({});
+    startTransition(() => setCustomBoardPhotoUrls({}));
     void Promise.all(renderingCustomBoards.map(async (board) => {
       const sharedUrl = sharedCustomBoardPhotoUrls[board.photoId];
       if (sharedUrl) return [board.photoId, sharedUrl] as const;
@@ -4625,7 +4759,7 @@ export default function Home() {
     if (!hasLoadedFloorPhotoAreas) return;
     let active = true;
     const urls: string[] = [];
-    setFloorPhotoUrls({});
+    startTransition(() => setFloorPhotoUrls({}));
     void Promise.all(Object.entries(floorPhotoAreas.photosByZoneId).map(async ([zoneId, photo]) => {
       if (!isFloorPhotoAreaId(zoneId) || !photo) return [zoneId, ""] as const;
       const storedPhoto = await loadCustomBoardPhoto(photo.photoId);
@@ -4646,67 +4780,78 @@ export default function Home() {
   }, [floorPhotoAreas, hasLoadedFloorPhotoAreas]);
 
   useEffect(() => {
+    const applyStoredLibraryPreferences = (parsed: unknown) => {
+      if (isStoredLibraryPreferences(parsed)) {
+        setGemIds([...new Set(parsed.gemIds)]);
+        setCustomLibraryCards(parsed.customCards.map(copyLibraryItem));
+        setRecentIdeaIds([...new Set(parsed.recentIdeaIds)]);
+        setArchivedIdeaIds([...new Set(parsed.archivedIdeaIds)]);
+        setRestoredIdeaIds([...new Set(parsed.restoredIdeaIds)]);
+        setDraftIdeaIds([...new Set(parsed.draftIdeaIds)]);
+        setItemOverridesById(Object.fromEntries(Object.entries(parsed.itemOverridesById).map(([id, card]) => [id, copyLibraryItem(card)])));
+        setRemovedIdeaIds([...new Set(parsed.removedIdeaIds)]);
+      } else if (isStoredLibraryPreferencesV6(parsed)) {
+        setGemIds([...new Set(parsed.gemIds)]);
+        setCustomLibraryCards(parsed.customCards.map(copyLibraryItem));
+        setRecentIdeaIds([...new Set(parsed.recentIdeaIds)]);
+        setArchivedIdeaIds([...new Set(parsed.archivedIdeaIds)]);
+        setRestoredIdeaIds([...new Set(parsed.restoredIdeaIds)]);
+        setDraftIdeaIds([]);
+        setItemOverridesById(Object.fromEntries(Object.entries(parsed.itemOverridesById).map(([id, card]) => [id, copyLibraryItem(card)])));
+        setRemovedIdeaIds([...new Set(parsed.removedIdeaIds)]);
+        setNotice("LOCAL LIBRARY RESTORED · DRAFT IDEAS ADDED");
+      } else if (isStoredLibraryPreferencesV5(parsed)) {
+        setGemIds([...new Set(parsed.gemIds)]);
+        setCustomLibraryCards(parsed.customCards.map(copyLibraryItem));
+        setRecentIdeaIds([...new Set(parsed.recentIdeaIds)]);
+        setArchivedIdeaIds([...new Set(parsed.archivedIdeaIds)]);
+        setRestoredIdeaIds([...new Set(parsed.restoredIdeaIds)]);
+        setDraftIdeaIds([]);
+        setItemOverridesById(Object.fromEntries(Object.entries(parsed.itemOverridesById).map(([id, card]) => [id, copyLibraryItem(card)])));
+        setRemovedIdeaIds([...new Set(parsed.removedIdeaIds)]);
+        setNotice("LOCAL LIBRARY RESTORED · PHOTOS UPGRADED FOR PHOTO OR VIDEO ATTACHMENTS");
+      } else if (isStoredLibraryPreferencesV4(parsed)) {
+        setGemIds([...new Set(parsed.gemIds)]);
+        setCustomLibraryCards(parsed.customCards.map(copyLibraryItem));
+        setRecentIdeaIds([...new Set(parsed.recentIdeaIds)]);
+        setArchivedIdeaIds([...new Set(parsed.archivedIdeaIds)]);
+        setRestoredIdeaIds([...new Set(parsed.restoredIdeaIds)]);
+        setDraftIdeaIds([]);
+        setNotice("LOCAL LIBRARY RESTORED · EDITABLE IDEAS ADDED IN THIS BROWSER");
+      } else if (isStoredLibraryPreferencesV3(parsed)) {
+        setGemIds([...new Set(parsed.gemIds)]);
+        setCustomLibraryCards(parsed.customCards.map(makeLocalLibraryItem));
+        setRecentIdeaIds([...new Set(parsed.recentIdeaIds)]);
+        setNotice("LOCAL LIBRARY RESTORED · FULL VAULT CATALOG ADDED IN THIS BROWSER");
+      } else if (isStoredLibraryPreferencesV2(parsed)) {
+        setGemIds([...new Set(parsed.gemIds)]);
+        setCustomLibraryCards(parsed.customCards.map(makeLocalLibraryItem));
+        setNotice("LOCAL LIBRARY RESTORED · ARCHIVE CONTROLS ADDED IN THIS BROWSER");
+      } else if (isStoredLibraryPreferencesV1(parsed)) {
+        setGemIds([...new Set(parsed.gemIds)]);
+        setNotice("LOCAL DEMO CATALOG RESTORED · IDEA LIBRARY UPGRADED IN THIS BROWSER");
+      }
+    };
+    let storedPreferences: unknown;
+    let hasStoredPreferences = false;
     try {
       const stored = window.localStorage.getItem(LOCAL_LIBRARY_STORAGE_KEY);
       libraryStorageSnapshotRef.current = stored;
       if (stored) {
-        const parsed: unknown = JSON.parse(stored);
-        if (isStoredLibraryPreferences(parsed)) {
-          setGemIds([...new Set(parsed.gemIds)]);
-          setCustomLibraryCards(parsed.customCards.map(copyLibraryItem));
-          setRecentIdeaIds([...new Set(parsed.recentIdeaIds)]);
-          setArchivedIdeaIds([...new Set(parsed.archivedIdeaIds)]);
-          setRestoredIdeaIds([...new Set(parsed.restoredIdeaIds)]);
-          setDraftIdeaIds([...new Set(parsed.draftIdeaIds)]);
-          setItemOverridesById(Object.fromEntries(Object.entries(parsed.itemOverridesById).map(([id, card]) => [id, copyLibraryItem(card)])));
-          setRemovedIdeaIds([...new Set(parsed.removedIdeaIds)]);
-        } else if (isStoredLibraryPreferencesV6(parsed)) {
-          setGemIds([...new Set(parsed.gemIds)]);
-          setCustomLibraryCards(parsed.customCards.map(copyLibraryItem));
-          setRecentIdeaIds([...new Set(parsed.recentIdeaIds)]);
-          setArchivedIdeaIds([...new Set(parsed.archivedIdeaIds)]);
-          setRestoredIdeaIds([...new Set(parsed.restoredIdeaIds)]);
-          setDraftIdeaIds([]);
-          setItemOverridesById(Object.fromEntries(Object.entries(parsed.itemOverridesById).map(([id, card]) => [id, copyLibraryItem(card)])));
-          setRemovedIdeaIds([...new Set(parsed.removedIdeaIds)]);
-          setNotice("LOCAL LIBRARY RESTORED · DRAFT IDEAS ADDED");
-        } else if (isStoredLibraryPreferencesV5(parsed)) {
-          setGemIds([...new Set(parsed.gemIds)]);
-          setCustomLibraryCards(parsed.customCards.map(copyLibraryItem));
-          setRecentIdeaIds([...new Set(parsed.recentIdeaIds)]);
-          setArchivedIdeaIds([...new Set(parsed.archivedIdeaIds)]);
-          setRestoredIdeaIds([...new Set(parsed.restoredIdeaIds)]);
-          setDraftIdeaIds([]);
-          setItemOverridesById(Object.fromEntries(Object.entries(parsed.itemOverridesById).map(([id, card]) => [id, copyLibraryItem(card)])));
-          setRemovedIdeaIds([...new Set(parsed.removedIdeaIds)]);
-          setNotice("LOCAL LIBRARY RESTORED · PHOTOS UPGRADED FOR PHOTO OR VIDEO ATTACHMENTS");
-        } else if (isStoredLibraryPreferencesV4(parsed)) {
-          setGemIds([...new Set(parsed.gemIds)]);
-          setCustomLibraryCards(parsed.customCards.map(copyLibraryItem));
-          setRecentIdeaIds([...new Set(parsed.recentIdeaIds)]);
-          setArchivedIdeaIds([...new Set(parsed.archivedIdeaIds)]);
-          setRestoredIdeaIds([...new Set(parsed.restoredIdeaIds)]);
-          setDraftIdeaIds([]);
-          setNotice("LOCAL LIBRARY RESTORED · EDITABLE IDEAS ADDED IN THIS BROWSER");
-        } else if (isStoredLibraryPreferencesV3(parsed)) {
-          setGemIds([...new Set(parsed.gemIds)]);
-          setCustomLibraryCards(parsed.customCards.map(makeLocalLibraryItem));
-          setRecentIdeaIds([...new Set(parsed.recentIdeaIds)]);
-          setNotice("LOCAL LIBRARY RESTORED · FULL VAULT CATALOG ADDED IN THIS BROWSER");
-        } else if (isStoredLibraryPreferencesV2(parsed)) {
-          setGemIds([...new Set(parsed.gemIds)]);
-          setCustomLibraryCards(parsed.customCards.map(makeLocalLibraryItem));
-          setNotice("LOCAL LIBRARY RESTORED · ARCHIVE CONTROLS ADDED IN THIS BROWSER");
-        } else if (isStoredLibraryPreferencesV1(parsed)) {
-          setGemIds([...new Set(parsed.gemIds)]);
-          setNotice("LOCAL DEMO CATALOG RESTORED · IDEA LIBRARY UPGRADED IN THIS BROWSER");
-        }
+        storedPreferences = JSON.parse(stored) as unknown;
+        hasStoredPreferences = true;
       }
     } catch {
-      setNotice("LOCAL DEMO CATALOG ACTIVE · GEM PREFERENCES COULD NOT BE RESTORED");
-    } finally {
-      setHasLoadedLibraryPreferences(true);
+      startTransition(() => {
+        setNotice("LOCAL DEMO CATALOG ACTIVE · GEM PREFERENCES COULD NOT BE RESTORED");
+        setHasLoadedLibraryPreferences(true);
+      });
+      return;
     }
+    startTransition(() => {
+      if (hasStoredPreferences) applyStoredLibraryPreferences(storedPreferences);
+      setHasLoadedLibraryPreferences(true);
+    });
   }, []);
 
   useEffect(() => {
@@ -4728,7 +4873,7 @@ export default function Home() {
       libraryStorageSnapshotRef.current = serialized;
       window.localStorage.setItem(LOCAL_LIBRARY_STORAGE_KEY, serialized);
     } catch {
-      setNotice("LOCAL DEMO CATALOG ACTIVE · GEM PREFERENCES CANNOT BE SAVED IN THIS BROWSER");
+      startTransition(() => setNotice("LOCAL DEMO CATALOG ACTIVE · GEM PREFERENCES CANNOT BE SAVED IN THIS BROWSER"));
     }
   }, [archivedIdeaIds, customLibraryCards, draftIdeaIds, gemIds, hasLoadedLibraryPreferences, itemOverridesById, recentIdeaIds, removedIdeaIds, restoredIdeaIds]);
 
@@ -5234,51 +5379,62 @@ export default function Home() {
   ]);
 
   useEffect(() => {
+    const applyStoredOperations = (parsed: unknown) => {
+      const storedV4 = parsePlannerOperationsV4(parsed);
+      if (storedV4) {
+        setOperationTaskDoneByPlanId(storedV4.taskDoneByPlanId);
+        setViewAttendanceByPlanId(storedV4.attendanceByPlanId);
+        const savedAttendance = storedV4.attendanceByPlanId[activeLessonPlanIdRef.current];
+        if (savedAttendance) setAttendanceById((current) => ({ ...current, ...savedAttendance }));
+        setUpdateDecisionByRevision(storedV4.updateDecisionByRevision);
+        setGoalPreferences(storedV4.goalPreferences);
+        setPlannerIntake(storedV4.plannerIntake);
+        setNotice("BROWSER OPERATIONS CACHE RESTORED · CONNECTING TO RYAN’S WORKSPACE");
+      } else if (isStoredOperationsV3(parsed)) {
+        setOperationTaskDoneByPlanId(parsed.taskDoneByPlanId);
+        setViewAttendanceByPlanId(parsed.attendanceByPlanId);
+        const savedAttendance = parsed.attendanceByPlanId[activeLessonPlanIdRef.current];
+        if (savedAttendance) setAttendanceById((current) => ({ ...current, ...savedAttendance }));
+        setUpdateDecisionByRevision(parsed.updateDecisionByRevision);
+        setGoalPreferences(parsed.goalPreferences);
+        setPlannerIntake(emptyPlannerIntake());
+        setNotice("BROWSER OPERATIONS CACHE UPGRADED · CONNECTING TO RYAN’S WORKSPACE");
+      } else if (isStoredOperationsV2(parsed)) {
+        setOperationTaskDoneByPlanId(parsed.taskDoneByPlanId);
+        setViewAttendanceByPlanId(parsed.attendanceByPlanId);
+        const savedAttendance = parsed.attendanceByPlanId[activeLessonPlanIdRef.current];
+        if (savedAttendance) setAttendanceById((current) => ({ ...current, ...savedAttendance }));
+        setUpdateDecisionByRevision(parsed.updateDecisionByRevision);
+        setGoalPreferences(emptyLessonGoalPreferences());
+        setPlannerIntake(emptyPlannerIntake());
+        setNotice("BROWSER OPERATIONS CACHE RESTORED · CONNECTING TO RYAN’S WORKSPACE");
+      } else if (isStoredOperationsV1(parsed)) {
+        setOperationTaskDoneByPlanId({ [activeLessonPlanIdRef.current]: parsed.taskDoneById });
+        setUpdateDecisionByRevision(parsed.updateDecisionByRevision);
+        setGoalPreferences(emptyLessonGoalPreferences());
+        setPlannerIntake(emptyPlannerIntake());
+        setNotice("BROWSER OPERATIONS CACHE RESTORED · CONNECTING TO RYAN’S WORKSPACE");
+      }
+    };
+    let storedOperations: unknown;
+    let hasStoredOperations = false;
     try {
       const stored = window.localStorage.getItem(LOCAL_OPERATIONS_STORAGE_KEY);
       if (stored) {
-        const parsed: unknown = JSON.parse(stored);
-        const storedV4 = parsePlannerOperationsV4(parsed);
-        if (storedV4) {
-          setOperationTaskDoneByPlanId(storedV4.taskDoneByPlanId);
-          setViewAttendanceByPlanId(storedV4.attendanceByPlanId);
-          const savedAttendance = storedV4.attendanceByPlanId[activeLessonPlanIdRef.current];
-          if (savedAttendance) setAttendanceById((current) => ({ ...current, ...savedAttendance }));
-          setUpdateDecisionByRevision(storedV4.updateDecisionByRevision);
-          setGoalPreferences(storedV4.goalPreferences);
-          setPlannerIntake(storedV4.plannerIntake);
-          setNotice("BROWSER OPERATIONS CACHE RESTORED · CONNECTING TO RYAN’S WORKSPACE");
-        } else if (isStoredOperationsV3(parsed)) {
-          setOperationTaskDoneByPlanId(parsed.taskDoneByPlanId);
-          setViewAttendanceByPlanId(parsed.attendanceByPlanId);
-          const savedAttendance = parsed.attendanceByPlanId[activeLessonPlanIdRef.current];
-          if (savedAttendance) setAttendanceById((current) => ({ ...current, ...savedAttendance }));
-          setUpdateDecisionByRevision(parsed.updateDecisionByRevision);
-          setGoalPreferences(parsed.goalPreferences);
-          setPlannerIntake(emptyPlannerIntake());
-          setNotice("BROWSER OPERATIONS CACHE UPGRADED · CONNECTING TO RYAN’S WORKSPACE");
-        } else if (isStoredOperationsV2(parsed)) {
-          setOperationTaskDoneByPlanId(parsed.taskDoneByPlanId);
-          setViewAttendanceByPlanId(parsed.attendanceByPlanId);
-          const savedAttendance = parsed.attendanceByPlanId[activeLessonPlanIdRef.current];
-          if (savedAttendance) setAttendanceById((current) => ({ ...current, ...savedAttendance }));
-          setUpdateDecisionByRevision(parsed.updateDecisionByRevision);
-          setGoalPreferences(emptyLessonGoalPreferences());
-          setPlannerIntake(emptyPlannerIntake());
-          setNotice("BROWSER OPERATIONS CACHE RESTORED · CONNECTING TO RYAN’S WORKSPACE");
-        } else if (isStoredOperationsV1(parsed)) {
-          setOperationTaskDoneByPlanId({ [activeLessonPlanIdRef.current]: parsed.taskDoneById });
-          setUpdateDecisionByRevision(parsed.updateDecisionByRevision);
-          setGoalPreferences(emptyLessonGoalPreferences());
-          setPlannerIntake(emptyPlannerIntake());
-          setNotice("BROWSER OPERATIONS CACHE RESTORED · CONNECTING TO RYAN’S WORKSPACE");
-        }
+        storedOperations = JSON.parse(stored) as unknown;
+        hasStoredOperations = true;
       }
     } catch {
-      setNotice("LOCAL DEMO OPERATIONS ACTIVE · COULD NOT RESTORE THE LAST EDIT");
-    } finally {
-      setHasLoadedOperations(true);
+      startTransition(() => {
+        setNotice("LOCAL DEMO OPERATIONS ACTIVE · COULD NOT RESTORE THE LAST EDIT");
+        setHasLoadedOperations(true);
+      });
+      return;
     }
+    startTransition(() => {
+      if (hasStoredOperations) applyStoredOperations(storedOperations);
+      setHasLoadedOperations(true);
+    });
   }, []);
 
   useEffect(() => {
@@ -5294,7 +5450,7 @@ export default function Home() {
     try {
       window.localStorage.setItem(LOCAL_OPERATIONS_STORAGE_KEY, JSON.stringify(savedOperations));
     } catch {
-      setNotice("LOCAL DEMO OPERATIONS ACTIVE · BROWSER STORAGE IS UNAVAILABLE");
+      startTransition(() => setNotice("LOCAL DEMO OPERATIONS ACTIVE · BROWSER STORAGE IS UNAVAILABLE"));
     }
   }, [goalPreferences, hasLoadedOperations, operationTaskDoneByPlanId, plannerIntake, updateDecisionByRevision, viewAttendanceByPlanId]);
 
@@ -5913,7 +6069,7 @@ export default function Home() {
       setNotice("THIS EVENT NEEDS AT LEAST 10 MINUTES OF ITS OWN TIME BEFORE A NEW EVENT CAN SPLIT IT");
       return;
     }
-    const id = `local-event-${Date.now()}`;
+    const id = timestampId("local-event");
     const phase: LessonPhase = {
       id,
       time: "TBD",
@@ -5975,7 +6131,7 @@ export default function Home() {
       setNotice("SET THIS EVENT'S START AND END BEFORE ADDING AN EVENT AFTER IT");
       return;
     }
-    const id = `local-event-${Date.now()}`;
+    const id = timestampId("local-event");
     const phase: LessonPhase = {
       id,
       time: "TBD",
@@ -6158,7 +6314,7 @@ export default function Home() {
 
   function insertPhase(kind: "CONTINUE" | "TRANSITION", eventIdFromEditor?: string) {
     if (activePlanIsReadOnly()) return;
-    const id = `local-phase-${Date.now()}`;
+    const id = timestampId("local-phase");
     const sameEvent = kind === "CONTINUE";
     const sourceEventId = eventIdFromEditor ?? (activePhase.eventId ?? activePhase.id);
     const sourceEventPhases = lessonPhases.filter((candidate) => (candidate.eventId ?? candidate.id) === sourceEventId);
@@ -6315,7 +6471,7 @@ export default function Home() {
   function makeLessonSnapshot(card: LessonCard): LessonCard {
     return {
       ...copyCard(card),
-      id: `${card.id}-snapshot-${Date.now()}`,
+      id: timestampId(`${card.id}-snapshot`),
       tags: [...card.tags, "lesson snapshot"],
       lessonLocal: true,
     };
@@ -6802,7 +6958,7 @@ export default function Home() {
     const sourceSpots = sourceStationSpots(layout);
     const existing = effectiveBuiltInStationSpots(zone, layout);
     const spot: EffectiveStationBoardSpot = {
-      id: `spot-${zone.id}-${Date.now()}`,
+      id: timestampId(`spot-${zone.id}`),
       name: `Station ${existing.length + 1}`,
       x: point.x,
       y: point.y,
@@ -7152,7 +7308,7 @@ export default function Home() {
       const dimensions = await readCustomPhotoDimensions(photo);
       if (!dimensions.width || !dimensions.height) throw new Error("empty image");
       const timestamp = new Date().toISOString();
-      const photoId = `photo-${board.id}-${Date.now()}`;
+      const photoId = timestampId(`photo-${board.id}`);
       await saveCustomBoardPhoto({
         id: photoId,
         blob: photo,
@@ -7203,7 +7359,7 @@ export default function Home() {
       const dimensions = await readCustomPhotoDimensions(photo);
       if (!dimensions.width || !dimensions.height) throw new Error("empty image");
       const timestamp = new Date().toISOString();
-      const photoId = `photo-${zoneId}-${Date.now()}`;
+      const photoId = timestampId(`photo-${zoneId}`);
       await saveCustomBoardPhoto({
         id: photoId,
         blob: photo,
@@ -7471,7 +7627,7 @@ export default function Home() {
       const dimensions = await readCustomPhotoDimensions(photo);
       if (!dimensions.width || !dimensions.height) throw new Error("empty image");
       const timestamp = new Date().toISOString();
-      const id = `custom-board-${Date.now()}`;
+      const id = timestampId("custom-board");
       const photoId = `photo-${id}`;
       const board: CustomBoard = {
         id,
@@ -7869,7 +8025,7 @@ export default function Home() {
       return;
     }
     const capture: PlannerBacklogCapture = {
-      id: `backlog-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      id: randomizedId("backlog"),
       kind: "backlog-capture",
       createdAt: new Date().toISOString(),
       source: {
@@ -8051,7 +8207,7 @@ export default function Home() {
     } else if (field === "skills") {
       edited.skills = parseEditableList(value);
     } else if (field === "events") {
-      edited.events = parseEditableList(value);
+      edited.events = normalizeIdeaEvents(value);
     } else {
       edited.mats = parseEditableList(value);
     }
@@ -8132,7 +8288,7 @@ export default function Home() {
         safety: libraryEditDraft.safety.trim() || undefined,
         mats: parseEditableList(libraryEditDraft.mats),
         tags: normalizeIdeaTags(libraryEditDraft.tags),
-        events: parseEditableList(libraryEditDraft.events),
+        events: normalizeIdeaEvents(libraryEditDraft.events),
         skills: parseEditableList(libraryEditDraft.skills),
         goals: parseEditableList(libraryEditDraft.goals),
         instructions: parseEditableList(libraryEditDraft.instructions),
@@ -8899,6 +9055,7 @@ export default function Home() {
     setNewIdeaTitle("");
     setNewIdeaDescription("");
     setNewIdeaTags("");
+    setNewIdeaEvents("");
     setNewIdeaMats("");
     setNewIdeaLevels([]);
     setNewIdeaMediaFile(null);
@@ -9001,7 +9158,7 @@ export default function Home() {
       setNotice("NAME THE IDEA BEFORE SAVING IT TO RYAN’S IDEA LIBRARY");
       return;
     }
-      const tags = normalizeIdeaTags(newIdeaTags);
+    const tags = normalizeIdeaTags(newIdeaTags);
     const ideaId = `local-idea-${Date.now()}`;
     setIsSavingNewIdea(true);
     try {
@@ -9019,6 +9176,7 @@ export default function Home() {
           mats: parseEditableList(newIdeaMats),
           levels: [...newIdeaLevels],
         }),
+        events: normalizeIdeaEvents(newIdeaEvents),
         ...mediaMetadata,
         ...(newIdeaStationSetup ? { stationSetupId: newIdeaStationSetup.id, stationPreviewKind: "pixel-station" as const } : {}),
       };
@@ -9089,6 +9247,7 @@ export default function Home() {
         ))}
       </fieldset>
       <IdeaTagPicker value={newIdeaTags} onChange={setNewIdeaTags} options={libraryTagOptions} />
+      <IdeaEventPicker value={newIdeaEvents} onChange={setNewIdeaEvents} />
       <div className="new-idea-media-actions">
         <b>REFERENCE PHOTO OR VIDEO <small>optional · one shared attachment · syncs with this Idea Library</small></b>
         <input
@@ -9284,19 +9443,6 @@ export default function Home() {
         }}
       >
         {libraryCards.length ? libraryCards.map((card) => {
-          const state = card.isRemoved
-            ? "HIDDEN IN LIBRARY"
-            : card.isDraft
-              ? "DRAFT · NEEDS EDITS"
-            : recentIdeaIds.includes(card.id)
-              ? "RECENTLY PLACED"
-              : card.defaultArchived && card.sourceType === "lesson_plan_activity"
-                ? "IMPORTED NOTE · REVIEW"
-                : card.id.startsWith("local-idea-")
-                  ? "SHARED IDEA"
-                  : card.sourceStatus.toUpperCase();
-          const tags = card.tags.slice(0, 2).join(" · ");
-          const levels = card.levels?.length ? `L${card.levels.join(" · L")}` : "";
           const skills = card.skills.slice(0, 3).join(" · ");
           const safety = card.safety?.trim() ?? "";
           const events = card.events.length ? card.events.join(" · ") : "NONE LISTED";
@@ -9308,7 +9454,7 @@ export default function Home() {
               : "NO ATTACHMENT";
           const isUnavailable = Boolean(card.isRemoved || card.isArchived);
           const stationSetup = card.stationSetupId ? stationSetupsById[card.stationSetupId] : null;
-          const libraryPhotoUrl = libraryRowHeight >= 110 && card.mediaKind === "image" && card.mediaId
+          const libraryPhotoUrl = libraryRowHeight >= 96 && card.mediaKind === "image" && card.mediaId
             ? ideaMediaUrls[card.mediaId]
             : undefined;
           return (
@@ -9319,14 +9465,9 @@ export default function Home() {
                   <span>{card.variants.length} VARIANT{card.variants.length === 1 ? "" : "S"}</span>
                 </div>
                 <LibraryQuickEditButton card={card} field="title" onOpen={startLibraryQuickEdit} className="library-item-title library-quick-edit-target" ariaLabel={`Edit title for ${card.title}`} title="Edit Title"><strong>{card.title}</strong></LibraryQuickEditButton>
-                <div className="library-item-state" title={[state, levels, tags].filter(Boolean).join(" · ")}>
-                  <span>{state}</span>
-                  <LibraryQuickEditButton card={card} field="levels" onOpen={startLibraryQuickEdit} className="library-quick-edit-target" ariaLabel={`Edit levels for ${card.title}`} title="Edit Levels">{levels || "NO LEVELS"}</LibraryQuickEditButton>
-                  <LibraryQuickEditButton card={card} field="tags" onOpen={startLibraryQuickEdit} className="library-quick-edit-target" ariaLabel={`Edit tags for ${card.title}`} title="Edit Tags">{tags || "NO TAGS"}</LibraryQuickEditButton>
-                </div>
-                <LibraryQuickEditButton card={card} field="description" onOpen={startLibraryQuickEdit} className="library-item-description library-quick-edit-target" ariaLabel={`Edit description for ${card.title}`} ariaHidden={libraryRowHeight < 86} tabIndex={libraryRowHeight < 86 ? -1 : 0} title="Edit Description">{card.description}</LibraryQuickEditButton>
-                {skills ? <LibraryQuickEditButton card={card} field="skills" onOpen={startLibraryQuickEdit} className="library-item-extra library-quick-edit-target" ariaLabel={`Edit skills for ${card.title}`} ariaHidden={libraryRowHeight <= 100} tabIndex={libraryRowHeight <= 100 ? -1 : 0} title="Edit Skills">SKILLS · {skills}</LibraryQuickEditButton> : null}
-                {safety ? <LibraryQuickEditButton card={card} field="safety" onOpen={startLibraryQuickEdit} className="library-item-extra safety library-quick-edit-target" ariaLabel={`Edit safety note for ${card.title}`} ariaHidden={libraryRowHeight <= 100} tabIndex={libraryRowHeight <= 100 ? -1 : 0} title="Edit Safety Note">⚠ {safety}</LibraryQuickEditButton> : null}
+                <LibraryQuickEditButton card={card} field="description" onOpen={startLibraryQuickEdit} className="library-item-description library-quick-edit-target" ariaLabel={`Edit description for ${card.title}`} ariaHidden={libraryRowHeight <= 66} tabIndex={libraryRowHeight <= 66 ? -1 : 0} title="Edit Description">{card.description}</LibraryQuickEditButton>
+                {skills ? <LibraryQuickEditButton card={card} field="skills" onOpen={startLibraryQuickEdit} className="library-item-extra library-quick-edit-target" ariaLabel={`Edit skills for ${card.title}`} ariaHidden={libraryRowHeight <= 84} tabIndex={libraryRowHeight <= 84 ? -1 : 0} title="Edit Skills">SKILLS · {skills}</LibraryQuickEditButton> : null}
+                {safety ? <LibraryQuickEditButton card={card} field="safety" onOpen={startLibraryQuickEdit} className="library-item-extra safety library-quick-edit-target" ariaLabel={`Edit safety note for ${card.title}`} ariaHidden={libraryRowHeight <= 84} tabIndex={libraryRowHeight <= 84 ? -1 : 0} title="Edit Safety Note">⚠ {safety}</LibraryQuickEditButton> : null}
                 {libraryDetailLevel(libraryRowHeight) === "FULL DETAILS" ? (
                   <div className="library-item-facts">
                     <LibraryQuickEditButton card={card} field="events" onOpen={startLibraryQuickEdit} className="library-quick-edit-target" ariaLabel={`Edit events for ${card.title}`} title={`Edit Events: ${events}`}><b>EVENTS</b> {events}</LibraryQuickEditButton>
@@ -11030,6 +11171,12 @@ export default function Home() {
                   onChange={(value) => setLibraryQuickEdit((current) => current ? { ...current, value } : current)}
                   options={libraryTagOptions}
                 />
+              ) : libraryQuickEdit.field === "events" ? (
+                <IdeaEventPicker
+                  label="EVENTS"
+                  value={libraryQuickEdit.value}
+                  onChange={(value) => setLibraryQuickEdit((current) => current ? { ...current, value } : current)}
+                />
               ) : libraryQuickEdit.field === "title" || libraryQuickEdit.field === "safety" ? (
                 <label>{libraryQuickEditLabels[libraryQuickEdit.field]}
                   <input autoFocus value={libraryQuickEdit.value} maxLength={libraryQuickEdit.field === "title" ? 100 : 260} onChange={(event) => setLibraryQuickEdit((current) => current ? { ...current, value: event.target.value } : current)} />
@@ -11099,7 +11246,11 @@ export default function Home() {
                   onChange={(value) => updateLibraryEditDraft("tags", value)}
                   options={libraryTagOptions}
                 />
-                <label>EVENTS <small>one per line or comma</small><textarea value={libraryEditDraft.events} onChange={(event) => updateLibraryEditDraft("events", event.target.value)} /></label>
+                <IdeaEventPicker
+                  label="EVENTS"
+                  value={libraryEditDraft.events}
+                  onChange={(value) => updateLibraryEditDraft("events", value)}
+                />
                 <label className="wide">SKILLS <small>one per line or comma</small><textarea value={libraryEditDraft.skills} onChange={(event) => updateLibraryEditDraft("skills", event.target.value)} /></label>
                 <label>GOALS <small>one per line or comma</small><textarea value={libraryEditDraft.goals} onChange={(event) => updateLibraryEditDraft("goals", event.target.value)} /></label>
                 <label>COACHING CUES <small>one per line or comma</small><textarea value={libraryEditDraft.coachingCues} onChange={(event) => updateLibraryEditDraft("coachingCues", event.target.value)} /></label>
