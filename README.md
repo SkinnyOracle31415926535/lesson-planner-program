@@ -2,8 +2,7 @@
 
 Private, local-first lesson planning for gymnastics coaching: an iPad-first app with a private Mac editor, a visual gym-zone planner, a drill/activity library, offline media, and a bridge to the existing gymnastics vault.
 
-## LINK
-https://skinnyoracle31415926535.github.io/lesson-planner-program/
+
 
 
 ## Current status
