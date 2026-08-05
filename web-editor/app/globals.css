@@ -1675,3 +1675,20 @@ button { cursor: pointer; touch-action:manipulation; -webkit-tap-highlight-color
 .preschool-springboard-footprint { fill:#a453ba; stroke:#6f347d; stroke-width:.6; stroke-linejoin:miter; vector-effect:non-scaling-stroke; }
 .station-piece.preschool-springboard.selected { outline:0; }
 .station-palette-icon.preschool-springboard { width:27px; height:14px; background:#e7464f; border-color:#8f262d; clip-path:polygon(0 100%,0 73%,100% 0,100% 100%); box-shadow:3px 4px #b62f38; }
+/* Short-lived migration control. It intentionally stays separate from coaching tools. */
+.temporary-planner-transfer { position:fixed; right:max(10px,env(safe-area-inset-right)); bottom:max(10px,env(safe-area-inset-bottom)); z-index:10020; font-family:var(--font-pixel,monospace); }
+.temporary-planner-transfer-trigger { border:2px solid #1b2642; background:#fff3a6; color:#152244; box-shadow:3px 3px 0 #1b2642; font-weight:900; font-size:11px; letter-spacing:.04em; padding:8px 10px; }
+.temporary-planner-transfer-panel { position:absolute; right:0; bottom:calc(100% + 10px); width:min(390px,calc(100vw - 20px)); border:3px solid #1b2642; background:#fffdf2; color:#152244; box-shadow:6px 6px 0 rgba(27,38,66,.55); padding:12px; display:grid; gap:9px; font-size:12px; line-height:1.35; }
+.temporary-planner-transfer-panel p,.temporary-planner-transfer-panel small { margin:0; }
+.temporary-planner-transfer-actions,.temporary-planner-transfer-preview { display:flex; flex-wrap:wrap; gap:7px; align-items:center; }
+.temporary-planner-transfer-actions button,.temporary-planner-transfer-preview button { border:2px solid #1b2642; background:#d8eff8; color:#152244; font-weight:800; padding:7px 8px; }
+.temporary-planner-transfer-preview { border-top:1px dashed #53617d; padding-top:9px; display:grid; }
+.temporary-planner-transfer-preview b { color:#8c2433; }
+.temporary-planner-transfer-preview button { width:max-content; background:#ffd28f; }
+.temporary-planner-transfer-preview button:last-child { background:#eceff4; }
+.temporary-planner-transfer-message { border-left:4px solid #2d7a7a; padding-left:8px; }
+
+@media (max-width:540px) {
+  .temporary-planner-transfer { left:8px; right:8px; bottom:max(8px,env(safe-area-inset-bottom)); display:flex; justify-content:flex-end; }
+  .temporary-planner-transfer-panel { right:0; width:min(100%,420px); }
+}

@@ -186,6 +186,7 @@ import {
   restorePlannerBackup,
   type PlannerBackupBundleV1,
 } from "./planner-backup";
+import { TemporaryPlannerDataTransfer } from "./temporary-planner-data-transfer";
 import {
   PLANNER_INTAKE_PROJECTS,
   addPlannerIntakeItem,
@@ -11359,6 +11360,9 @@ export default function Home() {
           </section>
         </div>
       ) : null}
+      <TemporaryPlannerDataTransfer
+        normalizeWorkspace={normalizeSharedPlannerWorkspaceSnapshot}
+      />
     </main>
   );
 }
